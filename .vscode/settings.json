@@ -1,5 +1,0 @@
-{
-    "rust-analyzer.linkedProjects": [
-        "./libwifi_macros/Cargo.toml"
-    ]
-}
