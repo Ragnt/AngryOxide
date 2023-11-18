@@ -1,5 +1,5 @@
 use nom::bytes::complete::take;
-use nom::number::complete::{le_u16, le_u64};
+use nom::number::complete::{le_u16, le_u64, le_u8};
 
 use nom::sequence::tuple;
 
@@ -122,6 +122,7 @@ pub fn parse_association_response(
 /// - Dynamic fields
 pub fn parse_beacon(frame_control: FrameControl, input: &[u8]) -> Result<Frame, Error> {
     let (input, header) = parse_management_header(frame_control, input)?;
+
     let (_, (timestamp, beacon_interval, capability_info, station_info)) =
         tuple((le_u64, le_u16, le_u16, parse_station_info))(input)?;
 
@@ -167,5 +168,36 @@ pub fn parse_probe_response(frame_control: FrameControl, input: &[u8]) -> Result
         beacon_interval,
         capability_info,
         station_info,
+    }))
+}
+
+/// Parse an [Action] frame.
+///
+/// The general structure is:
+/// - ManagementHeader
+/// - Category (indicating the type of action, e.g., spectrum management, QoS)
+/// - Action (specific action within the category)
+/// - Dynamic fields (vary depending on the category and action)
+pub fn parse_action(frame_control: FrameControl, input: &[u8]) -> Result<Frame, Error> {
+    let (input, header) = parse_management_header(frame_control, input)?;
+
+    // Parsing the category field (1 byte)
+    let (input, category) = le_u8(input)?;
+
+    // Parsing the action field (1 byte)
+    let (input, action) = le_u8(input)?;
+
+    // Parsing the dynamic fields (depends on category and action)
+    let (_, station_info) = parse_station_info(input)?;
+
+    // Assuming `StationInfo` is part of dynamic fields and its parsing
+    // is handled inside `parse_dynamic_fields`
+    // ...
+
+    Ok(Frame::Action(Action {
+        header,
+        category: category.into(), // Convert to enum variant if needed
+        action: action,            // Convert to enum variant if needed
+        station_info,              // Assuming this comes from dynamic fields
     }))
 }

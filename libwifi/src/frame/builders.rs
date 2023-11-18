@@ -137,6 +137,9 @@ impl QosDataBuilder {
 }
 
 pub struct EapolKeyBuilder {
+    protocol_version: u8,
+    packet_type: u8,
+    packet_length: u16,
     descriptor_type: u8,
     key_information: u16,
     key_length: u16,
@@ -153,6 +156,9 @@ pub struct EapolKeyBuilder {
 impl EapolKeyBuilder {
     pub fn new() -> Self {
         Self {
+            protocol_version: 2,
+            packet_type: 3,
+            packet_length: 0,
             descriptor_type: 0,
             key_information: 0,
             key_length: 0,
@@ -168,7 +174,12 @@ impl EapolKeyBuilder {
     }
 
     pub fn build(self) -> EapolKey {
+        let key_data_length = self.key_data.len() as u16;
+        let packet_length = 95 + key_data_length;
         EapolKey {
+            protocol_version: self.protocol_version,
+            packet_type: 3,
+            packet_length: packet_length,
             descriptor_type: self.descriptor_type,
             key_information: self.key_information,
             key_length: self.key_length,
@@ -178,7 +189,7 @@ impl EapolKeyBuilder {
             key_rsc: self.key_rsc,
             key_id: self.key_id,
             key_mic: self.key_mic,
-            key_data_length: self.key_data_length,
+            key_data_length: key_data_length,
             key_data: self.key_data,
         }
     }

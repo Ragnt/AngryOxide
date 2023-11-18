@@ -104,7 +104,7 @@ impl Addresses for ManagementHeader {
 /// Representation of a data frame header. This format is used by all data frames!
 ///
 /// It's very similar to the format of the management header, but there are some slight
-/// differences, since they allow a forth address and Quality of Service (QoS) data.
+/// differences, since they allow a fourth address and Quality of Service (QoS) data.
 ///
 /// Structure:
 ///

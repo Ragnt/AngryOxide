@@ -25,27 +25,28 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
     loop {
         (input, (element_id, length)) = tuple((get_u8, get_u8))(input)?;
         (input, data) = take(length)(input)?;
+        if !data.is_empty() {
+            match element_id {
+                0 => {
+                    let mut ssid = String::from_utf8_lossy(data).to_string();
+                    ssid = ssid.replace('\0', " ");
+                    station_info.ssid = Some(ssid);
+                }
+                1 => station_info.supported_rates = parse_supported_rates(data),
+                3 => station_info.ds_parameter_set = Some(data[0]),
+                5 => station_info.tim = Some(data.to_vec()),
+                7 => station_info.country_info = Some(data.to_vec()),
+                32 => station_info.power_constraint = Some(data[0]),
+                45 => station_info.ht_capabilities = Some(data.to_vec()),
+                191 => station_info.vht_capabilities = Some(data.to_vec()),
+                _ => {
+                    station_info.data.push((element_id, data.to_vec()));
+                }
+            };
 
-        match element_id {
-            0 => {
-                let mut ssid = String::from_utf8_lossy(data).to_string();
-                ssid = ssid.replace('\0', " ");
-                station_info.ssid = Some(ssid);
+            if input.len() <= 4 {
+                break;
             }
-            1 => station_info.supported_rates = parse_supported_rates(data),
-            3 => station_info.ds_parameter_set = Some(data[0]),
-            5 => station_info.tim = Some(data.to_vec()),
-            7 => station_info.country_info = Some(data.to_vec()),
-            32 => station_info.power_constraint = Some(data[0]),
-            45 => station_info.ht_capabilities = Some(data.to_vec()),
-            191 => station_info.vht_capabilities = Some(data.to_vec()),
-            _ => {
-                station_info.data.push((element_id, data.to_vec()));
-            }
-        };
-
-        if input.len() <= 4 {
-            break;
         }
     }
 
