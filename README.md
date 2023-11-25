@@ -7,8 +7,6 @@
 
 WPOxide was developed as a way to learn rust, netlink, and kernel sockets all at once- with a focus on WiFi exploitation.
 
-The engine behind the tool is primarily designed after the hcxdumptool attack engine.
-
 ## Features
 
 
