@@ -8,4 +8,7 @@ pub use frame_control::FrameControl;
 pub use header::*;
 pub use mac_address::*;
 pub use sequence_control::SequenceControl;
-pub use station_info::StationInfo;
+pub use station_info::{
+    RsnAkmSuite, RsnCipherSuite, RsnInformation, StationInfo, VendorSpecificInfo, WpaAkmSuite,
+    WpaCipherSuite, WpaInformation,
+};

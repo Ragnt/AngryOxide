@@ -52,6 +52,17 @@ pub fn parse_frame(input: &[u8]) -> Result<Frame, Error> {
         FrameSubType::NullData => parse_null_data(frame_control, input),
         FrameSubType::QosData => parse_qos_data(frame_control, input),
         FrameSubType::QosNull => parse_qos_null(frame_control, input),
+        FrameSubType::DataCfAck => parse_data_cf_ack(frame_control, input),
+        FrameSubType::DataCfPoll => parse_data_cf_poll(frame_control, input),
+        FrameSubType::DataCfAckCfPoll => parse_data_cf_ack_cf_poll(frame_control, input),
+        FrameSubType::CfAck => parse_cf_ack(frame_control, input),
+        FrameSubType::CfPoll => parse_cf_poll(frame_control, input),
+        FrameSubType::CfAckCfPoll => parse_cf_ack_cf_poll(frame_control, input),
+        FrameSubType::QosDataCfAck => parse_qos_data_cf_ack(frame_control, input),
+        FrameSubType::QosDataCfPoll => parse_qos_data_cf_poll(frame_control, input),
+        FrameSubType::QosDataCfAckCfPoll => parse_qos_data_cf_ack_cf_poll(frame_control, input),
+        FrameSubType::QosCfPoll => parse_qos_cf_poll(frame_control, input),
+        FrameSubType::QosCfAckCfPoll => parse_qos_cf_ack_cf_poll(frame_control, input),
         _ => Err(Error::UnhandledFrameSubtype(frame_control, input.to_vec())),
     }
 }

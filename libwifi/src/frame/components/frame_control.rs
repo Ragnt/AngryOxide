@@ -39,7 +39,7 @@ pub struct FrameControl {
     pub frame_subtype: FrameSubType,
     pub flags: u8,
 }
-
+//
 impl FrameControl {
     pub fn to_ds(&self) -> bool {
         flag_is_set(self.flags, 0)
@@ -71,6 +71,17 @@ impl FrameControl {
 
     pub fn order(&self) -> bool {
         flag_is_set(self.flags, 7)
+    }
+
+    pub fn encode(&self) -> [u8; 2] {
+        let protocol_version_bits = self.protocol_version & 0b11; // 2 bits
+        let frame_type_bits = (self.frame_type as u8 & 0b11) << 2; // 2 bits
+        let frame_subtype_bits = (self.frame_subtype.to_bytes() & 0b1111) << 4; // 4 bits
+
+        let first_byte = frame_subtype_bits | frame_type_bits | protocol_version_bits;
+        let second_byte = self.flags; // Assuming flags fit into one byte
+
+        [first_byte, second_byte]
     }
 }
 

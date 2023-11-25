@@ -2,6 +2,7 @@ use crate::ntlook::attr::*;
 use crate::ntlook::interface::Interface;
 use crate::ntlook::util::*;
 
+use libwifi::frame::components::MacAddress;
 use neli::consts::genl::{CtrlAttr, CtrlCmd};
 use neli::consts::rtnl::{Arphrd, IffFlags, Ifla, RtAddrFamily, Rtm};
 use neli::consts::{nl::GenlId, nl::NlmF, nl::NlmFFlags, socket::NlFamily};
@@ -78,8 +79,8 @@ impl RtSocket {
 
     pub fn set_interface_mac_random(&mut self, interface_index: i32) -> Result<(), NlError> {
         let mut rtattr: RtBuffer<Ifla, neli::types::Buffer> = RtBuffer::new();
-        let mac = generate_random_bytes(6);
-        rtattr.push(Rtattr::new(None, Ifla::Address, mac).unwrap());
+        let mac = MacAddress::random().0;
+        rtattr.push(Rtattr::new(None, Ifla::Address, &mac[..]).unwrap());
 
         self.sock
             .send(Nlmsghdr::new(

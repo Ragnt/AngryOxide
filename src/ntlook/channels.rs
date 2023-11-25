@@ -112,6 +112,13 @@ impl WiFiChannel {
         }
     }
 
+    pub fn short_string(&self) -> String {
+        match self {
+            WiFiChannel::Channel2GHz(channel) => format!("{}", channel),
+            WiFiChannel::Channel5GHz(channel) => format!("{}", channel),
+        }
+    }
+
     pub fn to_frequency(&self) -> Option<u32> {
         match self {
             WiFiChannel::Channel2GHz(channel) => match channel {

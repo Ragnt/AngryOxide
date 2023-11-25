@@ -36,6 +36,28 @@ pub struct ManagementHeader {
     pub sequence_control: SequenceControl,
 }
 
+impl ManagementHeader {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Serialize frame control
+        bytes.extend_from_slice(&self.frame_control.encode());
+
+        // Serialize duration (2 bytes, big-endian)
+        bytes.extend_from_slice(&self.duration);
+
+        // Serialize MAC addresses
+        bytes.extend_from_slice(&self.address_1.encode());
+        bytes.extend_from_slice(&self.address_2.encode());
+        bytes.extend_from_slice(&self.address_3.encode());
+
+        // Serialize sequence control
+        bytes.extend_from_slice(&self.sequence_control.encode());
+
+        bytes
+    }
+}
+
 /// Which address is used in which way, depends on a combination of
 /// - two flags in the FrameControl header.
 /// - the Type/Subtype constellation.

@@ -6,7 +6,7 @@ use nom::sequence::tuple;
 use crate::error::Error;
 use crate::frame::components::FrameControl;
 use crate::frame::*;
-use crate::parsers::{parse_management_header, parse_station_info};
+use crate::parsers::{parse_mac, parse_management_header, parse_station_info};
 
 /// Parse an [AssociationRequest] frame.
 ///
@@ -84,7 +84,7 @@ pub fn parse_deauthentication_frame(
 
     Ok(Frame::Deauthentication(Deauthentication {
         header,
-        reason_code,
+        reason_code: DeauthenticationReason::from_code(reason_code),
     }))
 }
 
@@ -110,6 +110,56 @@ pub fn parse_association_response(
         status_code,
         association_id,
         station_info,
+    }))
+}
+
+/// Parse a [ReassociationRequest] frame.
+///
+/// The general structure is:
+/// - ManagementHeader
+/// - Capability info
+/// - Listen interval
+/// - Current AP address (MAC address)
+/// - Dynamic fields (like StationInfo)
+pub fn parse_reassociation_request(
+    frame_control: FrameControl,
+    input: &[u8],
+) -> Result<Frame, Error> {
+    let (input, header) = parse_management_header(frame_control, input)?;
+    let (input, (capability_info, listen_interval)) = tuple((le_u16, le_u16))(input)?;
+
+    let (input, current_ap_address) = parse_mac(input)?;
+    let (_, station_info) = parse_station_info(input)?;
+
+    Ok(Frame::ReassociationRequest(ReassociationRequest {
+        header,
+        capability_info,
+        listen_interval,
+        current_ap_address,
+        station_info,
+    }))
+}
+
+/// Parse a [ReassociationResponse] frame.
+///
+/// The general structure is:
+/// - ManagementHeader
+/// - Capability info
+/// - Status code
+/// - Association id
+pub fn parse_reassociation_response(
+    frame_control: FrameControl,
+    input: &[u8],
+) -> Result<Frame, Error> {
+    let (input, header) = parse_management_header(frame_control, input)?;
+    let (_, (capability_info, status_code, association_id)) =
+        tuple((le_u16, le_u16, le_u16))(input)?;
+
+    Ok(Frame::ReassociationResponse(ReassociationResponse {
+        header,
+        capability_info,
+        status_code,
+        association_id,
     }))
 }
 
@@ -197,7 +247,7 @@ pub fn parse_action(frame_control: FrameControl, input: &[u8]) -> Result<Frame, 
     Ok(Frame::Action(Action {
         header,
         category: category.into(), // Convert to enum variant if needed
-        action: action,            // Convert to enum variant if needed
+        action,                    // Convert to enum variant if needed
         station_info,              // Assuming this comes from dynamic fields
     }))
 }

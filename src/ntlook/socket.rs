@@ -2,13 +2,12 @@ use crate::ntlook::attr::*;
 use crate::ntlook::bss::Bss;
 use crate::ntlook::channels::{BandList, FrequencyStatus, WiFiBand, WiFiChannel};
 use crate::ntlook::cmd::Nl80211Cmd;
-use crate::ntlook::interface::{Frequency, Interface};
+use crate::ntlook::interface::Interface;
 use crate::ntlook::station::Station;
 use crate::ntlook::util::*;
 use crate::ntlook::{Attrs, NL_80211_GENL_NAME, NL_80211_GENL_VERSION};
 
 use super::{ChannelData, Nl80211Iftype};
-use libwifi::frame::components::MacAddress;
 use neli::attr::{AttrHandle, Attribute};
 use neli::consts::genl::{CtrlAttr, CtrlCmd};
 use neli::consts::{nl::GenlId, nl::NlmF, nl::NlmFFlags, nl::Nlmsg, socket::NlFamily};
@@ -17,6 +16,7 @@ use neli::genl::{Genlmsghdr, Nlattr};
 use neli::nl::{NlPayload, Nlmsghdr};
 use neli::socket::NlSocketHandle;
 use neli::types::{Buffer, GenlBuffer};
+
 use std::fs;
 
 /// A generic netlink socket to send commands and receive messages
@@ -573,6 +573,7 @@ impl Socket {
         };
 
         // Send the Netlink message
+
         self.sock.send(nlhdr)?;
 
         let iter = self

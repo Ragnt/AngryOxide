@@ -3,14 +3,13 @@ use enum_dispatch::enum_dispatch;
 /// Contains structs representing recurring sets of structured data.
 /// For instance, MAC-Addresses, default headers, etc.
 pub mod components;
+
 /// Control frame structs
 mod control;
 /// Data frames structs
 mod data;
 /// Management frame structs
 mod management;
-
-mod builders;
 
 pub use control::*;
 pub use data::*;
@@ -29,6 +28,8 @@ pub enum Frame {
     ProbeResponse(ProbeResponse),
     AssociationRequest(AssociationRequest),
     AssociationResponse(AssociationResponse),
+    ReassociationRequest(ReassociationRequest),
+    ReassociationResponse(ReassociationResponse),
     Action(Action),
 
     // Authentication
@@ -47,4 +48,15 @@ pub enum Frame {
     NullData(NullData),
     QosData(QosData),
     QosNull(QosNull),
+    DataCfAck(DataCfAck),
+    DataCfPoll(DataCfPoll),
+    DataCfAckCfPoll(DataCfAckCfPoll),
+    CfAck(CfAck),
+    CfPoll(CfPoll),
+    CfAckCfPoll(CfAckCfPoll),
+    QosDataCfAck(QosDataCfAck),
+    QosDataCfPoll(QosDataCfPoll),
+    QosDataCfAckCfPoll(QosDataCfAckCfPoll),
+    QosCfPoll(QosCfPoll),
+    QosCfAckCfPoll(QosCfAckCfPoll),
 }

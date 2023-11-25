@@ -20,6 +20,8 @@ name = "parse_data"
 harness = false
 
 [dependencies]
+rand = "0.8"
+byteorder = "1.5.0"
 log = "0.4"
 nom = "7"
 thiserror = "1.0"

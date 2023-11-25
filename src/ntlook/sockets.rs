@@ -1,7 +1,11 @@
+use std::sync::Arc;
+use std::thread;
+
 use crate::ntlook::attr::*;
 use crate::ntlook::channels::*;
 use crate::ntlook::interface::Interface;
 
+use libwifi::frame::components::MacAddress;
 use neli::consts::genl::{CtrlAttr, CtrlCmd};
 use neli::consts::nl::GenlId;
 use neli::err::NlError;
@@ -27,7 +31,7 @@ impl Sockets {
         }
     }
 
-    pub fn print_interfaces(&mut self) {
+    pub fn print_interfaces(&self) {
         for interface in &self.interfaces {
             println!("{}", interface.pretty_print());
         }
@@ -75,59 +79,57 @@ impl Sockets {
     }
 
     pub fn set_interface_monitor(&mut self, interface_index: i32) -> Result<(), NlError> {
-        let _ = self
-            .gensock
-            .set_type_vec(interface_index, Nl80211Iftype::IftypeMonitor);
-        let _ = self.update_interfaces();
+        self.gensock
+            .set_type_vec(interface_index, Nl80211Iftype::IftypeMonitor)?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn set_interface_station(&mut self, interface_index: i32) -> Result<(), NlError> {
-        let _ = self
-            .gensock
-            .set_type_vec(interface_index, Nl80211Iftype::IftypeStation);
-        let _ = self.update_interfaces();
+        self.gensock
+            .set_type_vec(interface_index, Nl80211Iftype::IftypeStation)?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn set_interface_chan(&mut self, interface_index: i32, channel: u8) -> Result<(), NlError> {
-        let _ = self.gensock.set_frequency(
+        self.gensock.set_frequency(
             interface_index,
             WiFiChannel::new(channel).unwrap().to_frequency().unwrap(),
             Nl80211ChanWidth::ChanWidth20Noht,
             Nl80211ChannelType::ChanNoHt,
-        );
-        let _ = self.update_interfaces();
+        )?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn set_interface_up(&mut self, interface_index: i32) -> Result<(), NlError> {
-        let _ = self.rtsock.set_interface_up(interface_index);
-        let _ = self.update_interfaces();
+        self.rtsock.set_interface_up(interface_index)?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn set_interface_down(&mut self, interface_index: i32) -> Result<(), NlError> {
-        let _ = self.rtsock.set_interface_down(interface_index);
-        let _ = self.update_interfaces();
+        self.rtsock.set_interface_down(interface_index)?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn set_interface_mac(&mut self, interface_index: i32, mac: Vec<u8>) -> Result<(), NlError> {
-        let _ = self.rtsock.set_interface_mac(interface_index, mac);
-        let _ = self.update_interfaces();
+        self.rtsock.set_interface_mac(interface_index, mac)?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn set_interface_mac_random(&mut self, interface_index: i32) -> Result<(), NlError> {
-        let _ = self.rtsock.set_interface_mac_random(interface_index);
-        let _ = self.update_interfaces();
+        self.rtsock.set_interface_mac_random(interface_index)?;
+        self.update_interfaces()?;
         Ok(())
     }
 
     pub fn get_interface_status(&mut self, interface: &mut Interface) -> Result<(), NlError> {
-        let _ = self.rtsock.get_interface_status(interface);
-        let _ = self.update_interfaces();
+        self.rtsock.get_interface_status(interface)?;
+        self.update_interfaces()?;
         Ok(())
     }
 }
@@ -201,8 +203,8 @@ impl SocketsBuilder {
 
     // Builds the Sockets struct
     pub fn build(mut self) -> Result<Sockets, &'static str> {
-        self.with_gensocket();
-        self.with_rtsocket();
+        self.with_gensocket().ok();
+        self.with_rtsocket().ok();
         match (self.gensock, self.rtsock, self.interfaces) {
             (Some(gensock), Some(rtsock), Some(interfaces)) => Ok(Sockets {
                 rtsock,
