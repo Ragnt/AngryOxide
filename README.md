@@ -1,5 +1,5 @@
 
-![Screenshot](death.png)
+![Logo](death.png)
 
 # WPOxide
 
