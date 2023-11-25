@@ -367,7 +367,7 @@ pub struct Pmkid {
     pub id: u8,
     pub len: u8,
     pub oui: [u8; 3],
-    pub t: u8,
+    pub oui_type: u8,
     pub pmkid: [u8; 16],
 }
 
@@ -382,7 +382,7 @@ impl Pmkid {
             id: bytes[0],
             len: bytes[1],
             oui: [bytes[2], bytes[3], bytes[4]],
-            t: bytes[5],
+            oui_type: bytes[5],
             pmkid: [0; 16],
         };
         pmkid.pmkid.copy_from_slice(&bytes[6..]);
@@ -496,22 +496,14 @@ impl FourWayHandshake {
                 return Err("Invalid Message 1: MIC should not be present");
             }
 
-            if new_key.key_data_length as usize > 0 {
-                println!(
-                    "KEY!!!! {} | {:02x?}",
-                    &new_key.key_data_length, new_key.key_data
-                )
-            }
-
             // Check for PMKID presence and validity
-            if new_key.key_data_length as usize == 16 {
+            if new_key.key_data_length as usize == 22 {
                 // Extract PMKID from the key data
-                let pmkid_data = &new_key.key_data[0..16];
-                let pmkid = Pmkid::from_bytes(pmkid_data);
+                let pmkid = Pmkid::from_bytes(&new_key.key_data);
 
                 if pmkid.oui == rsnsuiteoui
-                    && pmkid.len >= 0x14
-                    && pmkid.t == 4
+                    && pmkid.len == 0x14
+                    && pmkid.oui_type == 4
                     && pmkid.pmkid.iter().any(|&x| x != 0)
                 {
                     self.pmkid = Some(pmkid)
@@ -660,9 +652,21 @@ impl FourWayHandshake {
     }
 
     pub fn to_hashcat_22000_format(&self) -> Option<String> {
-        if !self.complete() {
-            return None;
+        let mut output = String::new();
+
+        if let Some(pmkid) = &self.pmkid {
+            if let Some(pmkid_format) = self.generate_pmkid_hashcat_format(pmkid) {
+                output += &pmkid_format;
+            }
         }
+
+        if !self.complete() && output.is_empty() {
+            return None;
+        } else if !self.complete() && !output.is_empty() {
+            return Some(output);
+        }
+
+        output.push('\n');
 
         let mic_hex = self
             .mic
@@ -676,7 +680,6 @@ impl FourWayHandshake {
         let mac_ap_hex = self.mac_ap.as_ref()?.to_string();
         let mac_client_hex = self.mac_client.as_ref()?.to_string();
 
-        // For essid_hex
         let essid_hex =
             self.essid
                 .as_ref()?
@@ -705,10 +708,9 @@ impl FourWayHandshake {
                     acc
                 });
 
-        // Calculate the message pair value
         let message_pair = self.calculate_message_pair();
 
-        Some(format!(
+        output += &format!(
             "WPA*02*{}*{}*{}*{}*{}*{}*{}",
             mic_hex,
             mac_ap_hex,
@@ -717,6 +719,35 @@ impl FourWayHandshake {
             anonce_hex,
             eapol_client_hex,
             message_pair
+        );
+
+        Some(output)
+    }
+
+    fn generate_pmkid_hashcat_format(&self, pmkid: &Pmkid) -> Option<String> {
+        let pmkid_hex = pmkid.pmkid.iter().fold(String::new(), |mut acc, &byte| {
+            acc.push_str(&format!("{:02x}", byte));
+            acc
+        });
+
+        let mac_ap_hex = self.mac_ap.as_ref()?.to_string();
+        let mac_client_hex = self.mac_client.as_ref()?.to_string();
+        let essid_hex =
+            self.essid
+                .as_ref()?
+                .as_bytes()
+                .iter()
+                .fold(String::new(), |mut acc, &byte| {
+                    acc.push_str(&format!("{:02x}", byte));
+                    acc
+                });
+
+        // Calculate the message pair value
+        let message_pair = self.calculate_message_pair();
+
+        Some(format!(
+            "WPA*01*{}*{}*{}*{}***{}",
+            pmkid_hex, mac_ap_hex, mac_client_hex, essid_hex, message_pair
         ))
     }
 

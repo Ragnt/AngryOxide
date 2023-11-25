@@ -11,17 +11,14 @@ extern crate nix;
 use anyhow::Result;
 use devices::AccessPointInformation;
 use libc::EXIT_FAILURE;
-use libwifi::frame::components::{
-    MacAddress, RsnAkmSuite, RsnCipherSuite,
-    WpaAkmSuite,
-};
-use libwifi::frame::{DeauthenticationReason};
+use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
+use libwifi::frame::DeauthenticationReason;
 
-use ntlook::{Sockets};
+use ntlook::Sockets;
 
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
-use tx::{build_probe_request_undirected};
+use tx::build_probe_request_undirected;
 
 use crate::devices::{
     FourWayHandshake, HandshakeStorage, WiFiDevice, WiFiDeviceList, WiFiDeviceType,
@@ -89,6 +86,7 @@ impl WPOxideRuntime {
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
         let mut log = status::MessageLog::new(100);
+        //let interface_name: String = "wlx00c0ca98a919".to_string();
         let interface_name: String = "panda0".to_string();
         let mut iface: Option<ntlook::Interface> = None;
 
@@ -2880,7 +2878,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let interactions_interval = Duration::from_secs(500);
 
     let hop_interval = Duration::from_secs(2);
-    let channels = vec![1, 6, 11];
+    let channels = vec![6];
 
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
