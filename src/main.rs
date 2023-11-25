@@ -12,16 +12,16 @@ use anyhow::Result;
 use devices::AccessPointInformation;
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{
-    FrameControl, MacAddress, ManagementHeader, RsnAkmSuite, RsnCipherSuite, SequenceControl,
-    WpaAkmSuite, WpaCipherSuite, WpaInformation,
+    MacAddress, RsnAkmSuite, RsnCipherSuite,
+    WpaAkmSuite,
 };
-use libwifi::frame::{Authentication, DeauthenticationReason};
+use libwifi::frame::{DeauthenticationReason};
 
-use ntlook::{generate_random_bytes, Sockets};
+use ntlook::{Sockets};
 
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
-use tx::{build_probe_request_directed, build_probe_request_undirected};
+use tx::{build_probe_request_undirected};
 
 use crate::devices::{
     FourWayHandshake, HandshakeStorage, WiFiDevice, WiFiDeviceList, WiFiDeviceType,

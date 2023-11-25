@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use std::thread;
+
+
 
 use crate::ntlook::attr::*;
 use crate::ntlook::channels::*;
 use crate::ntlook::interface::Interface;
 
-use libwifi::frame::components::MacAddress;
+
 use neli::consts::genl::{CtrlAttr, CtrlCmd};
 use neli::consts::nl::GenlId;
 use neli::err::NlError;
@@ -47,7 +47,7 @@ impl Sockets {
         }
         for interface in &mut self.interfaces {
             match self.gensock.cmd_get_split_wiphy(interface) {
-                Ok(result) => {}
+                Ok(_result) => {}
                 Err(err) => {
                     let mapped_error = NlError::new(err.to_string());
                     return Err(mapped_error);
@@ -55,7 +55,7 @@ impl Sockets {
             }
         }
         for interface in &mut self.interfaces {
-            if let Some(index) = interface.index {
+            if let Some(_index) = interface.index {
                 match self.rtsock.get_interface_status(interface) {
                     Ok(state) => {
                         interface.state = Some(state);
@@ -157,9 +157,9 @@ impl SocketsBuilder {
         let mut rtsock = RtSocket::connect()?;
         if let Some(interfaces) = &mut self.interfaces {
             for interface in interfaces {
-                if let Some(index) = interface.index {
+                if let Some(_index) = interface.index {
                     match rtsock.get_interface_status(interface) {
-                        Ok(state) => {}
+                        Ok(_state) => {}
                         Err(err) => {
                             let mapped_error = NlError::new(err.to_string());
                             return Err(mapped_error);
@@ -189,7 +189,7 @@ impl SocketsBuilder {
         if let Some(interfaces) = &mut self.interfaces {
             for interface in interfaces {
                 match gensock.cmd_get_split_wiphy(interface) {
-                    Ok(result) => {}
+                    Ok(_result) => {}
                     Err(err) => {
                         let mapped_error = NlError::new(err.to_string());
                         return Err(mapped_error);

@@ -1,6 +1,6 @@
 use crate::ntlook::attr::*;
 use crate::ntlook::interface::Interface;
-use crate::ntlook::util::*;
+
 
 use libwifi::frame::components::MacAddress;
 use neli::consts::genl::{CtrlAttr, CtrlCmd};
@@ -19,7 +19,7 @@ pub struct RtSocket {
 
 impl RtSocket {
     pub fn connect() -> Result<Self, NlError<GenlId, Genlmsghdr<CtrlCmd, CtrlAttr>>> {
-        let mut sock = NlSocketHandle::connect(NlFamily::Route, None, &[])?;
+        let sock = NlSocketHandle::connect(NlFamily::Route, None, &[])?;
         Ok(Self { sock })
     }
 
@@ -104,7 +104,7 @@ impl RtSocket {
         for msg in iter {
             match msg {
                 Ok(p) => match p.get_payload() {
-                    Ok(p) => {
+                    Ok(_p) => {
                         //println!("{:?}", p);
                     }
                     Err(p) => {
@@ -150,7 +150,7 @@ impl RtSocket {
         for msg in iter {
             match msg {
                 Ok(p) => match p.get_payload() {
-                    Ok(p) => {
+                    Ok(_p) => {
                         //println!("{:?}", p);
                     }
                     Err(p) => {
@@ -191,7 +191,7 @@ impl RtSocket {
         for msg in iter {
             match msg {
                 Ok(p) => match p.get_payload() {
-                    Ok(p) => {
+                    Ok(_p) => {
                         //println!("{:?}", p);
                     }
                     Err(p) => {
@@ -231,7 +231,7 @@ impl RtSocket {
         for msg in iter {
             match msg {
                 Ok(p) => match p.get_payload() {
-                    Ok(p) => {
+                    Ok(_p) => {
                         //println!("{:?}", p);
                     }
                     Err(p) => {

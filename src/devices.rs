@@ -1,7 +1,7 @@
 use crate::ntlook::WiFiChannel;
 use libwifi::frame::components::MacAddress;
 use libwifi::frame::{EapolKey, MessageType};
-use radiotap::field::{AntennaSignal, Channel, Field};
+use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::collections::HashMap;

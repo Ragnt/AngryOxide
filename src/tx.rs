@@ -1,7 +1,7 @@
 use libwifi::frame::{
     components::{
         FrameControl, MacAddress, ManagementHeader, RsnAkmSuite, RsnCipherSuite, RsnInformation,
-        SequenceControl, StationInfo, VendorSpecificInfo, WpaCipherSuite,
+        SequenceControl, StationInfo,
     },
     AssociationRequest, Authentication, Deauthentication, DeauthenticationReason, ProbeRequest,
     ReassociationRequest,
