@@ -89,7 +89,7 @@ fn decode_iftypes(bytes: Vec<u8>) -> Vec<Nl80211Iftype> {
 pub fn iftypes_to_string_list(iftypes: Vec<Nl80211Iftype>) -> String {
     iftypes
         .iter()
-        .map(|iftype| iftype.to_string())
+        .map(|iftype| iftype.string())
         .collect::<Vec<&str>>()
         .join(", ")
 }
@@ -164,7 +164,7 @@ impl Interface {
             self.mac.as_ref().unwrap(),
             self.index.unwrap(),
             self.driver.as_ref().unwrap_or(&"Unknown".to_string()),
-            self.current_iftype.unwrap().to_string(),
+            self.current_iftype.unwrap().string(),
             types,
             self.active_monitor.unwrap(),
             self.frequency.as_ref().unwrap().frequency.map_or("None".to_string(), |value| value.to_string()),

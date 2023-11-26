@@ -45,9 +45,7 @@ pub enum Frame {
 
     // Data Frames
     Data(Data),
-    NullData(NullData),
     QosData(QosData),
-    QosNull(QosNull),
     DataCfAck(DataCfAck),
     DataCfPoll(DataCfPoll),
     DataCfAckCfPoll(DataCfAckCfPoll),
@@ -57,6 +55,9 @@ pub enum Frame {
     QosDataCfAck(QosDataCfAck),
     QosDataCfPoll(QosDataCfPoll),
     QosDataCfAckCfPoll(QosDataCfAckCfPoll),
+    // No eapol
     QosCfPoll(QosCfPoll),
     QosCfAckCfPoll(QosCfAckCfPoll),
+    QosNull(QosNull),
+    NullData(NullData),
 }

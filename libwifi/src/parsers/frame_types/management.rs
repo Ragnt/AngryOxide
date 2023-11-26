@@ -51,7 +51,7 @@ pub fn parse_authentication_frame(
     let (input, status_code) = le_u16(input)?;
 
     // Parse the optional challenge text, if present
-    let (input, challenge_text) = if input.is_empty() {
+    let (_, challenge_text) = if input.is_empty() {
         (input, None)
     } else {
         let (input, length) = le_u16(input)?;
@@ -80,7 +80,7 @@ pub fn parse_deauthentication_frame(
     let (input, header) = parse_management_header(frame_control, input)?;
 
     // Parse the reason code
-    let (input, reason_code) = le_u16(input)?;
+    let (_, reason_code) = le_u16(input)?;
 
     Ok(Frame::Deauthentication(Deauthentication {
         header,

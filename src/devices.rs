@@ -485,10 +485,14 @@ impl FourWayHandshake {
         }
     }
 
-    pub fn add_key(&mut self, new_key: EapolKey) -> Result<(), &'static str> {
-        let key_type = new_key.clone().determine_key_type();
+    pub fn add_key(&mut self, new_key: &EapolKey) -> Result<(), &'static str> {
+        let key_type = new_key.determine_key_type();
         // Define the RSN Suite OUI for PMKID validation
         let rsnsuiteoui: [u8; 3] = [0x00, 0x0f, 0xac];
+
+        if key_type == MessageType::GTK {
+            return Err("EAPOL is a GTK Update... ignoring.");
+        }
 
         if key_type == MessageType::Message1 && self.msg1.is_none() {
             // Validate Message 1: should have no MIC, contains ANonce
@@ -835,6 +839,13 @@ impl HandshakeStorage {
         })
     }
 
+    // Updated has_complete_handshake_for_ap function
+    pub fn has_m1_for_ap(&self, ap_mac: &MacAddress) -> bool {
+        self.handshakes.iter().any(|(key, handshakes)| {
+            &key.ap_mac == ap_mac && handshakes.iter().any(|hs| hs.has_m1())
+        })
+    }
+
     pub fn add_or_update_handshake(
         &mut self,
         ap_mac: &MacAddress,
@@ -846,7 +857,7 @@ impl HandshakeStorage {
 
         let handshake_list = self.handshakes.entry(session_key).or_default();
         for handshake in &mut *handshake_list {
-            if handshake.add_key(new_key.clone()).is_ok() {
+            if handshake.add_key(&new_key).is_ok() {
                 handshake.mac_ap = Some(ap_mac.clone());
                 handshake.mac_client = Some(client_mac.clone());
                 handshake.essid = essid;
@@ -854,7 +865,7 @@ impl HandshakeStorage {
             }
         }
         let mut new_handshake = FourWayHandshake::new(); // Create a new FourWayHandshake instance
-        new_handshake.add_key(new_key)?;
+        new_handshake.add_key(&new_key)?;
         new_handshake.mac_ap = Some(ap_mac.clone());
         new_handshake.mac_client = Some(client_mac.clone());
         new_handshake.essid = essid;

@@ -83,7 +83,6 @@ impl From<u8> for ActionCategory {
             126 => ActionCategory::VendorSpecificProtected,
             127 => ActionCategory::VendorSpecific,
             128..=255 => ActionCategory::Error,
-            _ => ActionCategory::Error,
         }
     }
 }

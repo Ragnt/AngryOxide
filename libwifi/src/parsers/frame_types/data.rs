@@ -6,7 +6,7 @@ use crate::frame::*;
 use crate::parsers::parse_data_header;
 use nom::{
     bytes::complete::take,
-    number::complete::{be_u16, be_u64, le_u16, le_u64, le_u8},
+    number::complete::{be_u16, be_u64, le_u8},
 };
 
 /// Parse a [Data] frame.
@@ -250,7 +250,7 @@ pub fn parse_eapol_key(input: &[u8]) -> Result<EapolKey, Error> {
     let (input, key_id) = be_u64(input)?;
     let (input, key_mic) = take(16usize)(input)?;
     let (input, key_data_length) = be_u16(input)?;
-    let (input, key_data) = take(key_data_length as usize)(input)?;
+    let (_, key_data) = take(key_data_length as usize)(input)?;
 
     Ok(EapolKey {
         protocol_version,

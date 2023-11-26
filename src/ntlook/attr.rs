@@ -306,7 +306,7 @@ impl Nl80211Iftype {
         }
     }
 
-    pub fn to_string(&self) -> &str {
+    pub fn string(&self) -> &str {
         match *self {
             Nl80211Iftype::IftypeUnspecified => "Unspecified",
             Nl80211Iftype::IftypeAdhoc => "Adhoc",

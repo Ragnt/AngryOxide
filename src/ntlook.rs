@@ -15,25 +15,14 @@ pub use util::*;
 mod channels;
 pub use channels::*;
 
-mod bss;
-pub use bss::*;
-
-mod station;
-pub use station::*;
-
 mod interface;
 pub use interface::*;
 
-mod socket;
-pub use socket::*;
+mod ntsocket;
+pub use ntsocket::*;
 
 mod sockets;
 pub use sockets::*;
 
 mod rtsocket;
 pub use rtsocket::*;
-
-#[cfg(feature = "async")]
-mod async_socket;
-#[cfg(feature = "async")]
-pub use async_socket::*;

@@ -1,5 +1,3 @@
-use rand::{thread_rng, RngCore};
-
 use super::Nl80211Iftype;
 
 pub fn decode_iftypes(bytes: Vec<u8>) -> Vec<Nl80211Iftype> {
@@ -23,17 +21,4 @@ pub fn decode_iftypes(bytes: Vec<u8>) -> Vec<Nl80211Iftype> {
             }
         })
         .collect()
-}
-
-pub fn generate_random_bytes(x: usize) -> Vec<u8> {
-    let mut rng = thread_rng();
-    let length = x;
-    let mut bytes = vec![0u8; length];
-    rng.fill_bytes(&mut bytes);
-    // Ensure the first byte is even
-    if !bytes.is_empty() {
-        bytes[0] &= 0xFE; // 0xFE is 11111110 in binary
-    }
-
-    bytes
 }

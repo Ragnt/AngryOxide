@@ -4,16 +4,29 @@ use crate::frame::components::*;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use std::{
-    collections::HashMap,
     io::{self, Write},
-    time::SystemTime,
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+use super::{DataFrame, NullDataFrame};
 
 #[derive(Clone, Debug, AddressHeader)]
 pub struct QosData {
     pub header: DataHeader,
     pub eapol_key: Option<EapolKey>,
     pub data: Vec<u8>,
+}
+
+impl DataFrame for QosData {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
+    fn eapol_key(&self) -> &Option<EapolKey> {
+        &self.eapol_key
+    }
+    fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
 }
 
 #[derive(Clone, Debug, AddressHeader)]
@@ -23,11 +36,35 @@ pub struct QosDataCfAck {
     pub data: Vec<u8>,
 }
 
+impl DataFrame for QosDataCfAck {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
+    fn eapol_key(&self) -> &Option<EapolKey> {
+        &self.eapol_key
+    }
+    fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+}
+
 #[derive(Clone, Debug, AddressHeader)]
 pub struct QosDataCfPoll {
     pub header: DataHeader,
     pub eapol_key: Option<EapolKey>,
     pub data: Vec<u8>,
+}
+
+impl DataFrame for QosDataCfPoll {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
+    fn eapol_key(&self) -> &Option<EapolKey> {
+        &self.eapol_key
+    }
+    fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
 }
 
 #[derive(Clone, Debug, AddressHeader)]
@@ -37,9 +74,27 @@ pub struct QosDataCfAckCfPoll {
     pub data: Vec<u8>,
 }
 
+impl DataFrame for QosDataCfAckCfPoll {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
+    fn eapol_key(&self) -> &Option<EapolKey> {
+        &self.eapol_key
+    }
+    fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+}
+
 #[derive(Clone, Debug, AddressHeader)]
 pub struct QosCfPoll {
     pub header: DataHeader,
+}
+
+impl NullDataFrame for QosCfPoll {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
 }
 
 #[derive(Clone, Debug, AddressHeader)]
@@ -47,9 +102,21 @@ pub struct QosCfAckCfPoll {
     pub header: DataHeader,
 }
 
+impl NullDataFrame for QosCfAckCfPoll {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
+}
+
 #[derive(Clone, Debug, AddressHeader)]
 pub struct QosNull {
     pub header: DataHeader,
+}
+
+impl NullDataFrame for QosNull {
+    fn header(&self) -> &DataHeader {
+        &self.header
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +136,28 @@ pub struct EapolKey {
     pub key_mic: [u8; 16],
     pub key_data_length: u16,
     pub key_data: Vec<u8>,
+}
+
+impl Default for EapolKey {
+    fn default() -> EapolKey {
+        EapolKey {
+            protocol_version: 0,
+            timestamp: UNIX_EPOCH,
+            packet_type: 0,
+            packet_length: 0,
+            descriptor_type: 0,
+            key_information: 0,
+            key_length: 0,
+            replay_counter: 0,
+            key_nonce: [0; 32],
+            key_iv: [0; 16],
+            key_rsc: 0,
+            key_id: 0,
+            key_mic: [0; 16],
+            key_data_length: 0,
+            key_data: Vec::new(),
+        }
+    }
 }
 
 impl EapolKey {
@@ -93,7 +182,43 @@ impl EapolKey {
         Ok(bytes)
     }
 
-    pub fn determine_key_type(&mut self) -> MessageType {
+    pub fn encode(&self) -> Result<Vec<u8>, std::io::Error> {
+        let key_data_length = self.key_data.len() as u16;
+
+        // Assuming key_length is the length of the key_nonce for this example
+        let key_length = self.key_nonce.len() as u16;
+
+        // Calculate the packet length dynamically
+        let header_size = 1 + 1 + 2 + 1 + 2 + 2; // Sizes of the fields before replay_counter
+        let packet_length = header_size as u16
+            + 8 // replay_counter
+            + self.key_nonce.len() as u16
+            + self.key_iv.len() as u16
+            + 8 // key_rsc
+            + 8 // key_id
+            + self.key_mic.len() as u16
+            + 2 // key_data_length
+            + key_data_length;
+
+        let mut buf = Vec::new();
+        buf.write_u8(self.protocol_version)?;
+        buf.write_u8(self.packet_type)?;
+        buf.write_u16::<BigEndian>(packet_length)?;
+        buf.write_u8(self.descriptor_type)?;
+        buf.write_u16::<BigEndian>(self.key_information)?;
+        buf.write_u16::<BigEndian>(key_length)?;
+        buf.write_u64::<BigEndian>(self.replay_counter)?;
+        buf.extend_from_slice(&self.key_nonce);
+        buf.extend_from_slice(&self.key_iv);
+        buf.write_u64::<BigEndian>(self.key_rsc)?;
+        buf.write_u64::<BigEndian>(self.key_id)?;
+        buf.extend_from_slice(&self.key_mic);
+        buf.write_u16::<BigEndian>(key_data_length)?;
+        buf.extend_from_slice(&self.key_data);
+        Ok(buf)
+    }
+
+    pub fn determine_key_type(&self) -> MessageType {
         /*
         00000001 00001010
         xxx..... ........ Reserved
@@ -101,13 +226,15 @@ impl EapolKey {
         ....0... ........ No Request to initiate Handshake
         .....0.. ........ No Error
         ......0. ........ Not Secure
-        .......1 ........ Message contains Key MIC
-        ........ 0....... No Key ACK
+        .......0 ........ Message contains Key MIC
+        ........ 1....... No Key ACK
         ........ .0...... Install: 802.1X component shall not configure the temporal key
         ........ ..xx.... Reserved
         ........ ....1... Key Type: Pairwise Key
         ........ .....010 Vers: HMAC-SHA1-128 is the EAPOL-Key MIC / NIST AES key wrap is the EAPOL-key enc
         */
+
+        const KEY_TYPE: u16 = 1 << 3;
         // Define the bit masks for the relevant bits in the key_information field
         const KEY_ACK: u16 = 1 << 7;
         const KEY_MIC: u16 = 1 << 8;
@@ -121,45 +248,49 @@ impl EapolKey {
             (key_information & INSTALL) != 0
         ); */
 
-        match self.key_information {
-            // Check for Message 1 of 4-way handshake
-            // KEY_ACK == 1
-            ki if ki & KEY_ACK != 0
-                && ki & KEY_MIC == 0
-                && ki & SECURE == 0
-                && ki & INSTALL == 0 =>
-            {
-                MessageType::Message1
+        if self.key_information & KEY_TYPE != 0 {
+            match self.key_information {
+                // Check for Message 1 of 4-way handshake
+                // KEY_ACK == 1
+                ki if ki & KEY_ACK != 0
+                    && ki & KEY_MIC == 0
+                    && ki & SECURE == 0
+                    && ki & INSTALL == 0 =>
+                {
+                    MessageType::Message1
+                }
+                // Check for Message 2 of 4-way handshake
+                // KEY_MIC == 1
+                ki if ki & KEY_ACK == 0
+                    && ki & KEY_MIC != 0
+                    && ki & SECURE == 0
+                    && ki & INSTALL == 0 =>
+                {
+                    MessageType::Message2
+                }
+                // Check for Message 3 of 4-way handshake
+                // KEY_ACK & KEY_MIC & SECURE & AND INSTALL == 1
+                ki if ki & KEY_ACK != 0
+                    && ki & KEY_MIC != 0
+                    && ki & SECURE != 0
+                    && ki & INSTALL != 0 =>
+                {
+                    MessageType::Message3
+                }
+                // Check for Message 4 of 4-way handshake
+                // KEY MIC & KEY SECURE == 1
+                ki if ki & KEY_ACK == 0
+                    && ki & KEY_MIC != 0
+                    && ki & SECURE != 0
+                    && ki & INSTALL == 0 =>
+                {
+                    MessageType::Message4
+                }
+                // Other cases, such as Group Key Handshake, or unrecognized/invalid key information
+                _ => MessageType::Error,
             }
-            // Check for Message 2 of 4-way handshake
-            // KEY_MIC == 1
-            ki if ki & KEY_ACK == 0
-                && ki & KEY_MIC != 0
-                && ki & SECURE == 0
-                && ki & INSTALL == 0 =>
-            {
-                MessageType::Message2
-            }
-            // Check for Message 3 of 4-way handshake
-            // KEY_ACK & KEY_MIC & SECURE & AND INSTALL == 1
-            ki if ki & KEY_ACK != 0
-                && ki & KEY_MIC != 0
-                && ki & SECURE != 0
-                && ki & INSTALL != 0 =>
-            {
-                MessageType::Message3
-            }
-            // Check for Message 4 of 4-way handshake
-            // KEY MIC & KEY SECURE == 1
-            ki if ki & KEY_ACK == 0
-                && ki & KEY_MIC != 0
-                && ki & SECURE != 0
-                && ki & INSTALL == 0 =>
-            {
-                MessageType::Message4
-            }
-            // Other cases, such as Group Key Handshake, or unrecognized/invalid key information
-            _ => MessageType::Error,
+        } else {
+            MessageType::GTK
         }
     }
 }
@@ -170,6 +301,7 @@ pub enum MessageType {
     Message2,
     Message3,
     Message4,
+    GTK,
     Error,
 }
 
@@ -180,6 +312,7 @@ impl std::fmt::Display for MessageType {
             MessageType::Message2 => write!(f, "Message 2"),
             MessageType::Message3 => write!(f, "Message 3"),
             MessageType::Message4 => write!(f, "Message 4"),
+            MessageType::GTK => write!(f, "Group Temporal Key"),
             MessageType::Error => write!(f, "Unknown Message"),
         }
     }

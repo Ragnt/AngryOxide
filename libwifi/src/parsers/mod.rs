@@ -18,7 +18,7 @@ fn flag_is_set(data: u8, bit: usize) -> bool {
     }
 }
 
-pub(self) fn flag((input, bit_offset): (&[u8], usize)) -> IResult<(&[u8], usize), bool> {
+fn flag((input, bit_offset): (&[u8], usize)) -> IResult<(&[u8], usize), bool> {
     if input.is_empty() {
         return Err(nom::Err::Incomplete(Needed::new(1)));
     }

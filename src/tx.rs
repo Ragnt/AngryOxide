@@ -12,8 +12,8 @@ use libwifi::frame::{
 // These is a good platform for continued testing and optimization.
 
 pub fn build_authentication_frame_noack(
-    destination: MacAddress,
-    source_rogue: MacAddress,
+    destination: &MacAddress,
+    source_rogue: &MacAddress,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = [
         0x00, 0x00, /* radiotap version and padding */
@@ -33,7 +33,7 @@ pub fn build_authentication_frame_noack(
         frame_control,
         duration: 15000u16.to_ne_bytes(),
         address_1: destination.clone(),
-        address_2: source_rogue,
+        address_2: source_rogue.clone(),
         address_3: destination.clone(),
         sequence_control: SequenceControl {
             fragment_number: 0u8,
@@ -52,8 +52,8 @@ pub fn build_authentication_frame_noack(
 }
 
 pub fn build_deauthentication_fm_ap(
-    ap: MacAddress,
-    client: MacAddress,
+    ap: &MacAddress,
+    client: &MacAddress,
     reason: DeauthenticationReason,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = [
@@ -90,8 +90,8 @@ pub fn build_deauthentication_fm_ap(
 }
 
 pub fn build_deauthentication_fm_client(
-    ap: MacAddress,
-    client: MacAddress,
+    ap: &MacAddress,
+    client: &MacAddress,
     reason: DeauthenticationReason,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = [
@@ -128,9 +128,9 @@ pub fn build_deauthentication_fm_client(
 }
 
 pub fn build_association_request_org(
-    addr1: MacAddress,
-    addr_rogue: MacAddress,
-    addr3: MacAddress,
+    addr1: &MacAddress,
+    addr_rogue: &MacAddress,
+    addr3: &MacAddress,
     ssid: Option<String>,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = [
@@ -204,8 +204,8 @@ pub fn build_association_request_org(
 }
 
 pub fn build_reassociation_request(
-    ap_mac: MacAddress,
-    client_mac: MacAddress,
+    ap_mac: &MacAddress,
+    client_mac: &MacAddress,
     ssid: Option<String>,
     group_cipher_suite: RsnCipherSuite,
     pairwise_cipher_suites: Vec<RsnCipherSuite>,
@@ -240,7 +240,7 @@ pub fn build_reassociation_request(
         header,
         capability_info: 0x431,
         listen_interval: 0x14,
-        current_ap_address: ap_mac,
+        current_ap_address: ap_mac.clone(),
         station_info: StationInfo {
             supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
             extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
@@ -279,7 +279,7 @@ pub fn build_reassociation_request(
     rth
 }
 
-pub fn build_probe_request_undirected(addr_rogue: MacAddress) -> Vec<u8> {
+pub fn build_probe_request_undirected(addr_rogue: &MacAddress) -> Vec<u8> {
     let mut rth: Vec<u8> = [
         0x00, 0x00, /* radiotap version and padding */
         0x08, 0x00, /* radiotap header length */
@@ -328,7 +328,7 @@ pub fn build_probe_request_undirected(addr_rogue: MacAddress) -> Vec<u8> {
     rth
 }
 
-pub fn build_probe_request_directed(addr_rogue: MacAddress, ssid: String) -> Vec<u8> {
+pub fn build_probe_request_directed(addr_rogue: &MacAddress, ssid: &String) -> Vec<u8> {
     let mut rth: Vec<u8> = [
         0x00, 0x00, /* radiotap version and padding */
         0x08, 0x00, /* radiotap header length */
@@ -360,7 +360,7 @@ pub fn build_probe_request_directed(addr_rogue: MacAddress, ssid: String) -> Vec
         station_info: StationInfo {
             supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
             extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
-            ssid: Some(ssid),
+            ssid: Some(ssid.to_string()),
             ds_parameter_set: None,
             tim: None,
             country_info: None,

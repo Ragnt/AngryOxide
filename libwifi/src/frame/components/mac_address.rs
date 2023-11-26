@@ -17,7 +17,7 @@ use rand::{thread_rng, RngCore};
 pub struct MacAddress(pub [u8; 6]);
 
 impl Hash for MacAddress {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
         // Implement hashing here
     }
 }
@@ -38,7 +38,7 @@ impl MacAddress {
         self.0
     }
 
-    /// Check whether this MAC addresses the whole network.
+    /// Check if this is a private address (locally set bit)
     pub fn is_private(&self) -> bool {
         self.0[0] & 0x02 != 0
     }

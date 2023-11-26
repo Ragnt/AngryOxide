@@ -287,7 +287,7 @@ impl RsnInformation {
 
         // Encode RSN Capabilities
         let mut rsn_capabilities: u16 = 0;
-        rsn_capabilities |= (self.pre_auth as u16) << 0;
+        rsn_capabilities |= self.pre_auth as u16;
         rsn_capabilities |= (self.no_pairwise as u16) << 1;
         rsn_capabilities |= ((self.ptksa_replay_counter & 0x03) as u16) << 2;
         rsn_capabilities |= ((self.gtksa_replay_counter & 0x03) as u16) << 3;

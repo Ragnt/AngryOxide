@@ -1,217 +1,132 @@
-
-
-
 use crate::ntlook::attr::*;
 use crate::ntlook::channels::*;
 use crate::ntlook::interface::Interface;
 
-
-use neli::consts::genl::{CtrlAttr, CtrlCmd};
-use neli::consts::nl::GenlId;
-use neli::err::NlError;
-use neli::genl::Genlmsghdr;
-
+use crate::ntlook::ntsocket::NtSocket;
 use crate::ntlook::rtsocket::RtSocket;
-use crate::ntlook::socket::Socket;
 
 use super::Nl80211Iftype;
 
-pub struct Sockets {
-    pub(crate) rtsock: RtSocket,
-    pub(crate) gensock: Socket,
-    pub(crate) interfaces: Vec<Interface>,
+pub fn update_interfaces() -> Result<Vec<Interface>, String> {
+    get_interfaces_info()
 }
 
-impl Sockets {
-    pub fn print_interface(&mut self, interface_index: i32) {
-        for interface in &self.interfaces {
-            if interface.index.unwrap() == interface_index {
-                println!("{}", interface.pretty_print());
-            }
+// netlink commands
+
+fn get_interfaces_info() -> Result<Vec<Interface>, String> {
+    let mut nt_socket: NtSocket = NtSocket::connect()?;
+    let mut rt_socket: RtSocket = RtSocket::connect()?;
+
+    let mut interfaces: Vec<Interface> = nt_socket.cmd_get_interface(None)?;
+    for interface in &mut interfaces {
+        nt_socket.cmd_get_split_wiphy(interface)?;
+        interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
+    }
+    Ok(interfaces)
+}
+
+pub fn get_interface_info_idx(interface_index: i32) -> Result<Interface, String> {
+    let mut nt_socket: NtSocket = NtSocket::connect()?;
+    let mut rt_socket: RtSocket = RtSocket::connect()?;
+
+    let mut interfaces = nt_socket.cmd_get_interface(Some(interface_index))?;
+    for interface in &mut interfaces {
+        nt_socket.cmd_get_split_wiphy(interface)?;
+        interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
+    }
+    Ok(interfaces.first().unwrap().clone())
+}
+
+pub fn get_interface_info_name(interface_name: &String) -> Result<Interface, String> {
+    let mut nt_socket: NtSocket = NtSocket::connect()?;
+    let mut rt_socket: RtSocket = RtSocket::connect()?;
+    let mut ret_interface: Option<Interface> = None;
+    let mut interfaces = nt_socket.cmd_get_interface(None)?;
+    for interface in &mut interfaces {
+        let name: String = if let Some(nme) = &interface.name {
+            String::from_utf8(nme.to_vec())
+                .unwrap()
+                .trim_end_matches('\0')
+                .to_owned()
+        } else {
+            continue;
+        };
+        if &name == interface_name {
+            nt_socket.cmd_get_split_wiphy(interface)?;
+            interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
+            ret_interface = Some(interface.clone());
+            break;
         }
     }
-
-    pub fn print_interfaces(&self) {
-        for interface in &self.interfaces {
-            println!("{}", interface.pretty_print());
-        }
-    }
-
-    pub fn update_interfaces(&mut self) -> Result<bool, NlError> {
-        match self.gensock.cmd_get_interface(None) {
-            Ok(vec) => self.interfaces = vec,
-            Err(err) => {
-                let mapped_error = NlError::new(err.to_string());
-                return Err(mapped_error);
-            }
-        }
-        for interface in &mut self.interfaces {
-            match self.gensock.cmd_get_split_wiphy(interface) {
-                Ok(_result) => {}
-                Err(err) => {
-                    let mapped_error = NlError::new(err.to_string());
-                    return Err(mapped_error);
-                }
-            }
-        }
-        for interface in &mut self.interfaces {
-            if let Some(_index) = interface.index {
-                match self.rtsock.get_interface_status(interface) {
-                    Ok(state) => {
-                        interface.state = Some(state);
-                    }
-                    Err(err) => {
-                        let mapped_error = NlError::new(err.to_string());
-                        return Err(mapped_error);
-                    }
-                }
-            }
-        }
-        Ok(true)
-    }
-
-    pub fn get_interfaces_info(&mut self) -> Result<Vec<Interface>, NlError> {
-        self.gensock.cmd_get_interface(None)
-    }
-
-    pub fn get_interface_info(&mut self, interface_index: i32) -> Result<Vec<Interface>, NlError> {
-        self.gensock.cmd_get_interface(Some(interface_index))
-    }
-
-    pub fn set_interface_monitor(&mut self, interface_index: i32) -> Result<(), NlError> {
-        self.gensock
-            .set_type_vec(interface_index, Nl80211Iftype::IftypeMonitor)?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn set_interface_station(&mut self, interface_index: i32) -> Result<(), NlError> {
-        self.gensock
-            .set_type_vec(interface_index, Nl80211Iftype::IftypeStation)?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn set_interface_chan(&mut self, interface_index: i32, channel: u8) -> Result<(), NlError> {
-        self.gensock.set_frequency(
-            interface_index,
-            WiFiChannel::new(channel).unwrap().to_frequency().unwrap(),
-            Nl80211ChanWidth::ChanWidth20Noht,
-            Nl80211ChannelType::ChanNoHt,
-        )?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn set_interface_up(&mut self, interface_index: i32) -> Result<(), NlError> {
-        self.rtsock.set_interface_up(interface_index)?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn set_interface_down(&mut self, interface_index: i32) -> Result<(), NlError> {
-        self.rtsock.set_interface_down(interface_index)?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn set_interface_mac(&mut self, interface_index: i32, mac: Vec<u8>) -> Result<(), NlError> {
-        self.rtsock.set_interface_mac(interface_index, mac)?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn set_interface_mac_random(&mut self, interface_index: i32) -> Result<(), NlError> {
-        self.rtsock.set_interface_mac_random(interface_index)?;
-        self.update_interfaces()?;
-        Ok(())
-    }
-
-    pub fn get_interface_status(&mut self, interface: &mut Interface) -> Result<(), NlError> {
-        self.rtsock.get_interface_status(interface)?;
-        self.update_interfaces()?;
-        Ok(())
+    if let Some(intfc) = ret_interface {
+        Ok(intfc)
+    } else {
+        Err("Interface Not Found".to_string())
     }
 }
 
-pub struct SocketsBuilder {
-    rtsock: Option<RtSocket>,
-    gensock: Option<Socket>,
-    interfaces: Option<Vec<Interface>>,
+fn get_wiphy(interface: &mut Interface) -> Result<&mut Interface, String> {
+    let mut nt_socket = NtSocket::connect()?;
+    nt_socket.cmd_get_split_wiphy(interface)
 }
 
-impl SocketsBuilder {
-    // Creates a new builder instance
-    pub fn new() -> Self {
-        SocketsBuilder {
-            rtsock: None,
-            gensock: None,
-            interfaces: None,
-        }
-    }
+pub fn set_interface_monitor(interface_index: i32) -> Result<(), String> {
+    let mut nt_socket = NtSocket::connect()?;
+    nt_socket.set_type_vec(interface_index, Nl80211Iftype::IftypeMonitor)?;
+    let _ = update_interfaces();
+    Ok(())
+}
 
-    // Initializes and connects RtSocket
-    pub fn with_rtsocket(
-        &mut self,
-    ) -> Result<&Self, NlError<GenlId, Genlmsghdr<CtrlCmd, CtrlAttr>>> {
-        let mut rtsock = RtSocket::connect()?;
-        if let Some(interfaces) = &mut self.interfaces {
-            for interface in interfaces {
-                if let Some(_index) = interface.index {
-                    match rtsock.get_interface_status(interface) {
-                        Ok(_state) => {}
-                        Err(err) => {
-                            let mapped_error = NlError::new(err.to_string());
-                            return Err(mapped_error);
-                        }
-                    }
-                }
-            }
-        }
-        self.rtsock = Some(rtsock);
-        Ok(self)
-    }
+pub fn set_interface_station(interface_index: i32) -> Result<(), String> {
+    let mut nt_socket = NtSocket::connect()?;
+    nt_socket.set_type_vec(interface_index, Nl80211Iftype::IftypeStation)?;
+    let _ = update_interfaces();
+    Ok(())
+}
 
-    // Initializes and connects Socket
-    pub fn with_gensocket(
-        &mut self,
-    ) -> Result<&Self, NlError<GenlId, Genlmsghdr<CtrlCmd, CtrlAttr>>> {
-        let mut gensock = Socket::connect()?;
+pub fn set_interface_chan(interface_index: i32, channel: u8) -> Result<(), String> {
+    let mut nt_socket = NtSocket::connect()?;
+    nt_socket.set_frequency(
+        interface_index,
+        WiFiChannel::new(channel).unwrap().to_frequency().unwrap(),
+        Nl80211ChanWidth::ChanWidth20Noht,
+        Nl80211ChannelType::ChanNoHt,
+    )?;
+    let _ = update_interfaces();
+    Ok(())
+}
 
-        // Use a mutable reference to gensock for get_info_vec
-        match gensock.cmd_get_interface(None) {
-            Ok(vec) => self.interfaces = Some(vec),
-            Err(err) => {
-                let mapped_error = NlError::new(err.to_string());
-                return Err(mapped_error);
-            }
-        }
-        if let Some(interfaces) = &mut self.interfaces {
-            for interface in interfaces {
-                match gensock.cmd_get_split_wiphy(interface) {
-                    Ok(_result) => {}
-                    Err(err) => {
-                        let mapped_error = NlError::new(err.to_string());
-                        return Err(mapped_error);
-                    }
-                }
-            }
-        }
-        self.gensock = Some(gensock);
-        Ok(self)
-    }
+// rtnetlink commands- all use interface index.
 
-    // Builds the Sockets struct
-    pub fn build(mut self) -> Result<Sockets, &'static str> {
-        self.with_gensocket().ok();
-        self.with_rtsocket().ok();
-        match (self.gensock, self.rtsock, self.interfaces) {
-            (Some(gensock), Some(rtsock), Some(interfaces)) => Ok(Sockets {
-                rtsock,
-                gensock,
-                interfaces,
-            }),
-            _ => Err("Both RtSocket and Socket must be initialized"),
-        }
-    }
+pub fn set_interface_up(interface_index: i32) -> Result<(), String> {
+    let mut rt_socket = RtSocket::connect()?;
+    rt_socket.set_interface_up(interface_index)?;
+    let _ = update_interfaces();
+    Ok(())
+}
+
+pub fn set_interface_down(interface_index: i32) -> Result<(), String> {
+    let mut rt_socket = RtSocket::connect()?;
+    rt_socket.set_interface_down(interface_index)?;
+    let _ = update_interfaces();
+    Ok(())
+}
+
+pub fn set_interface_mac(interface_index: i32, mac: &[u8; 6]) -> Result<(), String> {
+    let mut rt_socket = RtSocket::connect()?;
+    rt_socket.set_interface_mac(interface_index, mac)?;
+    let _ = update_interfaces();
+    Ok(())
+}
+
+pub fn set_interface_mac_random(interface_index: i32) -> Result<(), String> {
+    let mut rt_socket = RtSocket::connect()?;
+    rt_socket.set_interface_mac_random(interface_index)?;
+    let _ = update_interfaces();
+    Ok(())
+}
+// This should only be called when "updating" an interface, so we won't update it after doing this.
+fn get_interface_state(interface_index: i32) -> Result<Operstate, String> {
+    let mut rt_socket = RtSocket::connect().map_err(|e| e.to_string())?;
+    rt_socket.get_interface_status(interface_index)
 }
