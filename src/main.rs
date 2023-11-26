@@ -599,6 +599,8 @@ fn handle_packet(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String
                 //  - If we don't have the SSID of this AP, we fire off a undirect proberequest every 8 beacons until we get one. Because this is undirected we usually end up with all the SSID's pretty quick.
                 //      - First we will send an authentication. This is the initiation of our interaction with the AP.
                 //      - Then we will try to asssociate. This should generate a EAPoL Message 1 (which may contain a PMKID)
+                //      - Four beacon frames later we will send a reasssociation request.
+                //      - And finally we will send a deauthentication if the target is seemingly vulnerable.
 
                 let mut interacted = false;
                 if !oxide
