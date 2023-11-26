@@ -30,6 +30,5 @@ hex = "0.4.3"
 rand = "0.8.5"
 ctrlc = "3.4.1"
 crossterm = "0.27.0"
-ratatui = "0.24.0"
+ratatui = { version = "0.24.0", features = ["all-widgets"]}
 chrono = "0.4.31"
-tokio = "1.34.0"
