@@ -17,16 +17,45 @@ pub use crate::frame::Frame;
 pub use crate::frame_types::*;
 pub use crate::traits::*;
 
+use crc::{Crc, CRC_32_ISO_HDLC};
+
+// CRC algorithm for FCS calculation
+const CRC_32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+
 /// Parse IEE 802.11 frames from raw bytes.
 ///
 /// This function doesn't do FCS checks. These need to be done separately.
-pub fn parse_frame(input: &[u8]) -> Result<Frame, Error> {
+pub fn parse_frame(input: &[u8], fcs_included: bool) -> Result<Frame, Error> {
+    // Ensure input is long enough for an FCS (at least 4 bytes)
+    if input.len() < 4 {
+        return Err(Error::Failure(
+            "Input frame is too short to contain an FCS".to_string(),
+            input.to_vec(),
+        ));
+    }
+    if fcs_included {
+        // Split the input into frame data and FCS
+        let (frame_data, fcs_bytes) = input.split_at(input.len() - 4);
+
+        // Calculate the CRC over the frame data
+        let crc = CRC_32.checksum(frame_data);
+
+        // Convert the last 4 bytes (FCS) to a u32
+        let fcs = u32::from_be_bytes([fcs_bytes[0], fcs_bytes[1], fcs_bytes[2], fcs_bytes[3]]);
+
+        // Verify the FCS
+        if crc != fcs {
+            return Err(Error::Failure(
+                format!(
+                    "Frame Check Sequence (FCS) mismatch {:02x} {:02x}",
+                    crc, fcs
+                ),
+                input.to_vec(),
+            ));
+        }
+    }
+
     let (input, frame_control) = parse_frame_control(input)?;
-    //println!(
-    //    "Type/Subtype: {:?}, {:?}",
-    //    frame_control.frame_type, frame_control.frame_subtype
-    //);
-    //println!("Payload bytes: {:?}", &input);
 
     // Check which kind of frame sub-type we got
     match frame_control.frame_subtype {

@@ -112,6 +112,13 @@ impl WiFiChannel {
         }
     }
 
+    pub fn get_channel_number(&self) -> u8 {
+        match self {
+            WiFiChannel::Channel2GHz(channel) => *channel,
+            WiFiChannel::Channel5GHz(channel) => *channel,
+        }
+    }
+
     pub fn short_string(&self) -> String {
         match self {
             WiFiChannel::Channel2GHz(channel) => format!("{}", channel),

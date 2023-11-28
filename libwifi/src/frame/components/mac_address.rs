@@ -13,7 +13,7 @@ use rand::{thread_rng, RngCore};
 /// // -> true
 /// ```
 ///
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Copy)]
 pub struct MacAddress(pub [u8; 6]);
 
 impl Hash for MacAddress {

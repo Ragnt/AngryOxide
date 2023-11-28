@@ -11,14 +11,6 @@ license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
-[[bench]]
-name = "parse_beacon"
-harness = false
-
-[[bench]]
-name = "parse_data"
-harness = false
-
 [dependencies]
 rand = "0.8"
 byteorder = "1.5.0"
@@ -28,6 +20,7 @@ thiserror = "1.0"
 strum_macros = "0.25"
 enum_dispatch = "0.3"
 libwifi_macros = { version = "0.0.2", path = "../libwifi_macros" }
+crc = "3.0.1"
 
 [dev-dependencies]
 criterion = "0.5"

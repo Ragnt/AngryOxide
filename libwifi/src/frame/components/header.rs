@@ -159,6 +159,38 @@ pub struct DataHeader {
     pub qos: Option<[u8; 2]>,
 }
 
+impl DataHeader {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Serialize frame control
+        bytes.extend_from_slice(&self.frame_control.encode());
+
+        // Serialize duration (2 bytes)
+        bytes.extend_from_slice(&self.duration);
+
+        // Serialize MAC addresses
+        bytes.extend_from_slice(&self.address_1.encode());
+        bytes.extend_from_slice(&self.address_2.encode());
+        bytes.extend_from_slice(&self.address_3.encode());
+
+        // Serialize sequence control
+        bytes.extend_from_slice(&self.sequence_control.encode());
+
+        // Serialize address 4 if present
+        if let Some(addr) = &self.address_4 {
+            bytes.extend_from_slice(&addr.encode());
+        }
+
+        // Serialize QoS if present
+        if let Some(qos) = &self.qos {
+            bytes.extend_from_slice(qos);
+        }
+
+        bytes
+    }
+}
+
 impl Addresses for DataHeader {
     /// Return the mac address of the sender
     fn src(&self) -> Option<&MacAddress> {

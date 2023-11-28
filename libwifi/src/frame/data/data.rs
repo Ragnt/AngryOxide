@@ -11,6 +11,25 @@ pub struct Data {
     pub data: Vec<u8>,
 }
 
+impl Data {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Serialize header
+        bytes.extend_from_slice(&self.header.encode());
+
+        // Serialize EAPOL key if present
+        if let Some(eapol_key) = &self.eapol_key {
+            bytes.extend(eapol_key.encode().unwrap()); // Unwrap the result
+        }
+
+        // Append data
+        bytes.extend_from_slice(&self.data);
+
+        bytes
+    }
+}
+
 impl DataFrame for Data {
     fn header(&self) -> &DataHeader {
         &self.header
