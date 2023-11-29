@@ -9,7 +9,6 @@ WPOxide was developed as a way to learn rust, netlink, and kernel sockets all at
 
 ## Features
 
-
 - Active attack engine used to retrieve relevent messages from Access Points.
 - "Smart Attack" - considers attack status, AP state, and AP capabilities before blindly (brute-force) attacking.
 - EAPOL Capture & 4-Way-Handshake validation using Nonce Correction, Replay Counter validation, and Temporal validation.
@@ -18,3 +17,10 @@ WPOxide was developed as a way to learn rust, netlink, and kernel sockets all at
 ## Screenshots
 
 ![Screenshot](wpoxide.png)
+
+
+## Attack Engine
+
+WIP state-based AP attack engine.
+
+![Attack Engine Diagram](engine.png)
