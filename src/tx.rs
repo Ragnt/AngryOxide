@@ -9,6 +9,19 @@ use libwifi::frame::{
     DeauthenticationReason, EapolKey, ProbeRequest, ProbeResponse, ReassociationRequest,
 };
 
+const RTH: [u8; 8] = [
+    0x00, 0x00, /* radiotap version and padding */
+    0x08, 0x00, /* radiotap header length */
+    0x00, 0x00, 0x00, 0x00, /* bitmap */
+];
+
+const RTH_NO_ACK: [u8; 10] = [
+    0x00, 0x00, /* radiotap version and padding */
+    0x0a, 0x00, /* radiotap header length */
+    0x00, 0x80, 0x00, 0x00, /* bitmap */
+    0x1c, 0x00, /* tx flags */
+];
+
 // These frames are MOSTLY hard coded based on security research by Zer0Beat (HcxTools)
 // There may be optimizations, changes in the future to how we can attack networks by manipulating these values for better results.
 // These is a good platform for continued testing and optimization.
@@ -19,12 +32,7 @@ pub fn build_authentication_response(
     bssid: &MacAddress,
     sequence: u16,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -60,12 +68,7 @@ pub fn build_authentication_frame_noack(
     source_rogue: &MacAddress,
     sequence: u16,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -102,12 +105,7 @@ pub fn build_deauthentication_fm_ap(
     sequence: u16,
     reason: DeauthenticationReason,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -141,12 +139,7 @@ pub fn build_deauthentication_fm_client(
     sequence: u16,
     reason: DeauthenticationReason,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -181,12 +174,7 @@ pub fn build_association_request_org(
     sequence: u16,
     ssid: Option<String>,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -259,12 +247,7 @@ pub fn build_association_request(
     group_cipher_suite: RsnCipherSuite,
     pairwise_cipher_suites: Vec<RsnCipherSuite>,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -335,12 +318,7 @@ pub fn build_reassociation_request(
     group_cipher_suite: RsnCipherSuite,
     pairwise_cipher_suites: Vec<RsnCipherSuite>,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -405,12 +383,7 @@ pub fn build_reassociation_request(
 }
 
 pub fn build_probe_request_undirected(addr_rogue: &MacAddress, sequence: u16) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -459,12 +432,7 @@ pub fn build_probe_request_directed(
     ssid: &String,
     sequence: u16,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -515,12 +483,7 @@ pub fn build_probe_response(
     sequence: u16,
     channel: u8,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -588,12 +551,7 @@ pub fn build_association_response(
     bssid: &MacAddress,
     sequence: u16,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -645,12 +603,7 @@ pub fn build_eapol_m1(
     bssid: &MacAddress,
     sequence: u16,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = [
-        0x00, 0x00, /* radiotap version and padding */
-        0x08, 0x00, /* radiotap header length */
-        0x00, 0x00, 0x00, 0x00, /* bitmap */
-    ]
-    .to_vec();
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,

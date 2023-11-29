@@ -415,56 +415,59 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                 let signal = radiotap
                     .antenna_signal
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
+                if auth_frame.auth_algorithm == 0 {
+                    // Open system (Which can be open or WPA2)
+                    if auth_frame.auth_seq == 1 {
+                        //// From Client
+                        let client = auth_frame.header.address_2;
+                        let ap_addr = auth_frame.header.address_1;
+                        let bssid = auth_frame.header.address_3;
 
-                if auth_frame.auth_seq == 1 {
-                    //// From Client
-                    let client = auth_frame.header.address_2;
-                    let ap_addr = auth_frame.header.address_1;
-                    let bssid = auth_frame.header.address_3;
-
-                    // First let's add it to our unassociated clients list:
-                    oxide.unassoc_clients.add_or_update_device(
-                        client,
-                        &Station::new_unassoc_station(client, signal, vec![]),
-                    );
-
-                    // Now let's... send an authentication response I guess.
-                    let _ = attack_authentication_from_client(&client, &ap_addr, &bssid, oxide);
-                } else if auth_frame.auth_seq == 2 {
-                    //// From AP
-                    let client = auth_frame.header.address_1;
-                    let ap_addr = auth_frame.header.address_2;
-
-                    // Add AP
-                    oxide.access_points.add_or_update_device(
-                        ap_addr,
-                        &AccessPoint::new(
-                            ap_addr,
-                            signal,
-                            None,
-                            Some(current_channel.get_channel_number()),
-                            None,
-                        ),
-                    );
-
-                    if client != oxide.rogue_client {
-                        // If it's not our rogue client that it's responding to.
+                        // First let's add it to our unassociated clients list:
                         oxide.unassoc_clients.add_or_update_device(
                             client,
-                            &Station::new_unassoc_station(
-                                client,
-                                AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
-                                vec![],
+                            &Station::new_unassoc_station(client, signal, vec![]),
+                        );
+
+                        // Now let's... send an authentication response I guess.
+                        let _ = attack_authentication_from_client(&client, &ap_addr, &bssid, oxide);
+                    } else if auth_frame.auth_seq == 2 {
+                        //// From AP
+                        let client = auth_frame.header.address_1;
+                        let ap_addr = auth_frame.header.address_2;
+
+                        // Add AP
+                        oxide.access_points.add_or_update_device(
+                            ap_addr,
+                            &AccessPoint::new(
+                                ap_addr,
+                                signal,
+                                None,
+                                Some(current_channel.get_channel_number()),
+                                None,
                             ),
                         );
-                    } else {
-                        // Oh it is responding to us!
-                        // Let's respond with an association request then
-                        let _ = attack_authentication_from_ap(
-                            &ap_addr,
-                            &oxide.rogue_client.clone(),
-                            oxide,
-                        );
+
+                        if client != oxide.rogue_client {
+                            // If it's not our rogue client that it's responding to.
+                            oxide.unassoc_clients.add_or_update_device(
+                                client,
+                                &Station::new_unassoc_station(
+                                    client,
+                                    AntennaSignal::from_bytes(&[0u8])
+                                        .map_err(|err| err.to_string())?,
+                                    vec![],
+                                ),
+                            );
+                        } else {
+                            // Oh it is responding to us!
+                            // Let's respond with an association request then
+                            let _ = attack_authentication_from_ap(
+                                &ap_addr,
+                                &oxide.rogue_client.clone(),
+                                oxide,
+                            );
+                        }
                     }
                 }
             }

@@ -73,7 +73,7 @@ pub fn attack_beacon(
                         &oxide.rogue_client,
                         oxide.counters.sequence2(),
                     );
-                    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                     interacted = true;
                 }
@@ -94,7 +94,7 @@ pub fn attack_beacon(
                         oxide.counters.sequence2(),
                         ap_data.ssid.clone(),
                     );
-                    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                     interacted = true;
                 }
@@ -120,7 +120,7 @@ pub fn attack_beacon(
                                 gcs,
                                 pcs,
                             );
-                            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                            //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
                             interacted = true;
                         }
                     }
@@ -369,7 +369,7 @@ pub fn attack_authentication_from_ap(
     } else {
         return Ok(());
     };
-    if ap_data.is_auth_time_elapsed() && ap_data.information.rsn_akm_psk.is_some_and(|f| f) {
+    if ap_data.is_t1_elapsed() && ap_data.information.rsn_akm_psk.is_some_and(|f| f) {
         let cs = if ap_data.information.cs_tkip.is_some_and(|f| f) {
             RsnCipherSuite::TKIP
         } else {
@@ -389,7 +389,7 @@ pub fn attack_authentication_from_ap(
             gs,
             vec![cs],
         );
-        ap_data.update_auth_timer();
+        ap_data.update_t1_timer();
         let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
         oxide.status_log.add_message(StatusMessage::new(

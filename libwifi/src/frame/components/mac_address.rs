@@ -1,7 +1,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, Rng, RngCore};
 
 /// This is our representation of a MAC-address
 ///
@@ -31,6 +31,14 @@ impl MacAddress {
                 return mac;
             }
         }
+    }
+
+    /// Generate a random MAC address using the same OUI as the given MAC address
+    pub fn random_with_oui(other: &MacAddress) -> Self {
+        let mut rng = rand::thread_rng();
+        let mut new_mac = other.0;
+        new_mac[3..6].fill_with(|| rng.gen());
+        MacAddress(new_mac)
     }
 
     /// Encode mac address for network.

@@ -7,7 +7,65 @@ use std::collections::HashMap;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+// Constants for timeouts
+const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5);
+const CONST_T2_TIMEOUT: Duration = Duration::from_millis(200);
+
 //////////////////////////////////////////////////////////////////////
+#[derive(Clone, Debug)]
+pub struct AuthSequence {
+    pub t1: SystemTime,
+    pub t2: SystemTime,
+    pub rogue_mac: MacAddress,
+    pub state: u8,
+}
+
+impl AuthSequence {
+    fn new(rogue_mac: MacAddress) -> Self {
+        AuthSequence {
+            t1: SystemTime::now(),
+            t2: SystemTime::now(),
+            rogue_mac: MacAddress::random_with_oui(&rogue_mac),
+            state: 0,
+        }
+    }
+
+    // Checks if CONST_T1_TIMEOUT has elapsed since t1
+    pub fn is_t1_timeout(&self) -> bool {
+        self.t1
+            .elapsed()
+            .map_or(false, |elapsed| elapsed > CONST_T1_TIMEOUT)
+    }
+
+    // Checks if CONST_T2_TIMEOUT has elapsed since t2
+    pub fn is_t2_timeout(&self) -> bool {
+        self.t2
+            .elapsed()
+            .map_or(false, |elapsed| elapsed > CONST_T2_TIMEOUT)
+    }
+
+    // Reset t1
+    pub fn reset_t1(&mut self) -> SystemTime {
+        self.t1 = SystemTime::now();
+        self.t1
+    }
+
+    // Reset t2
+    pub fn reset_t2(&mut self) -> SystemTime {
+        self.t2 = SystemTime::now();
+        self.t2
+    }
+
+    // Resets state to 0
+    pub fn reset_state(&mut self) {
+        self.state = 0;
+    }
+
+    // Increments state
+    pub fn increment_state(&mut self) {
+        self.state = self.state.saturating_add(1);
+    }
+}
 
 // Trait to restrict WiFiDeviceList
 pub trait WiFiDeviceType {}
@@ -23,7 +81,7 @@ pub struct AccessPoint {
     pub client_list: WiFiDeviceList<Station>,
     pub information: APFlags,
     pub beacon_count: u32,
-    pub timer_auth: SystemTime,
+    pub auth_sequence: AuthSequence,
 }
 
 impl WiFiDeviceType for AccessPoint {}
@@ -40,7 +98,7 @@ impl Default for AccessPoint {
             client_list: WiFiDeviceList::default(),
             information: APFlags::default(),
             beacon_count: 0,
-            timer_auth: SystemTime::now(),
+            auth_sequence: AuthSequence::new(MacAddress([255, 255, 255, 255, 255, 255])),
         }
     }
 }
@@ -52,6 +110,7 @@ impl AccessPoint {
         ssid: Option<String>,
         channel: Option<u8>,
         information: Option<APFlags>,
+        rogue_mac: MacAddress,
     ) -> Self {
         let client_list = WiFiDeviceList::new();
         let last_recv = SystemTime::now()
@@ -79,7 +138,7 @@ impl AccessPoint {
             } else {
                 APFlags::default()
             },
-            timer_auth: SystemTime::now(),
+            auth_sequence: AuthSequence::new(rogue_mac),
         }
     }
 
@@ -90,6 +149,7 @@ impl AccessPoint {
         channel: Option<u8>,
         information: Option<APFlags>,
         client_list: WiFiDeviceList<Station>,
+        rogue_mac: MacAddress,
     ) -> Self {
         let last_recv = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -116,21 +176,28 @@ impl AccessPoint {
             } else {
                 APFlags::default()
             },
-            timer_auth: SystemTime::now(),
+            auth_sequence: AuthSequence::new(rogue_mac),
         }
     }
 
-    // Check if the current time is passed the time stored in the timer_auth value + 0.2 seconds
-    pub fn is_auth_time_elapsed(&self) -> bool {
-        match SystemTime::now().duration_since(self.timer_auth) {
-            Ok(elapsed) => elapsed > Duration::from_millis(200),
-            Err(_) => false, // Handle case where current time is earlier than timer_auth
-        }
+    // Check if the current time is passed the time stored in the t1 value + 5 seconds
+    pub fn is_t1_elapsed(&self) -> bool {
+        self.auth_sequence.is_t1_timeout()
     }
 
     // Set the timer_auth value to the current time
-    pub fn update_auth_timer(&mut self) {
-        self.timer_auth = SystemTime::now();
+    pub fn update_t1_timer(&mut self) {
+        self.auth_sequence.reset_t1();
+    }
+
+    // Check if the current time is passed the time stored in the t2 value + 0.2 seconds
+    pub fn is_t2_elapsed(&self) -> bool {
+        self.auth_sequence.is_t2_timeout()
+    }
+
+    // Set the t2 value to the current time
+    pub fn update_t2_timer(&mut self) {
+        self.auth_sequence.reset_t2();
     }
 }
 
