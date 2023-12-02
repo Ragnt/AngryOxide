@@ -1,7 +1,7 @@
 
 ![Logo](death.png)
 
-# WPOxide
+# AngryOxide
 
 ### A Rust WPA Attack tool.
 
