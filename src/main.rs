@@ -17,6 +17,9 @@ use attack::{
     attack_beacon, attack_probe_request, attack_probe_request_direct, attack_probe_response,
 };
 
+use crossterm::cursor::position;
+use crossterm::event::{poll, read, self, KeyCode, Event};
+use crossterm::terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, self};
 use libc::{EXIT_FAILURE, EXIT_SUCCESS};
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
 use libwifi::frame::{DataFrame, NullDataFrame};
@@ -35,7 +38,7 @@ use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
 use crate::status::*;
-use crate::ui::default_ui;
+use crate::ui::{default_ui, print_ui};
 
 use libwifi::{Addresses, Frame};
 
@@ -64,6 +67,70 @@ struct Arguments {
     #[arg(short, long, default_values_t = [1, 6, 11]) ]
     /// Optional list of channels to scan.
     channels: Vec<u8>,
+}
+
+pub struct UiState {
+    menu: u8,
+    paused: bool,
+    ap_sort: u8,
+    cl_sort: u8,
+    hs_sort: u8,
+    sort_reverse: bool,
+}
+
+impl UiState {
+    pub fn menu_next(&mut self) -> u8{
+        if self.menu == 3 {
+            self.menu = 0;
+            return self.menu;
+        }
+        self.menu += 1;
+        self.menu
+    }
+
+    pub fn menu_back(&mut self) -> u8{
+        if self.menu == 0 {
+            self.menu = 3;
+            return self.menu;
+        }
+        self.menu -= 1;
+        self.menu
+    }
+
+    pub fn ap_sort_next(&mut self) -> u8{
+        if self.ap_sort == 5 {
+            self.ap_sort = 0;
+            return self.ap_sort;
+        }
+        self.ap_sort += 1;
+        self.ap_sort
+    }
+
+    pub fn cl_sort_next(&mut self) -> u8{
+        if self.cl_sort == 1 {
+            self.cl_sort = 0;
+            return self.cl_sort;
+        }
+        self.cl_sort += 1;
+        self.cl_sort
+    }
+
+    pub fn hs_sort_next(&mut self) -> u8{
+        if self.hs_sort == 4 {
+            self.hs_sort = 0;
+            return self.hs_sort;
+        }
+        self.hs_sort += 1;
+        self.hs_sort
+    }
+
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused
+    }
+
+    pub fn toggle_reverse(&mut self) {
+        self.sort_reverse = !self.sort_reverse
+    }
 }
 
 #[derive(Default)]
@@ -109,6 +176,7 @@ impl Counters {
 pub struct WPOxideRuntime {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
+    ui_state: UiState,
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
@@ -173,9 +241,18 @@ impl WPOxideRuntime {
                 tx_socket.as_raw_fd()
             ),
         ));
+        let state = UiState {
+            menu: 0,
+            paused: false,
+            ap_sort: 0,
+            cl_sort: 0,
+            hs_sort: 0,
+            sort_reverse: false,
+        };
         WPOxideRuntime {
             rx_socket,
             tx_socket,
+            ui_state: state,
             frame_count: 0,
             eapol_count: 0,
             error_count: 0,
@@ -265,6 +342,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                     .as_ref()
                                     .map(|rsn| rsn.mfp_required),
                             }),
+                            oxide.rogue_client,
                         ),
                     );
                 };
@@ -402,6 +480,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                     .as_ref()
                                     .map(|rsn| rsn.mfp_required),
                             }),
+                            oxide.rogue_client,
                         ),
                     );
                     let _ = attack_probe_response(oxide, &probe_response_frame, bssid);
@@ -445,6 +524,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                 None,
                                 Some(current_channel.get_channel_number()),
                                 None,
+                                oxide.rogue_client,
                             ),
                         );
 
@@ -511,6 +591,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                             None,
                             None,
                             None,
+                            oxide.rogue_client,
                         ),
                     );
                 }
@@ -581,6 +662,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                     Some(channel_u8),
                     None,
                     clients,
+                    oxide.rogue_client,
                 );
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
@@ -613,6 +695,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                         None,
                         Some(channel_u8),
                         None,
+                        oxide.rogue_client,
                     );
                     oxide.access_points.add_or_update_device(ap_mac, &ap);
                 };
@@ -694,6 +777,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                 .map(|rsn| rsn.mfp_required),
                         }),
                         clients,
+                        oxide.rogue_client,
                     );
                     oxide.access_points.add_or_update_device(bssid, &ap);
                 };
@@ -733,6 +817,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                         None,
                         None,
                         clients,
+                        oxide.rogue_client,
                     );
                     oxide.access_points.add_or_update_device(old_ap, &ap);
 
@@ -743,6 +828,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                         Some(channel_u8),
                         None,
                         WiFiDeviceList::<Station>::new(),
+                        oxide.rogue_client,
                     );
                     oxide.access_points.add_or_update_device(new_ap, &newap);
                 };
@@ -785,6 +871,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                         Some(channel_u8),
                         None,
                         clients,
+                        oxide.rogue_client,
                     );
                     oxide.access_points.add_or_update_device(ap_mac, &ap);
                 };
@@ -843,6 +930,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                     Some(channel_u8),
                     None,
                     clients,
+                    oxide.rogue_client,
                 );
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
@@ -906,6 +994,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                     Some(channel_u8),
                     None,
                     clients,
+                    oxide.rogue_client,
                 );
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
@@ -962,6 +1051,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                     Some(channel_u8),
                     None,
                     clients,
+                    oxide.rogue_client,
                 );
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
@@ -1089,6 +1179,7 @@ fn handle_data_frame(
         Some(chan),
         None,
         clients,
+        oxide.rogue_client,
     );
     oxide.access_points.add_or_update_device(ap_addr, &ap);
 
@@ -1107,7 +1198,7 @@ fn handle_data_frame(
             essid,
         );
         match result {
-            Ok(_) => {
+            Ok(handshake) => {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
@@ -1115,6 +1206,16 @@ fn handle_data_frame(
                         eapol.determine_key_type()
                     ),
                 ));
+                if handshake.complete() {
+                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
+                        ap.has_hs = true;
+                    }
+                }
+                if handshake.has_pmkid() {
+                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
+                        ap.has_pmkid = true;
+                    }
+                }
             }
             Err(e) => {
                 oxide.status_log.add_message(StatusMessage::new(
@@ -1189,6 +1290,7 @@ fn handle_null_data_frame(
         Some(chan),
         None,
         clients,
+        oxide.rogue_client,
     );
     oxide.access_points.add_or_update_device(ap_addr, &ap);
     Ok(())
@@ -1245,7 +1347,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let cli = Arguments::parse();
-    //println!("{:?}\n{}", cli.channels, cli.interface);
 
     let mut oxide = WPOxideRuntime::new(cli.interface);
     oxide.status_log.add_message(StatusMessage::new(
@@ -1290,7 +1391,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("Setting channel hopper: {:?}", channels),
     ));
 
-    //we don't really need this. We still process frames plenty fast and this had the potential of interupting us in the middle of trying to send out a response.
+    //we don't really need this. We still process frames plenty fast and this had the potential of interupting us 
+    //in the middle of trying to send out a response.
     //start_channel_hopping_thread(running.clone(), hop_interval, idx, channels);
 
     ctrlc::set_handler(move || {
@@ -1299,6 +1401,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start_time = Instant::now();
     execute!(stdout(), Hide).unwrap();
+    let _ = execute!(io::stdout(), EnterAlternateScreen)?;
+    let cleanup = CleanUp;
+    let _ = enable_raw_mode();
     while running.load(Ordering::SeqCst) {
         // Calculate last packet rate
         if seconds_timer.elapsed() >= seconds_interval {
@@ -1322,7 +1427,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Start UI Messages
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
-            default_ui(&mut oxide, start_time, frame_rate);
+            if poll(Duration::ZERO)? {
+                let event = crossterm::event::read()?;
+                if event == Event::Key(KeyCode::Right.into()) {
+                    oxide.ui_state.menu_next();
+                } else if event == Event::Key(KeyCode::Left.into()) {
+                    oxide.ui_state.menu_back();
+                } else if event == Event::Key(KeyCode::Char('q').into()) {
+                    running.store(false, Ordering::SeqCst);
+                } else if event == Event::Key(KeyCode::Char(' ').into()) {
+                    oxide.ui_state.toggle_pause();
+                } else if event == Event::Key(KeyCode::Char('a').into()) {
+                    oxide.ui_state.ap_sort_next();
+                } else if event == Event::Key(KeyCode::Char('c').into()) {
+                    oxide.ui_state.cl_sort_next();
+                } else if event == Event::Key(KeyCode::Char('r').into()) {
+                    oxide.ui_state.toggle_reverse();
+                }
+            
+            }
+            print_ui(&mut oxide, start_time, frame_rate);
         }
 
         // Clear all interactions counters every 60 seconds.
@@ -1336,7 +1460,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle_frame(&mut oxide, &packet)?;
         }
     }
-    execute!(stdout(), Show).unwrap();
 
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
@@ -1383,6 +1506,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+struct CleanUp;
+
+impl Drop for CleanUp {
+    fn drop(&mut self) {
+        execute!(stdout(), Show).unwrap();
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
+    }
+    
+}
+
 #[allow(dead_code)]
 fn start_channel_hopping_thread(
     running: Arc<AtomicBool>,

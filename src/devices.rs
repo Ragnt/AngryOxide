@@ -82,6 +82,8 @@ pub struct AccessPoint {
     pub information: APFlags,
     pub beacon_count: u32,
     pub auth_sequence: AuthSequence,
+    pub has_hs: bool,
+    pub has_pmkid: bool,
 }
 
 impl WiFiDeviceType for AccessPoint {}
@@ -99,6 +101,8 @@ impl Default for AccessPoint {
             information: APFlags::default(),
             beacon_count: 0,
             auth_sequence: AuthSequence::new(MacAddress([255, 255, 255, 255, 255, 255])),
+            has_hs: false,
+            has_pmkid: false,
         }
     }
 }
@@ -139,6 +143,8 @@ impl AccessPoint {
                 APFlags::default()
             },
             auth_sequence: AuthSequence::new(rogue_mac),
+            has_hs: false,
+            has_pmkid: false,
         }
     }
 
@@ -177,6 +183,8 @@ impl AccessPoint {
                 APFlags::default()
             },
             auth_sequence: AuthSequence::new(rogue_mac),
+            has_hs: false,
+            has_pmkid: false,
         }
     }
 
@@ -198,6 +206,13 @@ impl AccessPoint {
     // Set the t2 value to the current time
     pub fn update_t2_timer(&mut self) {
         self.auth_sequence.reset_t2();
+    }
+
+    pub fn is_hs_complete(&self) -> bool {
+        if self.has_hs {
+            return true
+        }
+        return false;
     }
 }
 
@@ -368,7 +383,7 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
         self.devices.insert(mac_address, device);
     }
 
-    pub fn size(&mut self) -> usize {
+    pub fn size(&self) -> usize {
         self.devices.len()
     }
 

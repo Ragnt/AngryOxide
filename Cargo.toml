@@ -13,7 +13,7 @@ edition = "2021"
 rust-version = "1.62"
 
 [package]
-name = "wp_oxide"
+name = "angry_oxide"
 version = "0.1.0"
 edition = "2021"
 

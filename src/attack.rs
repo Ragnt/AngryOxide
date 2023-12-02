@@ -61,7 +61,7 @@ pub fn attack_beacon(
                 // Attempt to get the SSID.
                 let frx =
                     build_probe_request_undirected(&oxide.rogue_client, oxide.counters.sequence2());
-                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
             }
             if (beacon_count % 16) == 0 {
                 // beacon_count mod 16 = 0
@@ -73,7 +73,7 @@ pub fn attack_beacon(
                         &oxide.rogue_client,
                         oxide.counters.sequence2(),
                     );
-                    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                    ////let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                     interacted = true;
                 }
@@ -94,7 +94,7 @@ pub fn attack_beacon(
                         oxide.counters.sequence2(),
                         ap_data.ssid.clone(),
                     );
-                    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                    ////let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                     interacted = true;
                 }
@@ -120,7 +120,7 @@ pub fn attack_beacon(
                                 gcs,
                                 pcs,
                             );
-                            //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                            ////let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
                             interacted = true;
                         }
                     }
@@ -146,7 +146,7 @@ pub fn attack_beacon(
                             oxide.counters.sequence1(),
                             DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
                         );
-                        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                         // Deauth From Client
                         let frx = build_deauthentication_fm_client(
@@ -155,7 +155,7 @@ pub fn attack_beacon(
                             oxide.counters.sequence1(),
                             DeauthenticationReason::DeauthenticatedBecauseSTAIsLeaving,
                         );
-                        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                         interacted = true;
                     } else {
@@ -166,7 +166,7 @@ pub fn attack_beacon(
                             oxide.counters.sequence1(),
                             DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
                         );
-                        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                         interacted = true;
                     }
@@ -228,7 +228,7 @@ pub fn attack_probe_response(
                     oxide.counters.sequence1(),
                     DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
                 );
-                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
                 interacted = true;
             }
 
@@ -241,7 +241,7 @@ pub fn attack_probe_response(
                         &oxide.rogue_client,
                         oxide.counters.sequence2(),
                     );
-                    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                     interacted = true;
                 }
@@ -261,7 +261,7 @@ pub fn attack_probe_response(
                             gcs,
                             pcs,
                         );
-                        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
                         interacted = true;
                     }
@@ -297,7 +297,7 @@ pub fn attack_probe_request(
     channel: u8,
     ssid: Option<String>,
 ) -> Result<(), String> {
-    let aprg = oxide.access_points.get_random().unwrap();
+    let aprg = oxide.access_points.get_random().unwrap_or(return Err("No Access Points".to_owned()));
     let aprg_mac = &aprg.mac_address;
     let aprg_ssid = if let Some(ssid) = &aprg.ssid {
         ssid.clone()
@@ -312,7 +312,7 @@ pub fn attack_probe_request(
             oxide.counters.sequence3(),
             channel,
         );
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
     } else {
         let frx = build_probe_response(
             client_mac,
@@ -321,7 +321,7 @@ pub fn attack_probe_request(
             oxide.counters.sequence3(),
             channel,
         );
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
     }
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
@@ -347,7 +347,7 @@ pub fn attack_probe_request_direct(
         oxide.counters.sequence3(),
         channel,
     );
-    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
@@ -390,7 +390,7 @@ pub fn attack_authentication_from_ap(
             vec![cs],
         );
         ap_data.update_t1_timer();
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
         oxide.status_log.add_message(StatusMessage::new(
             MessageType::Info,
@@ -407,7 +407,7 @@ pub fn attack_authentication_from_client(
     oxide: &mut WPOxideRuntime,
 ) -> Result<(), String> {
     let frx = build_authentication_response(macclient, macap, bssid, oxide.counters.sequence3());
-    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+    //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
     Ok(())
 }
@@ -427,9 +427,9 @@ pub fn attack_association_request(
 
     if rsnakm {
         let frx = build_association_response(macclient, macap, bssid, oxide.counters.seq3);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
         let frx = build_eapol_m1(macclient, macap, bssid, oxide.counters.seq3);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
     }
 
     Ok(())
@@ -450,9 +450,9 @@ pub fn attack_reassociation_request(
 
     if rsnakm {
         let frx = build_association_response(macclient, macap, bssid, oxide.counters.seq3);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
         let frx = build_eapol_m1(macclient, macap, bssid, oxide.counters.seq3);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
     }
 
     Ok(())

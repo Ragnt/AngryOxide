@@ -306,7 +306,6 @@ impl FourWayHandshake {
         } else {
             return Err("Handshake already complete or message already present.");
         }
-
         Ok(())
     }
 
@@ -465,17 +464,14 @@ impl HandshakeStorage {
         }
     }
 
-    // Updated count function
     pub fn count(&self) -> usize {
         self.handshakes.values().map(|v| v.len()).sum()
     }
 
-    // This function remains the same as it already returns a HashMap with a Vec of handshakes
     pub fn get_handshakes(&self) -> HashMap<HandshakeSessionKey, Vec<FourWayHandshake>> {
         self.handshakes.clone()
     }
 
-    // Updated find_handshakes_by_ap function
     pub fn find_handshakes_by_ap(
         &self,
         ap_mac: &MacAddress,
@@ -487,14 +483,12 @@ impl HandshakeStorage {
             .collect()
     }
 
-    // Updated has_complete_handshake_for_ap function
     pub fn has_complete_handshake_for_ap(&self, ap_mac: &MacAddress) -> bool {
         self.handshakes.iter().any(|(key, handshakes)| {
             &key.ap_mac == ap_mac && handshakes.iter().any(|hs| hs.complete())
         })
     }
 
-    // Updated has_complete_handshake_for_ap function
     pub fn has_m1_for_ap(&self, ap_mac: &MacAddress) -> bool {
         self.handshakes.iter().any(|(key, handshakes)| {
             &key.ap_mac == ap_mac && handshakes.iter().any(|hs| hs.has_m1())
@@ -507,7 +501,7 @@ impl HandshakeStorage {
         client_mac: &MacAddress,
         new_key: EapolKey,
         essid: Option<String>,
-    ) -> Result<(), &'static str> {
+    ) -> Result<FourWayHandshake, &'static str> {
         let session_key = HandshakeSessionKey::new(*ap_mac, *client_mac);
 
         let handshake_list = self.handshakes.entry(session_key).or_default();
@@ -516,7 +510,7 @@ impl HandshakeStorage {
                 handshake.mac_ap = Some(*ap_mac);
                 handshake.mac_client = Some(*client_mac);
                 handshake.essid = essid;
-                return Ok(());
+                return Ok(handshake.clone());
             }
         }
         let mut new_handshake = FourWayHandshake::new(); // Create a new FourWayHandshake instance
@@ -524,7 +518,8 @@ impl HandshakeStorage {
         new_handshake.mac_ap = Some(*ap_mac);
         new_handshake.mac_client = Some(*client_mac);
         new_handshake.essid = essid;
-        handshake_list.push(new_handshake);
-        Ok(())
+        let hs = new_handshake.clone();
+        handshake_list.push(new_handshake.clone());
+        Ok(hs)
     }
 }

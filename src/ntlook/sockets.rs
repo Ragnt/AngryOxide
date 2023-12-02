@@ -20,7 +20,7 @@ fn get_interfaces_info() -> Result<Vec<Interface>, String> {
     let mut interfaces: Vec<Interface> = nt_socket.cmd_get_interface(None)?;
     for interface in &mut interfaces {
         nt_socket.cmd_get_split_wiphy(interface)?;
-        interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
+        interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap_or(continue))?);
     }
     Ok(interfaces)
 }
@@ -34,7 +34,11 @@ pub fn get_interface_info_idx(interface_index: i32) -> Result<Interface, String>
         nt_socket.cmd_get_split_wiphy(interface)?;
         interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
     }
-    Ok(interfaces.first().unwrap().clone())
+    if let Some(interface) = interfaces.first() {
+        Ok(interface.clone())
+    } else {
+        Err("Failed to get interface.".to_owned())
+    }
 }
 
 pub fn get_interface_info_name(interface_name: &String) -> Result<Interface, String> {

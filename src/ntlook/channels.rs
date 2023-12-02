@@ -1,4 +1,4 @@
-use std::fmt::{self, Write};
+use std::{fmt::{self, Write}, cmp::Ordering};
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum WiFiBand {
@@ -89,6 +89,28 @@ pub enum FrequencyStatus {
 pub enum WiFiChannel {
     Channel2GHz(u8),
     Channel5GHz(u8),
+}
+
+impl PartialOrd for WiFiChannel {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (WiFiChannel::Channel2GHz(freq1), WiFiChannel::Channel2GHz(freq2)) => {
+                freq1.partial_cmp(freq2)
+            }
+            (WiFiChannel::Channel5GHz(freq1), WiFiChannel::Channel5GHz(freq2)) => {
+                freq1.partial_cmp(freq2)
+            }
+            // Define the ordering between different variants here.
+            (WiFiChannel::Channel2GHz(_), WiFiChannel::Channel5GHz(_)) => Some(Ordering::Less),
+            (WiFiChannel::Channel5GHz(_), WiFiChannel::Channel2GHz(_)) => Some(Ordering::Greater),
+        }
+    }
+}
+
+impl Ord for WiFiChannel {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 impl fmt::Display for WiFiChannel {
