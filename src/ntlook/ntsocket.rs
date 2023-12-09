@@ -26,6 +26,7 @@ impl NtSocket {
     pub fn connect() -> Result<Self, String> {
         let mut sock =
             NlSocketHandle::connect(NlFamily::Generic, None, &[]).map_err(|e| e.to_string())?;
+        sock.nonblock().map_err(|e| e.to_string())?;
         let family_id = sock
             .resolve_genl_family(NL_80211_GENL_NAME)
             .map_err(|e| e.to_string())?;

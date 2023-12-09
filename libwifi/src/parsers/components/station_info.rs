@@ -32,7 +32,9 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
             match element_id {
                 0 => {
                     let mut ssid = String::from_utf8_lossy(data).to_string();
-                    ssid = ssid.replace('\0', " ");
+                    if length == 0 {
+                        ssid = "".to_string();
+                    }
                     station_info.ssid = Some(ssid);
                 }
                 1 => station_info.supported_rates = parse_supported_rates(data),
@@ -60,7 +62,6 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
                             // Specific parsing for WPA Information Element
                             station_info.wpa_info =
                                 Some(parse_wpa_information(&vendor_data).unwrap());
-                            // Handle the parsed WPA information (store or process as needed)
                         }
 
                         let vendor_specific_info = VendorSpecificInfo {
@@ -172,7 +173,6 @@ fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {
     if data.len() >= offset + 2 {
         let rsn_capabilities = u16::from_le_bytes([data[offset], data[offset + 1]]);
 
-        // Extracting individual bits or bit groups
         let pre_auth = (rsn_capabilities & (1 << 0)) != 0;
         let no_pairwise = (rsn_capabilities & (1 << 1)) != 0;
         let ptksa_replay_counter = ((rsn_capabilities >> 2) & 0x03) as u8; // Extract 2 bits starting at position 2
@@ -257,33 +257,6 @@ fn parse_akm_suite(data: &[u8]) -> RsnAkmSuite {
         _ => RsnAkmSuite::Unknown(data.to_vec()),
     }
 }
-
-/// This is used in the ProbeResponse frame.
-/// It indicates which transmission rates (in Mbps) are supported by this AP.
-/* fn parse_supported_rates(input: &[u8]) -> Vec<f32> {
-    let mut rates: Vec<f32> = Vec::new();
-    for rate in input {
-        match rate {
-            0x82 => rates.push(1.0),
-            0x84 => rates.push(2.0),
-            0x8b => rates.push(5.5),
-            0x0c => rates.push(6.0),
-            0x12 => rates.push(9.0),
-            0x96 => rates.push(11.0),
-            0x18 => rates.push(12.0),
-            0x24 => rates.push(18.0),
-            0x2c => rates.push(22.0),
-            0x30 => rates.push(24.0),
-            0x42 => rates.push(33.0),
-            0x48 => rates.push(36.0),
-            0x60 => rates.push(48.0),
-            0x6c => rates.push(54.0),
-            _ => continue,
-        }
-    }
-
-    rates
-} */
 
 fn parse_supported_rates(input: &[u8]) -> Vec<f32> {
     input

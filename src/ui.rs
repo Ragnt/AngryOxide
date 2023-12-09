@@ -8,14 +8,32 @@ use std::{
 use crossterm::{
     cursor::MoveTo,
     execute,
-    terminal::{Clear, ClearType, window_size}, style::Print
+    terminal::{Clear, ClearType, window_size}, style::Print, style::Stylize
 };
+
 use libc::EXIT_FAILURE;
 
-use crate::{auth::FourWayHandshake, ntlook::get_interface_info_idx, WPOxideRuntime};
+use crate::{auth::FourWayHandshake, ntlook::get_interface_info_idx, OxideRuntime, ascii::get_art};
 
 
-pub fn print_ui(oxide: &mut WPOxideRuntime, start_time: Instant, framerate: u64) -> Result<(), std::io::Error> {
+pub fn print_ui(oxide: &mut OxideRuntime, start_time: Instant, framerate: u64) -> Result<(), std::io::Error> {
+    // Update interface
+    match oxide.interface.index {
+        Some(index) => match get_interface_info_idx(index) {
+            Ok(infos) => oxide.interface = infos,
+            Err(e) => {
+                let line = get_art(format!("Failed to get interface info: {}.", e).as_str());
+                println!("{}", line);
+                exit(EXIT_FAILURE);
+            }
+        },
+        None => {
+            let line = get_art("Interface index is none.");
+                println!("{}", line);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     /////////// Clear and Print ///////////
     execute!(stdout(), MoveTo(0, 0)).unwrap();
     execute!(stdout(), Clear(ClearType::All)).unwrap();
@@ -26,14 +44,14 @@ pub fn print_ui(oxide: &mut WPOxideRuntime, start_time: Instant, framerate: u64)
         (0, 0)
     };
 
-    if winsize.0 < 100 || winsize.1 < 6 {
+    if winsize.0 < 100 || winsize.1 < 9 {
         let mid = winsize.1 / 2;
         for n in 0..mid {
             execute!(stdout(), Print(format!("{:^width$}", "", width = winsize.0 as usize))).ok();
         }
-        execute!(stdout(), Print(format!("{:^width$}", "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓", width = winsize.0 as usize))).ok();
-        execute!(stdout(), Print(format!("{:^width$}", "┃ WPOxide terminal too small ┃", width = winsize.0 as usize))).ok();
-        execute!(stdout(), Print(format!("{:^width$}", "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛", width = winsize.0 as usize))).ok();
+        execute!(stdout(), Print(format!("{:^width$}", "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓", width = winsize.0 as usize))).ok();
+        execute!(stdout(), Print(format!("{:^width$}", "┃ AngryOxide terminal too small ┃", width = winsize.0 as usize))).ok();
+        execute!(stdout(), Print(format!("{:^width$}", "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛", width = winsize.0 as usize))).ok();
         return Ok(());
     }
     
@@ -46,10 +64,18 @@ pub fn print_ui(oxide: &mut WPOxideRuntime, start_time: Instant, framerate: u64)
     }
 }
 
-pub fn access_points_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
+pub fn access_points_pane(oxide: &mut OxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
     let mut output = String::new(); 
     let width = (winsize.0) as usize;
     let height = winsize.1 as usize;
+
+
+    // Elapsed Time
+    let total_seconds = start_time.elapsed().as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
     // Status
 
@@ -77,7 +103,7 @@ pub fn access_points_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start
 
 
     // Tabs
-    let title = format!("𝓦𝓟𝓞𝔁𝓲𝓭𝓮 | v0.1 | rage 2023");
+    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
     let tab_toptop = format!("┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓");
     let tab_center = format!("┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃");
     let tab_bottom = format!("┛               ┗━┻━━━━━━━━━━━┻━┻━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━━┻");
@@ -91,7 +117,6 @@ pub fn access_points_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start
     /////////// Print Access Points ///////////
 
     let list_height = height - 5;
-    let fill = width - 65;
     write!(
         output, "{:<width$}", 
         format!("  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<5} {:<5}",
@@ -124,6 +149,10 @@ pub fn access_points_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start
             if ssid == "" {
                 ssid = "Hidden SSID".to_string()
             }
+            if ssid.chars().count() > 30 {
+                ssid.truncate(27);
+                ssid += "...";
+            }
             let clients_size = ap_data.client_list.clone().size();
             let chan = if ap_data.channel.is_some() {
                 ap_data.clone().channel.unwrap().short_string()
@@ -150,7 +179,7 @@ pub fn access_points_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start
                 chan,
                 ap_data.last_signal_strength.value.to_string(),
                 epoch_to_string(ap_data.last_recv).to_string(),
-                ssid,
+                ssid.to_string(),
                 clients_size,
                 ap_data.interactions,
                 if pwnd_counter > 0 {
@@ -188,10 +217,18 @@ pub fn access_points_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start
     output
 }
 
-pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
+pub fn clients_pane(oxide: &mut OxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
     let mut output = String::new(); 
     let width = winsize.0 as usize;
     let height = winsize.1 as usize;
+
+
+    // Elapsed Time
+    let total_seconds = start_time.elapsed().as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
    // Status
     let status = format!(
@@ -201,7 +238,7 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
     );
 
 
-    let status2 = format!("Sort: {} {}| {}",
+    let status2 = format!("Sort: {} {} | {}",
     match oxide.ui_state.cl_sort {
         0 => "Last",
         1 => "RSSI",
@@ -214,7 +251,7 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
     format!("Errors: {}", oxide.error_count),);
 
     // Tabs
-    let title = format!("𝓦𝓟𝓞𝔁𝓲𝓭𝓮 | v0.1 | rage 2023");
+    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
     let tab_toptop = format!("┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓");
     let tab_center = format!("┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃",);
     let tab_bottom = format!("┻━━━━━━━━━━━━━━━┻━┛           ┗━┻━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━━┻");
@@ -235,7 +272,7 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
 
     write!(
         output, "{:<width$}", format!(
-        "  {:<15} {:<15} {:<8} {:<15} {:<30}",
+        "  {:<15} {:<15} {:<8} {:<6} {:<30}",
         "MAC Address", "Access Point", "RSSI", "Last", "Probes")
     )
     .ok();
@@ -243,6 +280,9 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
         0 => client_devices.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv)),
         1 => client_devices.sort_by(|a, b| b.1.last_signal_strength.value.cmp(&a.1.last_signal_strength.value)),
         _ => client_devices.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv)),
+    }
+    if oxide.ui_state.sort_reverse {
+        client_devices.reverse();
     }
     let mut client_len = 1;
     for (mac, station_data) in client_devices.clone() {
@@ -252,9 +292,9 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
             } else {
                 "".to_string()
             };
-            write!(
-                output,"{:<width$}", format!(
-                "  {:<15} {:<15} {:<8} {:<15} {:<30}",
+
+            let mut line = format!(
+                "  {:<15} {:<15} {:<8} {:<6} {:<30}",
                 mac.to_string(),
                 ap,
                 if station_data.last_signal_strength.value != 0 {
@@ -264,7 +304,13 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
                 },
                 epoch_to_string(station_data.last_recv),
                 station_data.clone().probes_to_string_list(),
-            ))
+            );
+            if line.chars().count() > width {
+                line.truncate(width-3);
+                line = line + "...";
+            }
+            write!(
+                output,"{:<width$}", line)
             .ok();
             client_len += 1;
         } else {
@@ -290,10 +336,18 @@ pub fn clients_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time:
     output
 }
 
-pub fn handshakes_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
+pub fn handshakes_pane(oxide: &mut OxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
     let mut output = String::new(); 
     let width = winsize.0 as usize;
     let height = winsize.1 as usize;;
+
+
+    // Elapsed Time
+    let total_seconds = start_time.elapsed().as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
     // Status
     let status = format!(
@@ -307,7 +361,7 @@ pub fn handshakes_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_ti
     format!("Errors: {}", oxide.error_count),);
 
     /// Tabs
-    let title = format!("𝓦𝓟𝓞𝔁𝓲𝓭𝓮 | v0.1 | rage 2023");
+    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
     let tab_toptop = format!("┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓");
     let tab_center = format!("┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃",);
     let tab_bottom = format!("┻━━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━┻━┛              ┗━┻━━━━━━━━━━━━┻");
@@ -325,7 +379,7 @@ pub fn handshakes_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_ti
     let headers = [
         "AP MAC",
         "Client MAC",
-        "ESSID",
+        "SSID",
         "[M1 M2 M3 M4 MC] | [PM] | COMPLETE",
     ];
     write!(
@@ -352,12 +406,17 @@ pub fn handshakes_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_ti
             .cmp(&a.last_msg.clone().unwrap().timestamp)
     });
     for hs in print_handshakes {
+        let mut ssid = hs.essid_to_string();
+        if ssid.chars().count() > 30 {
+            ssid.truncate(27);
+            ssid += "...";
+        }
         write!(
             output, "{:<width$}", format!(
             "  {:<15} {:<15} {:<30} {:<30}",
             hs.mac_ap.unwrap().to_string(),
             hs.mac_client.unwrap().to_string(),
-            hs.essid_to_string(),
+            ssid,
             hs.to_string()
         ))
         .ok();
@@ -389,10 +448,18 @@ pub fn handshakes_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_ti
     output
 }
 
-pub fn messages_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
+pub fn messages_pane(oxide: &mut OxideRuntime, winsize: (u16, u16), start_time: Instant, framerate: u64) -> String {
     let mut output = String::new(); 
     let width = winsize.0 as usize;
     let height = winsize.1 as usize;;
+
+
+    // Elapsed Time
+    let total_seconds = start_time.elapsed().as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
     // Status
     let status = format!(
@@ -401,12 +468,11 @@ pub fn messages_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time
         format!("Rate: {}/s", framerate),
     );
 
-
     let status2 = format!("{}", 
     format!("Errors: {}", oxide.error_count),);
 
     /// Tabs
-    let title = format!("𝓦𝓟𝓞𝔁𝓲𝓭𝓮 | v0.1 | rage 2023");
+    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
     let tab_toptop = format!("┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓");
     let tab_center = format!("┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃",);
     let tab_bottom = format!("┻━━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━┻━┻━━━━━━━━━━━━━━┻━┛            ┗");
@@ -419,7 +485,7 @@ pub fn messages_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time
 
     write!(
         output, "{:<width$}", format!(
-        "  {:<30} {:^10} {}",
+        "  {:<25} {:<6} {}",
         "Date / Time", "Type", "Message")
     )
     .ok();
@@ -428,13 +494,19 @@ pub fn messages_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time
     let mut recent_messages = oxide.status_log.get_recent_messages(list_height-2);
     recent_messages.reverse();
     for message in recent_messages {
-        write!(
-            output, "{:<width$}", format!(
-            "  {:<25} {:^10} {}",
+
+        let mut line = format!(
+            "  {:<25} {:<6} {}",
             message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
             message.message_type.to_string(),
-            message.content.to_string()
-        ))
+            message.content.to_string());
+        if line.chars().count() > width {
+            line.truncate(width-3);
+            line = line + "...";
+        }
+
+        write!(
+            output, "{:<width$}", line)
         .ok();
     }
     let display_height = output.chars().count() / width;
@@ -449,7 +521,7 @@ pub fn messages_pane(oxide: &mut WPOxideRuntime, winsize: (u16, u16), start_time
     output
 }
 
-pub fn default_ui(oxide: &mut WPOxideRuntime, start_time: Instant, framerate: u64) -> String {
+pub fn default_ui(oxide: &mut OxideRuntime, start_time: Instant, framerate: u64) -> String {
     // Update interface
     match oxide.interface.index {
         Some(index) => match get_interface_info_idx(index) {

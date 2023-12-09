@@ -51,6 +51,11 @@ impl MacAddress {
         self.0[0] & 0x02 != 0
     }
 
+    /// Check if this is a multicast address
+    pub fn is_mcast(&self) -> bool {
+        self.0[0] % 2 == 1
+    }
+
     /// Check whether this MAC addresses the whole network.
     pub fn is_broadcast(&self) -> bool {
         self.0 == [255, 255, 255, 255, 255, 255]
@@ -91,7 +96,8 @@ impl MacAddress {
             || self.is_broadcast()
             || self.is_ipv4_multicast()
             || self.is_groupcast()
-            || self.is_spanning_tree())
+            || self.is_spanning_tree()
+            || self.is_mcast())
     }
 }
 

@@ -176,6 +176,7 @@ impl WiFiChannel {
 
     pub fn from_frequency(frequency: u32) -> Option<WiFiChannel> {
         match frequency {
+            //2.4 GHz Channels
             2412 => Some(WiFiChannel::Channel2GHz(1)),
             2417 => Some(WiFiChannel::Channel2GHz(2)),
             2422 => Some(WiFiChannel::Channel2GHz(3)),
@@ -191,7 +192,13 @@ impl WiFiChannel {
             2472 => Some(WiFiChannel::Channel2GHz(13)),
             2484 => Some(WiFiChannel::Channel2GHz(14)), // Typically Japan only
 
-            // Mapping 5 GHz frequencies to channels
+            // 4.9GHz
+            4920 => Some(WiFiChannel::Channel5GHz(184)),
+            4940 => Some(WiFiChannel::Channel5GHz(188)),
+            4960 => Some(WiFiChannel::Channel5GHz(192)),
+            4980 => Some(WiFiChannel::Channel5GHz(196)),
+
+            // Standard 5 GHz frequencies
             5180 => Some(WiFiChannel::Channel5GHz(36)),
             5190 => Some(WiFiChannel::Channel5GHz(38)),
             5200 => Some(WiFiChannel::Channel5GHz(40)),
@@ -207,6 +214,16 @@ impl WiFiChannel {
             5300 => Some(WiFiChannel::Channel5GHz(60)),
             5310 => Some(WiFiChannel::Channel5GHz(62)),
             5320 => Some(WiFiChannel::Channel5GHz(64)),
+            5340 => Some(WiFiChannel::Channel5GHz(68)),
+            5360 => Some(WiFiChannel::Channel5GHz(72)),
+            5380 => Some(WiFiChannel::Channel5GHz(76)),
+            5400 => Some(WiFiChannel::Channel5GHz(80)),
+            5420 => Some(WiFiChannel::Channel5GHz(84)),
+            5440 => Some(WiFiChannel::Channel5GHz(88)),
+            5460 => Some(WiFiChannel::Channel5GHz(92)),
+            5480 => Some(WiFiChannel::Channel5GHz(96)),
+
+            // Higher 5 GHz frequencies
             5500 => Some(WiFiChannel::Channel5GHz(100)),
             5510 => Some(WiFiChannel::Channel5GHz(102)),
             5520 => Some(WiFiChannel::Channel5GHz(104)),
@@ -230,19 +247,17 @@ impl WiFiChannel {
             5700 => Some(WiFiChannel::Channel5GHz(140)),
             5720 => Some(WiFiChannel::Channel5GHz(142)),
             5745 => Some(WiFiChannel::Channel5GHz(149)),
+            5755 => Some(WiFiChannel::Channel5GHz(151)),
             5765 => Some(WiFiChannel::Channel5GHz(153)),
+            5775 => Some(WiFiChannel::Channel5GHz(155)),
             5785 => Some(WiFiChannel::Channel5GHz(157)),
+            5795 => Some(WiFiChannel::Channel5GHz(159)),
             5805 => Some(WiFiChannel::Channel5GHz(161)),
             5825 => Some(WiFiChannel::Channel5GHz(165)),
-            // Higher 5Ghz
-            5755 => Some(WiFiChannel::Channel5GHz(151)),
-            5775 => Some(WiFiChannel::Channel5GHz(155)),
-            5795 => Some(WiFiChannel::Channel5GHz(159)),
-            // 4.9GHz
-            4920 => Some(WiFiChannel::Channel5GHz(184)),
-            4940 => Some(WiFiChannel::Channel5GHz(188)),
-            4960 => Some(WiFiChannel::Channel5GHz(192)),
-            4980 => Some(WiFiChannel::Channel5GHz(196)),
+            5845 => Some(WiFiChannel::Channel5GHz(169)),
+            5865 => Some(WiFiChannel::Channel5GHz(173)),
+            5885 => Some(WiFiChannel::Channel5GHz(177)),
+            5905 => Some(WiFiChannel::Channel5GHz(181)),
 
             _ => None, // Invalid or unsupported frequency
         }

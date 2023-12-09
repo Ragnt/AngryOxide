@@ -150,7 +150,7 @@ impl StationInfo {
 pub struct VendorSpecificInfo {
     pub element_id: u8,
     pub length: u8,
-    pub oui: [u8; 3], // 3-byte OUI
+    pub oui: [u8; 3],
     pub oui_type: u8,
     pub data: Vec<u8>,
 }

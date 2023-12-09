@@ -13,8 +13,8 @@ extern crate nix;
 
 use anyhow::Result;
 use attack::{
-    attack_association_request, attack_authentication_from_ap, attack_authentication_from_client,
-    attack_beacon, attack_probe_request, attack_probe_request_direct, attack_probe_response,
+    attack_authentication_from_ap,
+    attack_beacon, attack_probe_response,
 };
 
 use crossterm::cursor::position;
@@ -33,6 +33,7 @@ use ntlook::{
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
 use rawsocks::{open_socket_rx, open_socket_tx};
+use tx::build_ack;
 
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
@@ -67,6 +68,9 @@ struct Arguments {
     #[arg(short, long, default_values_t = [1, 6, 11]) ]
     /// Optional list of channels to scan.
     channels: Vec<u8>,
+    #[arg(long)]
+    /// Optional do not transmit, passive only
+    notx: bool,
 }
 
 pub struct UiState {
@@ -173,10 +177,11 @@ impl Counters {
     }
 }
 
-pub struct WPOxideRuntime {
+pub struct OxideRuntime {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
     ui_state: UiState,
+    notx: bool,
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
@@ -189,8 +194,8 @@ pub struct WPOxideRuntime {
     status_log: status::MessageLog,
 }
 
-impl WPOxideRuntime {
-    pub fn new(interface_name: String) -> Self {
+impl OxideRuntime {
+    pub fn new(interface_name: String, notx: bool) -> Self {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
@@ -198,7 +203,7 @@ impl WPOxideRuntime {
         let iface = match get_interface_info_name(&interface_name) {
             Ok(inf) => inf,
             Err(e) => {
-                eprintln!("{}", e);
+                println!("{}", get_art(&e));
                 exit(EXIT_FAILURE);
             }
         };
@@ -249,10 +254,11 @@ impl WPOxideRuntime {
             hs_sort: 0,
             sort_reverse: false,
         };
-        WPOxideRuntime {
+        OxideRuntime {
             rx_socket,
             tx_socket,
             ui_state: state,
+            notx,
             frame_count: 0,
             eapol_count: 0,
             error_count: 0,
@@ -267,7 +273,7 @@ impl WPOxideRuntime {
     }
 }
 
-fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String> {
+fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     let radiotap = match Radiotap::from_bytes(packet) {
         Ok(radiotap) => radiotap,
         Err(error) => {
@@ -296,7 +302,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                 let signal_strength = radiotap
                     .antenna_signal
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
-                if bssid.is_real_device() && !bssid.is_private() {
+                if bssid.is_real_device() {
                     let station_info = &beacon_frame.station_info;
                     oxide.access_points.add_or_update_device(
                         bssid,
@@ -348,6 +354,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                 };
 
                 let _ = attack_beacon(oxide, &beacon_frame, &bssid);
+
             }
             Frame::ProbeRequest(probe_request_frame) => {
                 let client_mac = probe_request_frame.header.address_2; // MAC address of the client
@@ -371,14 +378,6 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                         vec![],
                                     ),
                                 );
-                                // Attack it.
-                                let _ = attack_probe_request_direct(
-                                    oxide,
-                                    &client_mac,
-                                    &bssid,
-                                    current_channel.get_channel_number(),
-                                    ssid.to_string(),
-                                );
                             }
                             None => {}
                         }
@@ -396,13 +395,6 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                         vec![],
                                     ),
                                 );
-                                // Attack it.
-                                let _ = attack_probe_request(
-                                    oxide,
-                                    &client_mac,
-                                    current_channel.get_channel_number(),
-                                    None,
-                                );
                             }
                             Some(ssid) => {
                                 // Add to unassoc clients.
@@ -413,13 +405,6 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                         signal_strength,
                                         vec![ssid.to_string()],
                                     ),
-                                );
-                                // Attack it.
-                                let _ = attack_probe_request(
-                                    oxide,
-                                    &client_mac,
-                                    current_channel.get_channel_number(),
-                                    Some(ssid.to_string()),
                                 );
                             }
                         }
@@ -483,7 +468,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                             oxide.rogue_client,
                         ),
                     );
-                    let _ = attack_probe_response(oxide, &probe_response_frame, bssid);
+                    let _ = attack_probe_response(oxide, &probe_response_frame, &bssid);
                 };
             }
             Frame::Authentication(auth_frame) => {
@@ -508,8 +493,6 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                             &Station::new_unassoc_station(client, signal, vec![]),
                         );
 
-                        // Now let's... send an authentication response I guess.
-                        let _ = attack_authentication_from_client(&client, &ap_addr, &bssid, oxide);
                     } else if auth_frame.auth_seq == 2 {
                         //// From AP
                         let client = auth_frame.header.address_1;
@@ -528,7 +511,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                             ),
                         );
 
-                        if client != oxide.rogue_client {
+                        if client.0[0..3] != oxide.rogue_client.0[0..3] {
                             // If it's not our rogue client that it's responding to.
                             oxide.unassoc_clients.add_or_update_device(
                                 client,
@@ -540,8 +523,6 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                                 ),
                             );
                         } else {
-                            // Oh it is responding to us!
-                            // Let's respond with an association request then
                             let _ = attack_authentication_from_ap(
                                 &ap_addr,
                                 &oxide.rogue_client.clone(),
@@ -699,13 +680,6 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                     );
                     oxide.access_points.add_or_update_device(ap_mac, &ap);
                 };
-                let _ = attack_association_request(
-                    &client_mac,
-                    &ap_mac,
-                    &bssid,
-                    &assoc_request_frame,
-                    oxide,
-                );
             }
             Frame::AssociationResponse(assoc_response_frame) => {
                 // Assumption:
@@ -713,6 +687,12 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
                 //
                 let client_mac = assoc_response_frame.header.address_1; // MAC address of the client
                 let bssid = assoc_response_frame.header.address_2; // MAC address of the AP (BSSID)
+                
+                if client_mac.0[0..3] == oxide.rogue_client.0[0..3] {
+                    let ack = build_ack(&bssid);
+                    write_packet(oxide.tx_socket.as_raw_fd(), &ack);
+                }
+
 
                 if bssid.is_real_device()
                     && client_mac.is_real_device()
@@ -1125,7 +1105,7 @@ fn handle_frame(oxide: &mut WPOxideRuntime, packet: &[u8]) -> Result<(), String>
 fn handle_data_frame(
     data_frame: &impl DataFrame,
     rthdr: &Radiotap,
-    oxide: &mut WPOxideRuntime,
+    oxide: &mut OxideRuntime,
     chan: u8,
 ) -> Result<(), String> {
     let source = data_frame.header().src().expect("Unable to get src");
@@ -1147,6 +1127,11 @@ fn handle_data_frame(
     } else {
         data_frame.header().address_1
     };
+
+    if station_addr.0[0..3] == oxide.rogue_client.0[0..3] {
+        let ack = build_ack(&ap_addr);
+        write_packet(oxide.tx_socket.as_raw_fd(), &ack);
+    }
 
     let mut clients = WiFiDeviceList::<Station>::new(); // Clients list for AP.
     let signal = rthdr
@@ -1225,10 +1210,6 @@ fn handle_data_frame(
                         eapol.determine_key_type(),
                     ),
                 ));
-                /* oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Info,
-                    format!("Failed: {:?}", &eapol.to_bytes(),),
-                )); */
             }
         }
     }
@@ -1238,7 +1219,7 @@ fn handle_data_frame(
 fn handle_null_data_frame(
     data_frame: &impl NullDataFrame,
     rthdr: &Radiotap,
-    oxide: &mut WPOxideRuntime,
+    oxide: &mut OxideRuntime,
     chan: u8,
 ) -> Result<(), String> {
     let from_ds: bool = data_frame.header().frame_control.from_ds();
@@ -1310,7 +1291,7 @@ fn write_packet(fd: i32, packet: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-fn read_packet(oxide: &mut WPOxideRuntime) -> Result<Vec<u8>, String> {
+fn read_packet(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
     let mut buffer = vec![0u8; 6000];
     let packet_len = unsafe {
         libc::read(
@@ -1324,15 +1305,15 @@ fn read_packet(oxide: &mut WPOxideRuntime) -> Result<Vec<u8>, String> {
     if packet_len < 0 {
         let error_code = io::Error::last_os_error();
         if error_code.kind() == io::ErrorKind::WouldBlock {
-            return Err("No data available".to_string());
+            return Ok(Vec::new());
         } else {
             // An actual error occurred
             oxide.error_count += 1;
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Error,
-                format!("Error Reading from Socket: {error_code:?}"),
+                format!("Error Reading from Socket: {:?}", error_code.kind()),
             ));
-            return Err(error_code.to_string());
+            return Err(error_code);
         }
     }
 
@@ -1348,7 +1329,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Arguments::parse();
 
-    let mut oxide = WPOxideRuntime::new(cli.interface);
+    let mut oxide = OxideRuntime::new(cli.interface, cli.notx);
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
         "Starting...".to_string(),
@@ -1370,7 +1351,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut frame_rate = 0u64;
 
     let mut last_status_time = Instant::now();
-    let status_interval = Duration::from_millis(100);
+    let status_interval = Duration::from_millis(50);
 
     let mut last_interactions_clear = Instant::now();
     let interactions_interval = Duration::from_secs(120);
@@ -1403,92 +1384,115 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(stdout(), Hide).unwrap();
     let _ = execute!(io::stdout(), EnterAlternateScreen)?;
     let cleanup = CleanUp;
+    let mut err = false;
     let _ = enable_raw_mode();
-    while running.load(Ordering::SeqCst) {
-        // Calculate last packet rate
-        if seconds_timer.elapsed() >= seconds_interval {
-            seconds_timer = Instant::now();
+    {
+        // Manage scope for cleanup
+        let cleanup = CleanUp;
+        while running.load(Ordering::SeqCst) {
+            // Calculate last packet rate
+            if seconds_timer.elapsed() >= seconds_interval {
+                seconds_timer = Instant::now();
 
-            // Calculate the frame rate
-            let frames_processed = oxide.frame_count - frame_count_old;
-            frame_count_old = oxide.frame_count;
-            frame_rate = frames_processed;
-        }
-
-        if last_hop_time.elapsed() >= hop_interval {
-            if let Some(&channel) = cycle_iter.next() {
-                if let Err(e) = set_interface_chan(idx, channel) {
-                    eprintln!("{}", e);
-                }
-                last_hop_time = Instant::now();
+                // Calculate the frame rate
+                let frames_processed = oxide.frame_count - frame_count_old;
+                frame_count_old = oxide.frame_count;
+                frame_rate = frames_processed;
             }
-        }
 
-        // Start UI Messages
-        if last_status_time.elapsed() >= status_interval {
-            last_status_time = Instant::now();
-            if poll(Duration::ZERO)? {
-                let event = crossterm::event::read()?;
-                if event == Event::Key(KeyCode::Right.into()) {
-                    oxide.ui_state.menu_next();
-                } else if event == Event::Key(KeyCode::Left.into()) {
-                    oxide.ui_state.menu_back();
-                } else if event == Event::Key(KeyCode::Char('q').into()) {
-                    running.store(false, Ordering::SeqCst);
-                } else if event == Event::Key(KeyCode::Char(' ').into()) {
-                    oxide.ui_state.toggle_pause();
-                } else if event == Event::Key(KeyCode::Char('a').into()) {
-                    oxide.ui_state.ap_sort_next();
-                } else if event == Event::Key(KeyCode::Char('c').into()) {
-                    oxide.ui_state.cl_sort_next();
-                } else if event == Event::Key(KeyCode::Char('r').into()) {
-                    oxide.ui_state.toggle_reverse();
-                }
             
+            if last_hop_time.elapsed() >= hop_interval {
+                if let Some(&channel) = cycle_iter.next() {
+                    if let Err(e) = set_interface_chan(idx, channel) {
+                        oxide.status_log.add_message(StatusMessage::new(
+                            MessageType::Error,
+                            format!("Error: {e:?}"),
+                        ));
+                    }
+                    last_hop_time = Instant::now();
+                }
             }
-            print_ui(&mut oxide, start_time, frame_rate);
-        }
+            
 
-        // Clear all interactions counters every 60 seconds.
-        if last_interactions_clear.elapsed() >= interactions_interval {
-            last_interactions_clear = Instant::now();
-            oxide.access_points.clear_all_interactions();
-        }
+            // Start UI Messages
+            if last_status_time.elapsed() >= status_interval {
+                last_status_time = Instant::now();
+                if poll(Duration::ZERO)? {
+                    let event = crossterm::event::read()?;
+                    if event == Event::Key(KeyCode::Right.into()) {
+                        oxide.ui_state.menu_next();
+                    } else if event == Event::Key(KeyCode::Left.into()) {
+                        oxide.ui_state.menu_back();
+                    } else if event == Event::Key(KeyCode::Char('q').into()) {
+                        running.store(false, Ordering::SeqCst);
+                    } else if event == Event::Key(KeyCode::Char(' ').into()) {
+                        oxide.ui_state.toggle_pause();
+                    } else if event == Event::Key(KeyCode::Char('a').into()) {
+                        oxide.ui_state.ap_sort_next();
+                    } else if event == Event::Key(KeyCode::Char('c').into()) {
+                        oxide.ui_state.cl_sort_next();
+                    } else if event == Event::Key(KeyCode::Char('r').into()) {
+                        oxide.ui_state.toggle_reverse();
+                    }
+                }
+                print_ui(&mut oxide, start_time, frame_rate);
+            }
 
-        // Read Packet
-        if let Ok(packet) = read_packet(&mut oxide) {
-            handle_frame(&mut oxide, &packet)?;
+            if last_interactions_clear.elapsed() >= interactions_interval {
+                last_interactions_clear = Instant::now();
+                oxide.access_points.clear_all_interactions();
+            }
+
+            // Read Packet
+            let _ = match read_packet(&mut oxide) {
+                Ok(packet) => {
+                    if !packet.is_empty() {
+                        handle_frame(&mut oxide, &packet);
+                    }
+                }
+                Err(e) => {
+                    err = true;
+                    running.store(false, Ordering::SeqCst);
+                },
+            };
+
         }
     }
 
-    oxide.status_log.add_message(StatusMessage::new(
-        MessageType::Info,
-        format!("Setting {} down.", interface_name),
-    ));
+    // Execute cleanup
+    if !err {
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("Setting {} down.", interface_name),
+        ));
 
-    match set_interface_down(idx) {
-        Ok(_) => {}
-        Err(e) => {
-            oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Error,
-                format!("Error: {e:?}"),
-            ));
+        match set_interface_down(idx) {
+            Ok(_) => {}
+            Err(e) => {
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Error,
+                    format!("Error: {e:?}"),
+                ));
+            }
         }
-    }
 
-    oxide.status_log.add_message(StatusMessage::new(
-        MessageType::Info,
-        format!("Setting {} to station mode.", interface_name),
-    ));
-    match set_interface_station(idx) {
-        Ok(_) => {}
-        Err(e) => {
-            oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Error,
-                format!("Error: {e:?}"),
-            ));
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("Setting {} to station mode.", interface_name),
+        ));
+        match set_interface_station(idx) {
+            Ok(_) => {}
+            Err(e) => {
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Error,
+                    format!("Error: {e:?}"),
+                ));
+            }
         }
+    } else {
+        println!("{}", get_art("A serious packet read error occured."))
     }
+    
     println!();
     for (_, handshakes) in oxide.handshake_storage.get_handshakes() {
         if !handshakes.is_empty() {
@@ -1512,8 +1516,8 @@ struct CleanUp;
 impl Drop for CleanUp {
     fn drop(&mut self) {
         execute!(stdout(), Show).unwrap();
-        let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
+        let _ = disable_raw_mode();
     }
     
 }

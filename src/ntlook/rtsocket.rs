@@ -16,6 +16,8 @@ impl RtSocket {
     pub fn connect() -> Result<Self, String> {
         let sock =
             NlSocketHandle::connect(NlFamily::Route, None, &[]).map_err(|e| e.to_string())?;
+
+        sock.nonblock().map_err(|e| e.to_string())?;
         Ok(Self { sock })
     }
 

@@ -59,7 +59,7 @@ impl fmt::Display for FourWayHandshake {
 
         write!(
             f,
-            " {:<2} {:<2} {:<2} {:<2} {:<2}   {:<2}    {:^8}",
+            " {:<2} {:<2} {:<2} {:<2} {:<2}     {:^2}    {:^8}",
             if self.msg1.is_some() {
                 "\u{2705}\0" // The check-mark is two char's wide, so we add a null char so the fmt lib doesn't add a space when padding to two.
             } else {

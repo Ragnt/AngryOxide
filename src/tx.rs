@@ -6,7 +6,7 @@ use libwifi::frame::{
         RsnInformation, SequenceControl, StationInfo,
     },
     AssociationRequest, AssociationResponse, Authentication, Data, Deauthentication,
-    DeauthenticationReason, EapolKey, ProbeRequest, ProbeResponse, ReassociationRequest,
+    DeauthenticationReason, EapolKey, ProbeRequest, ProbeResponse, ReassociationRequest, Ack,
 };
 
 const RTH: [u8; 8] = [
@@ -68,7 +68,7 @@ pub fn build_authentication_frame_noack(
     source_rogue: &MacAddress,
     sequence: u16,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+    let mut rth: Vec<u8> = RTH.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -174,7 +174,7 @@ pub fn build_association_request_org(
     sequence: u16,
     ssid: Option<String>,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+    let mut rth: Vec<u8> = RTH.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -247,7 +247,7 @@ pub fn build_association_request(
     group_cipher_suite: RsnCipherSuite,
     pairwise_cipher_suites: Vec<RsnCipherSuite>,
 ) -> Vec<u8> {
-    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+    let mut rth: Vec<u8> = RTH.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
@@ -650,3 +650,26 @@ pub fn build_eapol_m1(
     rth.extend(frx.encode());
     rth
 }
+
+
+pub fn build_ack(
+    addr: &MacAddress,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Data,
+        frame_subtype: libwifi::FrameSubType::Data,
+        flags: 0u8,
+    };
+
+    let frx = Ack {
+        frame_control,
+        duration: [0x3a, 0x01],
+        destination: *addr,
+    };
+    rth.extend(frx.encode());
+    rth
+}
+

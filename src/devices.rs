@@ -23,7 +23,7 @@ pub struct AuthSequence {
 impl AuthSequence {
     fn new(rogue_mac: MacAddress) -> Self {
         AuthSequence {
-            t1: SystemTime::now(),
+            t1: SystemTime::UNIX_EPOCH,
             t2: SystemTime::now(),
             rogue_mac: MacAddress::random_with_oui(&rogue_mac),
             state: 0,
