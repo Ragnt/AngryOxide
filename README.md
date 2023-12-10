@@ -1,11 +1,11 @@
 
 ![Logo](death.png)
 
-# WPOxide
+# AngryOxide
 
 ### A Rust WPA Attack tool.
 
-WPOxide was developed as a way to learn rust, netlink, and kernel sockets all at once- with a focus on WiFi exploitation.
+This tool was developed as a way to learn rust, netlink, kernel sockets (and eBPF) all at once- with a focus on WiFi exploitation.
 
 ## Features
 
