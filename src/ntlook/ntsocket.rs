@@ -332,6 +332,9 @@ impl NtSocket {
                                     } else {
                                         interface.active_monitor = Some(false);
                                     }
+
+                                    // This returns Some(true)
+                                    println!("Set {:?}, {:?}", String::from_utf8(interface.name.clone().unwrap_or_default()), interface.active_monitor);
                                 }
                                 _ => {}
                             }
@@ -340,6 +343,8 @@ impl NtSocket {
                 }
             }
         }
+        // This returns Some(false)
+        println!("Return {:?}, {:?}", String::from_utf8(interface.name.clone().unwrap_or_default()), interface.active_monitor);
         Ok(interface)
     }
 
@@ -347,6 +352,7 @@ impl NtSocket {
         &mut self,
         interface_index: i32,
         iftype: Nl80211Iftype,
+        active: Option<bool>
     ) -> Result<(), String> {
         let msghdr = Genlmsghdr::<Nl80211Cmd, Nl80211Attr>::new(
             Nl80211Cmd::CmdSetInterface,
@@ -361,6 +367,12 @@ impl NtSocket {
                     Nlattr::new(false, false, Nl80211Attr::AttrIftype, iftype_value as u32)
                         .unwrap(),
                 );
+                if active.is_some_and(|f| f) {
+                    attrs.push(
+                        Nlattr::new(false, false, Nl80211Attr::AttrMntrFlags, Nl80211MntrFlags::MntrFlagActive)
+                            .unwrap(),
+                    );
+                }
                 attrs
             },
         );

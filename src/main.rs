@@ -20,7 +20,7 @@ use attack::{
 use crossterm::cursor::position;
 use crossterm::event::{poll, read, self, KeyCode, Event};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, self};
-use libc::{EXIT_FAILURE, EXIT_SUCCESS};
+use libc::{EXIT_FAILURE, EXIT_SUCCESS, sleep};
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
 use libwifi::frame::{DataFrame, NullDataFrame};
 use nix::unistd::geteuid;
@@ -38,6 +38,7 @@ use tx::build_ack;
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
+use crate::ntlook::get_interface_info_idx;
 use crate::status::*;
 use crate::ui::{default_ui, print_ui};
 
@@ -210,6 +211,8 @@ impl OxideRuntime {
 
         let idx = iface.index.unwrap();
 
+        //println!("{}", get_interface_info_idx(idx));
+
         log.add_message(StatusMessage::new(
             MessageType::Info,
             format!("Setting {} down.", interface_name),
@@ -227,14 +230,15 @@ impl OxideRuntime {
             MessageType::Info,
             format!("Setting {} monitor mode.", interface_name),
         ));
-        set_interface_monitor(idx).ok();
+        set_interface_monitor(idx, iface.active_monitor.unwrap_or_default()).ok();
 
         log.add_message(StatusMessage::new(
             MessageType::Info,
             format!("Setting {} up.", interface_name),
         ));
         set_interface_up(idx).ok();
-
+        println!("{}", iface.pretty_print());
+        thread::sleep(Duration::from_secs(3));
         let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
         let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
 
@@ -1385,7 +1389,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = execute!(io::stdout(), EnterAlternateScreen)?;
     let cleanup = CleanUp;
     let mut err = false;
-    let _ = enable_raw_mode();
+    //let _ = enable_raw_mode();
     {
         // Manage scope for cleanup
         let cleanup = CleanUp;
@@ -1435,7 +1439,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         oxide.ui_state.toggle_reverse();
                     }
                 }
-                print_ui(&mut oxide, start_time, frame_rate);
+                //print_ui(&mut oxide, start_time, frame_rate);
             }
 
             if last_interactions_clear.elapsed() >= interactions_interval {

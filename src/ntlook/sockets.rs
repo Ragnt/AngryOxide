@@ -56,6 +56,7 @@ pub fn get_interface_info_name(interface_name: &String) -> Result<Interface, Str
             continue;
         };
         if &name == interface_name {
+            println!("print:  {:?}", interface.pretty_print());
             nt_socket.cmd_get_split_wiphy(interface)?;
             interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
             ret_interface = Some(interface.clone());
@@ -63,7 +64,8 @@ pub fn get_interface_info_name(interface_name: &String) -> Result<Interface, Str
         }
     }
     if let Some(intfc) = ret_interface {
-        Ok(intfc)
+        print!("print:  {:?}", intfc.pretty_print());
+        return Ok(intfc);
     } else {
         Err("Interface Not Found".to_string())
     }
@@ -74,16 +76,16 @@ fn get_wiphy(interface: &mut Interface) -> Result<&mut Interface, String> {
     nt_socket.cmd_get_split_wiphy(interface)
 }
 
-pub fn set_interface_monitor(interface_index: i32) -> Result<(), String> {
+pub fn set_interface_monitor(interface_index: i32, active: bool) -> Result<(), String> {
     let mut nt_socket = NtSocket::connect()?;
-    nt_socket.set_type_vec(interface_index, Nl80211Iftype::IftypeMonitor)?;
+    nt_socket.set_type_vec(interface_index, Nl80211Iftype::IftypeMonitor, Some(active))?;
     let _ = update_interfaces();
     Ok(())
 }
 
 pub fn set_interface_station(interface_index: i32) -> Result<(), String> {
     let mut nt_socket = NtSocket::connect()?;
-    nt_socket.set_type_vec(interface_index, Nl80211Iftype::IftypeStation)?;
+    nt_socket.set_type_vec(interface_index, Nl80211Iftype::IftypeStation, None)?;
     let _ = update_interfaces();
     Ok(())
 }

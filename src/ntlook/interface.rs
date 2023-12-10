@@ -159,17 +159,26 @@ impl Interface {
             types = "".to_string();
         }
         let str = format!(
-            "================ {} ({}) ================\n - Interface Index: {}\n - Driver: {}\n - Mode: {} \n - Modes: {}\n - Active Monitor: {}\n - Current Freq: {} ({})\n - Supported Frequencies: \n{}\n========================================",
+            "================ {} ({}) ================ 
+            - Interface Index: {} 
+            - Driver: {} 
+            - Mode: {} 
+            - Modes: {}
+            - Active Monitor: {}
+            - Current Freq: {} ({})
+            - Supported Frequencies: 
+            {}
+            ========================================",
             String::from_utf8(self.name.clone().unwrap()).unwrap(),
             self.mac.as_ref().unwrap(),
             self.index.unwrap(),
             self.driver.as_ref().unwrap_or(&"Unknown".to_string()),
             self.current_iftype.unwrap().string(),
             types,
-            self.active_monitor.unwrap(),
+            self.active_monitor.unwrap_or_default(),
             self.frequency.as_ref().unwrap().frequency.map_or("None".to_string(), |value| value.to_string()),
             self.frequency.as_ref().unwrap().channel.as_ref().map_or("None".to_string(), |value| value.to_string()),
-            pretty_print_band_lists(self.frequency_list.as_ref().unwrap()),
+            pretty_print_band_lists(self.frequency_list.as_ref().unwrap_or(&Vec::new())),
         );
         str
     }
