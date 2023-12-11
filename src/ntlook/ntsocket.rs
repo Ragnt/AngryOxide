@@ -1,11 +1,12 @@
-use crate::ntlook::attr::*;
 use crate::ntlook::channels::{BandList, FrequencyStatus, WiFiBand, WiFiChannel};
 use crate::ntlook::cmd::Nl80211Cmd;
 use crate::ntlook::interface::Interface;
 use crate::ntlook::util::*;
+use crate::ntlook::{attr::*, Frequency};
 use crate::ntlook::{NL_80211_GENL_NAME, NL_80211_GENL_VERSION};
 
 use super::{ChannelData, Nl80211Iftype};
+use libwifi::frame::components::MacAddress;
 use neli::attr::{AttrHandle, Attribute};
 use neli::consts::{nl::NlmF, nl::NlmFFlags, nl::Nlmsg, socket::NlFamily};
 use neli::genl::{Genlmsghdr, Nlattr};
@@ -13,6 +14,7 @@ use neli::nl::{NlPayload, Nlmsghdr};
 use neli::socket::NlSocketHandle;
 use neli::types::{Buffer, GenlBuffer};
 
+use std::collections::HashMap;
 use std::fs;
 
 /// A generic netlink socket to send commands and receive messages
@@ -33,23 +35,11 @@ impl NtSocket {
         Ok(Self { sock, family_id })
     }
 
-    pub fn cmd_get_interface(
-        &mut self,
-        interface_index: Option<i32>,
-    ) -> Result<Vec<Interface>, String> {
+    pub fn cmd_get_interfaces(&mut self) -> Result<HashMap<u32, Interface>, String> {
         let msghdr = Genlmsghdr::<Nl80211Cmd, Nl80211Attr>::new(
             Nl80211Cmd::CmdGetInterface,
             NL_80211_GENL_VERSION,
-            {
-                let mut attrs = GenlBuffer::new();
-                if let Some(interface_index) = interface_index {
-                    attrs.push(
-                        Nlattr::new(false, false, Nl80211Attr::AttrIfindex, interface_index)
-                            .unwrap(),
-                    );
-                }
-                attrs
-            },
+            GenlBuffer::new(),
         );
 
         let nlhdr: Nlmsghdr<u16, Genlmsghdr<Nl80211Cmd, Nl80211Attr>> = {
@@ -68,7 +58,7 @@ impl NtSocket {
             .sock
             .iter::<Nlmsg, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(false);
 
-        let mut retval: Vec<Interface> = Vec::new();
+        let mut retval: HashMap<u32, Interface> = HashMap::new();
 
         for response in iter {
             let response = response.unwrap();
@@ -77,110 +67,94 @@ impl NtSocket {
                 Nlmsg::Error => return Err("Error".to_string()),
                 Nlmsg::Done => break,
                 _ => {
-                    let mut res: Interface = Interface::default();
                     if let Some(p) = response.nl_payload.get_payload() {
                         let handle = p.get_attr_handle();
-                        res = Interface::try_from(handle).unwrap();
-                    }
-                    retval.push(res);
-                }
-            }
-        }
-        Ok(retval)
-    }
-
-    pub fn cmd_get_iftypes(
-        &mut self,
-        interface_index: Option<i32>,
-    ) -> Result<Vec<Interface>, String> {
-        let msghdr = Genlmsghdr::<Nl80211Cmd, Nl80211Attr>::new(
-            Nl80211Cmd::CmdGetWiphy,
-            NL_80211_GENL_VERSION,
-            {
-                let mut attrs = GenlBuffer::new();
-                if let Some(interface_index) = interface_index {
-                    attrs.push(
-                        Nlattr::new(false, false, Nl80211Attr::AttrIfindex, interface_index)
-                            .unwrap(),
-                    );
-                }
-                attrs
-            },
-        );
-
-        let nlhdr: Nlmsghdr<u16, Genlmsghdr<Nl80211Cmd, Nl80211Attr>> = {
-            let len = None;
-            let nl_type = self.family_id;
-            let flags = NlmFFlags::new(&[NlmF::Request, NlmF::Dump]);
-            let seq = None;
-            let pid = None;
-            let payload = NlPayload::Payload(msghdr);
-            Nlmsghdr::new(len, nl_type, flags, seq, pid, payload)
-        };
-
-        self.sock.send(nlhdr).map_err(|err| err.to_string())?;
-
-        let iter = self
-            .sock
-            .iter::<Nlmsg, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(false);
-
-        let mut retval: Vec<Interface> = Vec::new();
-
-        for response in iter {
-            let response = response.unwrap();
-            match response.nl_type {
-                Nlmsg::Noop => (),
-                Nlmsg::Error => panic!("Error"),
-                Nlmsg::Done => break,
-                _ => {
-                    let mut res = Interface::default();
-                    match response.nl_payload.get_payload() {
-                        Some(p) => {
-                            let handle = p.get_attr_handle();
-                            for attr in handle.get_attrs() {
-                                match attr.nla_type.nla_type {
-                                    Nl80211Attr::AttrSupportedIftypes => {
-                                        res.iftypes = Some(decode_iftypes(
-                                            attr.get_payload_as_with_len()
-                                                .map_err(|err| err.to_string())?,
-                                        ));
-                                    }
-                                    _ => {}
+                        let mut interface = Interface::default();
+                        let mut freq: Frequency = Frequency::default();
+                        for attr in handle.iter() {
+                            match attr.nla_type.nla_type {
+                                Nl80211Attr::AttrIfindex => {
+                                    interface.index =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?);
                                 }
+                                Nl80211Attr::AttrSsid => {
+                                    interface.ssid = Some(
+                                        attr.get_payload_as_with_len()
+                                            .map_err(|err| err.to_string())?,
+                                    );
+                                }
+                                Nl80211Attr::AttrMac => {
+                                    let mut mac = Vec::new();
+                                    let vecmac: Vec<u8> = attr
+                                        .get_payload_as_with_len()
+                                        .map_err(|err| err.to_string())?;
+                                    for byte in vecmac {
+                                        mac.push(byte);
+                                    }
+
+                                    interface.mac = Some(MacAddress(mac.try_into().unwrap()));
+                                }
+                                Nl80211Attr::AttrIfname => {
+                                    interface.name = Some(
+                                        attr.get_payload_as_with_len()
+                                            .map_err(|err| err.to_string())?,
+                                    );
+                                }
+                                Nl80211Attr::AttrWiphyFreq => {
+                                    freq.frequency =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?);
+                                    freq.channel = Some(
+                                        WiFiChannel::from_frequency(freq.frequency.unwrap())
+                                            .unwrap(),
+                                    );
+                                }
+                                Nl80211Attr::AttrChannelWidth => {
+                                    freq.width =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?);
+                                }
+                                Nl80211Attr::AttrWiphyTxPowerLevel => {
+                                    freq.pwr =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?);
+                                }
+                                Nl80211Attr::AttrPsState => {
+                                    interface.powerstate =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?);
+                                }
+                                Nl80211Attr::AttrWiphy => {
+                                    interface.phy =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?)
+                                }
+                                Nl80211Attr::AttrWdev => {
+                                    interface.device =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?)
+                                }
+                                Nl80211Attr::AttrSupportedIftypes => {
+                                    interface.iftypes = Some(decode_iftypes(
+                                        attr.get_payload_as_with_len()
+                                            .map_err(|err| err.to_string())?,
+                                    ));
+                                }
+                                Nl80211Attr::AttrIftype => {
+                                    interface.current_iftype =
+                                        Some(attr.get_payload_as().map_err(|err| err.to_string())?);
+                                }
+                                _ => (),
                             }
                         }
-                        None => {}
+                        interface.frequency = Some(freq);
+                        retval.insert(interface.phy.unwrap(), interface);
                     }
-                    retval.push(res);
                 }
             }
         }
-
         Ok(retval)
     }
 
-    pub fn cmd_get_split_wiphy<'a>(
-        &mut self,
-        interface: &'a mut Interface,
-    ) -> Result<&'a mut Interface, String> {
+    pub fn cmd_get_split_wiphy(&mut self) -> Result<Vec<Interface>, String> {
         let msghdr = Genlmsghdr::<Nl80211Cmd, Nl80211Attr>::new(
             Nl80211Cmd::CmdGetWiphy,
             NL_80211_GENL_VERSION,
-            {
-                let mut attrs = GenlBuffer::new();
-                if let Some(interface_index) = interface.index {
-                    attrs.push(
-                        Nlattr::new(
-                            false,
-                            false,
-                            Nl80211Attr::AttrSplitWiphyDump,
-                            interface_index,
-                        )
-                        .unwrap(),
-                    );
-                }
-                attrs
-            },
+            GenlBuffer::new(),
         );
 
         let nlhdr: Nlmsghdr<u16, Genlmsghdr<Nl80211Cmd, Nl80211Attr>> = {
@@ -199,20 +173,24 @@ impl NtSocket {
             .sock
             .iter::<Nlmsg, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(false);
 
+        let mut interfaces: Vec<Interface> = Vec::new();
         for response in iter {
             let response = response.unwrap();
             match response.nl_type {
                 Nlmsg::Noop => (),
-                Nlmsg::Error => panic!("Error"),
+                Nlmsg::Error => panic!("Error with netlink during cmd_get_split_wiphy()"),
                 Nlmsg::Done => break,
                 _ => {
                     if let Some(p) = response.nl_payload.get_payload() {
+                        let mut interface = Interface::default();
                         let handle = p.get_attr_handle();
                         for attr in handle.get_attrs() {
                             match attr.nla_type.nla_type {
                                 Nl80211Attr::AttrWiphy => {
+                                    // this get the wiphyname of the current payload...
                                     let wiphyname: u32 =
                                         attr.get_payload_as().map_err(|err| err.to_string())?;
+                                    interface.phy = Some(wiphyname);
                                     let driver_path = format!(
                                         "/sys/class/ieee80211/phy{}/device/driver",
                                         wiphyname
@@ -252,8 +230,8 @@ impl NtSocket {
                                             Nl80211Bandc::Band5ghz => {
                                                 bandlist.band = WiFiBand::Band5GHz
                                             }
-                                            Nl80211Bandc::Band60ghz => todo!(),
-                                            Nl80211Bandc::UnrecognizedConst(_) => todo!(),
+                                            Nl80211Bandc::Band60ghz => {}
+                                            Nl80211Bandc::UnrecognizedConst(_) => {}
                                         }
                                         let bandhandle: AttrHandle<
                                             '_,
@@ -332,27 +310,28 @@ impl NtSocket {
                                     } else {
                                         interface.active_monitor = Some(false);
                                     }
-
-                                    // This returns Some(true)
-                                    println!("Set {:?}, {:?}", String::from_utf8(interface.name.clone().unwrap_or_default()), interface.active_monitor);
+                                }
+                                Nl80211Attr::AttrWiphyName => {
+                                    let index: String = attr
+                                        .get_payload_as_with_len()
+                                        .map_err(|err| err.to_string())?;
                                 }
                                 _ => {}
                             }
                         }
+                        interfaces.push(interface);
                     }
                 }
             }
         }
-        // This returns Some(false)
-        println!("Return {:?}, {:?}", String::from_utf8(interface.name.clone().unwrap_or_default()), interface.active_monitor);
-        Ok(interface)
+        Ok(interfaces)
     }
 
     pub fn set_type_vec(
         &mut self,
         interface_index: i32,
         iftype: Nl80211Iftype,
-        active: Option<bool>
+        active: Option<bool>,
     ) -> Result<(), String> {
         let msghdr = Genlmsghdr::<Nl80211Cmd, Nl80211Attr>::new(
             Nl80211Cmd::CmdSetInterface,
@@ -369,8 +348,13 @@ impl NtSocket {
                 );
                 if active.is_some_and(|f| f) {
                     attrs.push(
-                        Nlattr::new(false, false, Nl80211Attr::AttrMntrFlags, Nl80211MntrFlags::MntrFlagActive)
-                            .unwrap(),
+                        Nlattr::new(
+                            false,
+                            false,
+                            Nl80211Attr::AttrMntrFlags,
+                            Nl80211MntrFlags::MntrFlagActive,
+                        )
+                        .unwrap(),
                     );
                 }
                 attrs

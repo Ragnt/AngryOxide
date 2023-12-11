@@ -94,62 +94,6 @@ pub fn iftypes_to_string_list(iftypes: Vec<Nl80211Iftype>) -> String {
         .join(", ")
 }
 
-impl TryFrom<Attrs<'_, Nl80211Attr>> for Interface {
-    type Error = DeError;
-
-    fn try_from(attrs: Attrs<'_, Nl80211Attr>) -> Result<Self, Self::Error> {
-        let mut res = Self::default();
-        let mut freq: Frequency = Frequency::default();
-        for attr in attrs.iter() {
-            match attr.nla_type.nla_type {
-                Nl80211Attr::AttrIfindex => {
-                    res.index = Some(attr.get_payload_as()?);
-                }
-                Nl80211Attr::AttrSsid => {
-                    res.ssid = Some(attr.get_payload_as_with_len()?);
-                }
-                Nl80211Attr::AttrMac => {
-                    let mut mac = Vec::new();
-                    let vecmac: Vec<u8> = attr.get_payload_as_with_len()?;
-                    for byte in vecmac {
-                        mac.push(byte);
-                    }
-
-                    res.mac = Some(MacAddress(mac.try_into().unwrap()));
-                }
-                Nl80211Attr::AttrIfname => {
-                    res.name = Some(attr.get_payload_as_with_len()?);
-                }
-                Nl80211Attr::AttrWiphyFreq => {
-                    freq.frequency = Some(attr.get_payload_as()?);
-                    freq.channel =
-                        Some(WiFiChannel::from_frequency(freq.frequency.unwrap()).unwrap());
-                }
-                Nl80211Attr::AttrChannelWidth => {
-                    freq.width = Some(attr.get_payload_as()?);
-                }
-                Nl80211Attr::AttrWiphyTxPowerLevel => {
-                    freq.pwr = Some(attr.get_payload_as()?);
-                }
-                Nl80211Attr::AttrPsState => {
-                    res.powerstate = Some(attr.get_payload_as()?);
-                }
-                Nl80211Attr::AttrWiphy => res.phy = Some(attr.get_payload_as()?),
-                Nl80211Attr::AttrWdev => res.device = Some(attr.get_payload_as()?),
-                Nl80211Attr::AttrSupportedIftypes => {
-                    res.iftypes = Some(decode_iftypes(attr.get_payload_as_with_len()?));
-                }
-                Nl80211Attr::AttrIftype => {
-                    res.current_iftype = Some(attr.get_payload_as()?);
-                }
-                _ => (),
-            }
-        }
-        res.frequency = Some(freq);
-        Ok(res)
-    }
-}
-
 impl Interface {
     pub fn pretty_print(&self) -> String {
         let types: String;
@@ -176,10 +120,67 @@ impl Interface {
             self.current_iftype.unwrap().string(),
             types,
             self.active_monitor.unwrap_or_default(),
-            self.frequency.as_ref().unwrap().frequency.map_or("None".to_string(), |value| value.to_string()),
-            self.frequency.as_ref().unwrap().channel.as_ref().map_or("None".to_string(), |value| value.to_string()),
+            self.frequency
+                .as_ref()
+                .unwrap()
+                .frequency
+                .map_or("None".to_string(), |value| value.to_string()),
+            self.frequency
+                .as_ref()
+                .unwrap()
+                .channel
+                .as_ref()
+                .map_or("None".to_string(), |value| value.to_string()),
             pretty_print_band_lists(self.frequency_list.as_ref().unwrap_or(&Vec::new())),
         );
         str
+    }
+
+    pub fn merge_with(&mut self, other: Interface) {
+        if self.index.is_none() {
+            self.index = other.index;
+        }
+        if self.ssid.is_none() {
+            self.ssid = other.ssid;
+        }
+        if self.mac.is_none() {
+            self.mac = other.mac;
+        }
+        if self.name.is_none() {
+            self.name = other.name;
+        }
+        if self.state.is_none() {
+            self.state = other.state;
+        }
+        if self.frequency.is_none() {
+            self.frequency = other.frequency;
+        }
+        if self.powerstate.is_none() {
+            self.powerstate = other.powerstate;
+        }
+        if self.phy.is_none() {
+            self.phy = other.phy;
+        }
+        if self.device.is_none() {
+            self.device = other.device;
+        }
+        if self.iftypes.is_none() {
+            self.iftypes = other.iftypes;
+        }
+        if self.current_iftype.is_none() {
+            self.current_iftype = other.current_iftype;
+        }
+        if self.driver.is_none() {
+            self.driver = other.driver;
+        }
+        if self.has_netlink.is_none() {
+            self.has_netlink = other.has_netlink;
+        }
+        if self.frequency_list.is_none() {
+            self.frequency_list = other.frequency_list;
+        }
+        if self.active_monitor.is_none() {
+            self.active_monitor = other.active_monitor;
+        }
     }
 }

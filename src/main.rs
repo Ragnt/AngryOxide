@@ -12,15 +12,13 @@ extern crate libc;
 extern crate nix;
 
 use anyhow::Result;
-use attack::{
-    attack_authentication_from_ap,
-    attack_beacon, attack_probe_response,
-};
+use attack::{attack_authentication_from_ap, attack_beacon, attack_probe_response};
 
-use crossterm::cursor::position;
-use crossterm::event::{poll, read, self, KeyCode, Event};
-use crossterm::terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, self};
-use libc::{EXIT_FAILURE, EXIT_SUCCESS, sleep};
+use crossterm::event::{poll, Event, KeyCode};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
+use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
 use libwifi::frame::{DataFrame, NullDataFrame};
 use nix::unistd::geteuid;
@@ -38,9 +36,8 @@ use tx::build_ack;
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
-use crate::ntlook::get_interface_info_idx;
 use crate::status::*;
-use crate::ui::{default_ui, print_ui};
+use crate::ui::print_ui;
 
 use libwifi::{Addresses, Frame};
 
@@ -55,7 +52,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "WPOxide")]
@@ -84,7 +81,7 @@ pub struct UiState {
 }
 
 impl UiState {
-    pub fn menu_next(&mut self) -> u8{
+    pub fn menu_next(&mut self) -> u8 {
         if self.menu == 3 {
             self.menu = 0;
             return self.menu;
@@ -93,7 +90,7 @@ impl UiState {
         self.menu
     }
 
-    pub fn menu_back(&mut self) -> u8{
+    pub fn menu_back(&mut self) -> u8 {
         if self.menu == 0 {
             self.menu = 3;
             return self.menu;
@@ -102,7 +99,7 @@ impl UiState {
         self.menu
     }
 
-    pub fn ap_sort_next(&mut self) -> u8{
+    pub fn ap_sort_next(&mut self) -> u8 {
         if self.ap_sort == 5 {
             self.ap_sort = 0;
             return self.ap_sort;
@@ -111,7 +108,7 @@ impl UiState {
         self.ap_sort
     }
 
-    pub fn cl_sort_next(&mut self) -> u8{
+    pub fn cl_sort_next(&mut self) -> u8 {
         if self.cl_sort == 1 {
             self.cl_sort = 0;
             return self.cl_sort;
@@ -120,7 +117,7 @@ impl UiState {
         self.cl_sort
     }
 
-    pub fn hs_sort_next(&mut self) -> u8{
+    pub fn hs_sort_next(&mut self) -> u8 {
         if self.hs_sort == 4 {
             self.hs_sort = 0;
             return self.hs_sort;
@@ -211,8 +208,6 @@ impl OxideRuntime {
 
         let idx = iface.index.unwrap();
 
-        //println!("{}", get_interface_info_idx(idx));
-
         log.add_message(StatusMessage::new(
             MessageType::Info,
             format!("Setting {} down.", interface_name),
@@ -237,8 +232,6 @@ impl OxideRuntime {
             format!("Setting {} up.", interface_name),
         ));
         set_interface_up(idx).ok();
-        println!("{}", iface.pretty_print());
-        thread::sleep(Duration::from_secs(3));
         let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
         let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
 
@@ -358,7 +351,6 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
 
                 let _ = attack_beacon(oxide, &beacon_frame, &bssid);
-
             }
             Frame::ProbeRequest(probe_request_frame) => {
                 let client_mac = probe_request_frame.header.address_2; // MAC address of the client
@@ -486,7 +478,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 if auth_frame.auth_algorithm == 0 {
                     // Open system (Which can be open or WPA2)
                     if auth_frame.auth_seq == 1 {
-                        //// From Client
+                        // From Client
                         let client = auth_frame.header.address_2;
                         let ap_addr = auth_frame.header.address_1;
                         let bssid = auth_frame.header.address_3;
@@ -496,7 +488,6 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             client,
                             &Station::new_unassoc_station(client, signal, vec![]),
                         );
-
                     } else if auth_frame.auth_seq == 2 {
                         //// From AP
                         let client = auth_frame.header.address_1;
@@ -691,12 +682,11 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 //
                 let client_mac = assoc_response_frame.header.address_1; // MAC address of the client
                 let bssid = assoc_response_frame.header.address_2; // MAC address of the AP (BSSID)
-                
+
                 if client_mac.0[0..3] == oxide.rogue_client.0[0..3] {
                     let ack = build_ack(&bssid);
                     write_packet(oxide.tx_socket.as_raw_fd(), &ack);
                 }
-
 
                 if bssid.is_real_device()
                     && client_mac.is_real_device()
@@ -1376,7 +1366,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("Setting channel hopper: {:?}", channels),
     ));
 
-    //we don't really need this. We still process frames plenty fast and this had the potential of interupting us 
+    //we don't really need this. We still process frames plenty fast and this had the potential of interupting us
     //in the middle of trying to send out a response.
     //start_channel_hopping_thread(running.clone(), hop_interval, idx, channels);
 
@@ -1389,7 +1379,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = execute!(io::stdout(), EnterAlternateScreen)?;
     let cleanup = CleanUp;
     let mut err = false;
-    //let _ = enable_raw_mode();
+    let _ = enable_raw_mode();
     {
         // Manage scope for cleanup
         let cleanup = CleanUp;
@@ -1404,7 +1394,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 frame_rate = frames_processed;
             }
 
-            
             if last_hop_time.elapsed() >= hop_interval {
                 if let Some(&channel) = cycle_iter.next() {
                     if let Err(e) = set_interface_chan(idx, channel) {
@@ -1416,7 +1405,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     last_hop_time = Instant::now();
                 }
             }
-            
 
             // Start UI Messages
             if last_status_time.elapsed() >= status_interval {
@@ -1439,7 +1427,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         oxide.ui_state.toggle_reverse();
                     }
                 }
-                //print_ui(&mut oxide, start_time, frame_rate);
+                let _ = print_ui(&mut oxide, start_time, frame_rate);
             }
 
             if last_interactions_clear.elapsed() >= interactions_interval {
@@ -1448,18 +1436,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // Read Packet
-            let _ = match read_packet(&mut oxide) {
+            match read_packet(&mut oxide) {
                 Ok(packet) => {
                     if !packet.is_empty() {
-                        handle_frame(&mut oxide, &packet);
+                        let _ = handle_frame(&mut oxide, &packet);
                     }
                 }
-                Err(e) => {
+                Err(_) => {
                     err = true;
                     running.store(false, Ordering::SeqCst);
-                },
+                }
             };
-
         }
     }
 
@@ -1496,7 +1483,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("{}", get_art("A serious packet read error occured."))
     }
-    
+
     println!();
     for (_, handshakes) in oxide.handshake_storage.get_handshakes() {
         if !handshakes.is_empty() {
@@ -1520,10 +1507,10 @@ struct CleanUp;
 impl Drop for CleanUp {
     fn drop(&mut self) {
         execute!(stdout(), Show).unwrap();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
+        let _ =
+            execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
         let _ = disable_raw_mode();
     }
-    
 }
 
 #[allow(dead_code)]

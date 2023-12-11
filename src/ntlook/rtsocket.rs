@@ -45,7 +45,6 @@ impl RtSocket {
                 Ok(p) => match p.get_payload() {
                     Ok(p) => {
                         let handle = p.rtattrs.get_attr_handle();
-                        // Extract the ethernet address and assert its length
                         if let Ok(operstate) =
                             handle.get_attr_payload_as_with_len::<Vec<u8>>(Ifla::Operstate)
                         {
@@ -67,7 +66,6 @@ impl RtSocket {
                 }
             }
         }
-
         Ok(Operstate::Unknown)
     }
 

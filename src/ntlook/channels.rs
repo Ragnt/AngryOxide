@@ -1,4 +1,7 @@
-use std::{fmt::{self, Write}, cmp::Ordering};
+use std::{
+    cmp::Ordering,
+    fmt::{self, Write},
+};
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum WiFiBand {
@@ -91,6 +94,7 @@ pub enum WiFiChannel {
     Channel5GHz(u8),
 }
 
+#[allow(clippy::incorrect_partial_ord_impl_on_ord_type)]
 impl PartialOrd for WiFiChannel {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
