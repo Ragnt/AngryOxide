@@ -208,32 +208,36 @@ impl OxideRuntime {
 
         let idx = iface.index.unwrap();
 
-        log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("Setting {} down.", interface_name),
-        ));
+        println!(
+            "
+         █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████ 
+        ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██      
+        ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████   
+        ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██      
+        ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
+        );
+
+        println!("{}", iface.pretty_print());
+
+        thread::sleep(Duration::from_secs(1));
+        println!("Setting {} down.", interface_name);
         set_interface_down(idx).ok();
 
+        thread::sleep(Duration::from_millis(500));
         let rogue_client = MacAddress::random();
-        log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("Randomizing {} mac to {}", interface_name, rogue_client),
-        ));
+        println!("Randomizing {} mac to {}", interface_name, rogue_client);
         set_interface_mac(idx, &rogue_client.0).ok();
 
-        log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("Setting {} monitor mode.", interface_name),
-        ));
+        thread::sleep(Duration::from_millis(500));
+        println!("Setting {} monitor mode.", interface_name);
         set_interface_monitor(idx, iface.active_monitor.unwrap_or_default()).ok();
 
-        log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("Setting {} up.", interface_name),
-        ));
+        thread::sleep(Duration::from_millis(500));
+        println!("Setting {} up.", interface_name);
         set_interface_up(idx).ok();
         let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
         let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
+        thread::sleep(Duration::from_millis(500));
 
         log.add_message(StatusMessage::new(
             MessageType::Info,
@@ -243,6 +247,7 @@ impl OxideRuntime {
                 tx_socket.as_raw_fd()
             ),
         ));
+
         let state = UiState {
             menu: 0,
             paused: false,
@@ -1366,7 +1371,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         format!("Setting channel hopper: {:?}", channels),
     ));
 
-    //we don't really need this. We still process frames plenty fast and this had the potential of interupting us
+    //we don't really need this. We still process frames plenty fast an d this had the potential of interupting us
     //in the middle of trying to send out a response.
     //start_channel_hopping_thread(running.clone(), hop_interval, idx, channels);
 
@@ -1377,7 +1382,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
     execute!(stdout(), Hide).unwrap();
     let _ = execute!(io::stdout(), EnterAlternateScreen)?;
-    let cleanup = CleanUp;
     let mut err = false;
     let _ = enable_raw_mode();
     {
@@ -1451,34 +1455,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Execute cleanup
+    println!("Cleaning up...");
     if !err {
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("Setting {} down.", interface_name),
-        ));
-
+        println!("Setting {} down.", interface_name);
         match set_interface_down(idx) {
             Ok(_) => {}
-            Err(e) => {
-                oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Error,
-                    format!("Error: {e:?}"),
-                ));
-            }
+            Err(e) => println!("Error: {e:?}"),
         }
 
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("Setting {} to station mode.", interface_name),
-        ));
+        println!("Setting {} to station mode.", interface_name);
         match set_interface_station(idx) {
             Ok(_) => {}
-            Err(e) => {
-                oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Error,
-                    format!("Error: {e:?}"),
-                ));
-            }
+            Err(e) => println!("Error: {e:?}"),
         }
     } else {
         println!("{}", get_art("A serious packet read error occured."))
@@ -1507,8 +1495,7 @@ struct CleanUp;
 impl Drop for CleanUp {
     fn drop(&mut self) {
         execute!(stdout(), Show).unwrap();
-        let _ =
-            execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
+        execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
         let _ = disable_raw_mode();
     }
 }

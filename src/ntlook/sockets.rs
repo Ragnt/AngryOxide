@@ -61,13 +61,8 @@ pub fn get_interface_info_name(interface_name: &String) -> Result<Interface, Str
     let wiphy: Vec<Interface> = nt_socket.cmd_get_split_wiphy()?;
     for wiphy_interface in wiphy {
         if let Some(interface) = interfaces.get_mut(&wiphy_interface.phy.unwrap()) {
-            println!(
-                "Interface: {:#?} \nWiphy: {:#?}",
-                interface, wiphy_interface
-            );
             interface.merge_with(wiphy_interface);
             interface.state = Some(rt_socket.get_interface_status(interface.index.unwrap())?);
-            println!("Merged: {:#?}", interface);
             let mut name = interface.name.clone().unwrap();
             name.truncate(interface_name.chars().count());
             let name = &String::from_utf8(name).unwrap();
@@ -110,14 +105,12 @@ pub fn set_interface_chan(interface_index: i32, channel: u8) -> Result<(), Strin
 pub fn set_interface_up(interface_index: i32) -> Result<(), String> {
     let mut rt_socket = RtSocket::connect()?;
     rt_socket.set_interface_up(interface_index)?;
-    //let _ = update_interfaces();
     Ok(())
 }
 
 pub fn set_interface_down(interface_index: i32) -> Result<(), String> {
     let mut rt_socket = RtSocket::connect()?;
     rt_socket.set_interface_down(interface_index)?;
-    //let _ = update_interfaces();
     Ok(())
 }
 

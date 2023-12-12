@@ -86,7 +86,7 @@ fn decode_iftypes(bytes: Vec<u8>) -> Vec<Nl80211Iftype> {
         .collect()
 }
 
-pub fn iftypes_to_string_list(iftypes: Vec<Nl80211Iftype>) -> String {
+pub fn iftypes_to_string_list(iftypes: &Vec<Nl80211Iftype>) -> String {
     iftypes
         .iter()
         .map(|iftype| iftype.string())
@@ -94,46 +94,95 @@ pub fn iftypes_to_string_list(iftypes: Vec<Nl80211Iftype>) -> String {
         .join(", ")
 }
 
+pub fn wrap_in_box(input: &str) -> String {
+    // Split the input string into lines
+    let lines: Vec<&str> = input.split('\n').collect();
+
+    // Determine the length of the longest line
+    let max_length = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    // Calculate the total width of the box
+    let box_width = max_length + 4; // 4 extra characters for borders and spaces
+
+    // Create a new string with a top border
+    let mut boxed_string = format!("┌{}┐\n", "─".repeat(box_width - 2));
+
+    // Add each line, padded with spaces to fit the box
+    for line in lines {
+        let padding_length = box_width - line.chars().count() - 4; // 4 extra characters for borders and spaces
+        let padding = " ".repeat(padding_length);
+        boxed_string.push_str(&format!("│ {}{} │\n", line, padding));
+    }
+
+    // Add a bottom border
+    boxed_string.push_str(&format!("└{}┘", "─".repeat(box_width - 2)));
+
+    boxed_string
+}
+
 impl Interface {
+    fn name_as_string(&self) -> String {
+        let name = self
+            .name
+            .as_ref()
+            .map(|n| String::from_utf8(n.clone()).unwrap_or_else(|_| "Invalid UTF-8".to_string()))
+            .unwrap_or("Unknown".to_string());
+        let stripped_name = name.strip_suffix('\0');
+        stripped_name.unwrap().to_string()
+    }
+
+    fn index_as_string(&self) -> String {
+        self.index.map_or("Unknown".to_string(), |i| i.to_string())
+    }
+
+    fn driver_as_string(&self) -> String {
+        self.driver
+            .as_ref()
+            .unwrap_or(&"Unknown".to_string())
+            .clone()
+    }
+
     pub fn pretty_print(&self) -> String {
-        let types: String;
-        if let Some(iftypes) = self.iftypes.clone() {
-            types = iftypes_to_string_list(iftypes);
-        } else {
-            types = "".to_string();
-        }
-        let str = format!(
-            "================ {} ({}) ================ 
-            - Interface Index: {} 
-            - Driver: {} 
-            - Mode: {} 
-            - Modes: {}
-            - Active Monitor: {}
-            - Current Freq: {} ({})
-            - Supported Frequencies: 
-            {}
-            ========================================",
-            String::from_utf8(self.name.clone().unwrap()).unwrap(),
-            self.mac.as_ref().unwrap(),
-            self.index.unwrap(),
-            self.driver.as_ref().unwrap_or(&"Unknown".to_string()),
-            self.current_iftype.unwrap().string(),
-            types,
-            self.active_monitor.unwrap_or_default(),
-            self.frequency
-                .as_ref()
-                .unwrap()
-                .frequency
-                .map_or("None".to_string(), |value| value.to_string()),
-            self.frequency
-                .as_ref()
-                .unwrap()
-                .channel
-                .as_ref()
-                .map_or("None".to_string(), |value| value.to_string()),
-            pretty_print_band_lists(self.frequency_list.as_ref().unwrap_or(&Vec::new())),
+        let mut output = "".to_string();
+        let interface_line = format!("Interface: {}", &self.name_as_string());
+        let index_driver_line = format!(
+            "Index: {} | Driver: {}",
+            self.index_as_string(),
+            self.driver_as_string()
         );
-        str
+        let mode_monitor_line = format!(
+            "Mode: {:?} | Active Monitor: {:?}",
+            self.current_iftype.unwrap(),
+            self.active_monitor.unwrap()
+        );
+        let modes_line = format!(
+            "Modes: {}",
+            iftypes_to_string_list(&self.iftypes.clone().unwrap())
+        );
+        let frequency_line = format!(
+            "Current Frequency: {:?}",
+            self.frequency.clone().unwrap().frequency.unwrap()
+        );
+        let lines = [
+            interface_line,
+            index_driver_line,
+            mode_monitor_line,
+            modes_line,
+            frequency_line,
+        ];
+        for line in &lines {
+            output.push_str(line);
+            output.push('\n');
+        }
+        output.push_str(&pretty_print_band_lists(
+            &self.frequency_list.clone().unwrap(),
+        ));
+
+        wrap_in_box(&output)
     }
 
     pub fn merge_with(&mut self, other: Interface) {

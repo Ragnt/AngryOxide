@@ -45,39 +45,29 @@ impl Default for BandList {
 
 pub fn pretty_print_band_lists(band_lists: &[BandList]) -> String {
     let mut output = String::new();
-
     for band_list in band_lists {
-        writeln!(&mut output, "   - Band: {:?}", band_list.band).unwrap();
-        writeln!(
-            &mut output,
-            "       {:<10} {:<15} {:<10} {:<10}",
-            "Frequency", "Channel", "Power (dBm)", "Status"
-        )
-        .unwrap();
-
+        output += &format!("Band{:?}:\n", band_list.band);
+        let mut line = String::new();
+        let mut count = 0;
         for channel in &band_list.channels {
-            let channel_str = match channel.channel {
-                WiFiChannel::Channel2GHz(ch) => format!("{}", ch),
-                WiFiChannel::Channel5GHz(ch) => format!("{}", ch),
-            };
+            if channel.status == FrequencyStatus::Enabled {
+                let channel_str = match channel.channel {
+                    WiFiChannel::Channel2GHz(ch) => format!("{}", ch),
+                    WiFiChannel::Channel5GHz(ch) => format!("{}", ch),
+                };
 
-            writeln!(
-                &mut output,
-                "       {:<10} {:<15} {:<10} {:<10}",
-                channel.frequency,
-                channel_str,
-                channel.pwr,
-                format!("{:?}", channel.status)
-            )
-            .unwrap();
+                line += &format!("    [{} ({})]", channel.frequency, channel_str);
+                count += 1;
+
+                if count % 6 == 0 {
+                    line += "\n";
+                }
+            }
         }
-
-        writeln!(
-            &mut output,
-            "    -------------------------------------------------"
-        )
-        .unwrap();
-        // Separator line
+        if !line.ends_with('\n') {
+            line += "\n";
+        }
+        output += &line;
     }
     output
 }

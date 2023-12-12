@@ -134,7 +134,7 @@ pub fn access_points_pane(
     );
 
     let status2 = format!(
-        "Sort: {} {} | {}",
+        "Sort: {} {} | Errors: {}",
         match oxide.ui_state.ap_sort {
             0 => "Last",
             1 => "RSSI",
@@ -148,7 +148,7 @@ pub fn access_points_pane(
             true => "▲",
             false => "▼",
         },
-        format!("Errors: {}", oxide.error_count),
+        oxide.error_count,
     );
 
     // Tabs
@@ -237,7 +237,7 @@ pub fn access_points_pane(
                     chan,
                     ap_data.last_signal_strength.value.to_string(),
                     epoch_to_string(ap_data.last_recv).to_string(),
-                    ssid.to_string(),
+                    ssid,
                     clients_size,
                     ap_data.interactions,
                     if pwnd_counter > 0 {
@@ -266,7 +266,7 @@ pub fn access_points_pane(
     }
 
     let display_height = output.chars().count() / width;
-    for n in display_height..height - 2 {
+    for _ in display_height..height - 2 {
         write!(output, "{:width$}", "").ok();
     }
 
