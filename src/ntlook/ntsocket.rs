@@ -342,21 +342,20 @@ impl NtSocket {
                     Nlattr::new(false, false, Nl80211Attr::AttrIfindex, interface_index).unwrap(),
                 );
                 let iftype_value: u16 = iftype.into();
-                attrs.push(
-                    Nlattr::new(false, false, Nl80211Attr::AttrIftype, iftype_value as u32)
-                        .unwrap(),
-                );
+                let mut iftype_attr = Nlattr::new(false, false, Nl80211Attr::AttrIftype, iftype_value as u32)
+                .unwrap();
                 if active.is_some_and(|f| f) {
-                    attrs.push(
-                        Nlattr::new(
-                            false,
-                            false,
-                            Nl80211Attr::AttrMntrFlags,
-                            Nl80211MntrFlags::MntrFlagActive,
-                        )
-                        .unwrap(),
-                    );
+                    let _ = iftype_attr.add_nested_attribute(&Nlattr::new(
+                        true,
+                        false,
+                        Nl80211Attr::AttrMntrFlags,
+                        Nl80211MntrFlags::MntrFlagActive,
+                    )
+                    .unwrap());
                 }
+                attrs.push(
+                    iftype_attr
+                );
                 attrs
             },
         );

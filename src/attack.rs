@@ -285,6 +285,7 @@ pub fn attack_authentication_from_ap(
         RsnCipherSuite::CCMP
     };
 
+    /*
     let frx: Vec<u8> = build_association_request_org(
         ap_mac,
         client_mac,
@@ -292,7 +293,11 @@ pub fn attack_authentication_from_ap(
         oxide.counters.sequence2(),
         ap_data.ssid.clone(),
         
-    );
+    );*/
+
+    let frx: Vec<u8> = build_association_request_org(ap_mac, client_mac,
+        ap_mac, oxide.counters.sequence2(), ap_data.ssid.clone(), gs, vec!(cs));
+
     if !oxide.notx {
         ap_data.auth_sequence.state = 2;
         ap_data.update_t1_timer(); // We interacted
@@ -303,8 +308,7 @@ pub fn attack_authentication_from_ap(
         ));
         let ack = build_ack(ap_mac);
         let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &ack);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &ack);
+        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &ack);
         ap_data.interactions += 1;
     }
     Ok(())

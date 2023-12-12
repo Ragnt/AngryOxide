@@ -48,7 +48,7 @@ pub fn print_ui(
         (0, 0)
     };
 
-    if winsize.0 < 100 || winsize.1 < 9 {
+    if winsize.0 < 102 || winsize.1 < 9 {
         let mid = winsize.1 / 2;
         for n in 0..mid {
             execute!(
@@ -170,8 +170,8 @@ pub fn access_points_pane(
         output,
         "{:<width$}",
         format!(
-            "  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<5} {:<5}",
-            "MAC Address", "CH", "RSSI", "Last", "SSID", "Clients", "Tx", "4wHS", "PMKID"
+            "  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<7} {:<5} {:<5}",
+            "MAC Address", "CH", "RSSI", "Last", "SSID", "Clients", "Tx", "MFP", "4wHS", "PMKID"
         )
     )
     .ok();
@@ -232,7 +232,7 @@ pub fn access_points_pane(
                 output,
                 "{:<width$}",
                 format!(
-                    "  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<5} {:<5}",
+                    "  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<7} {:<5} {:<5}",
                     mac.to_string(),
                     chan,
                     ap_data.last_signal_strength.value.to_string(),
@@ -240,6 +240,7 @@ pub fn access_points_pane(
                     ssid,
                     clients_size,
                     ap_data.interactions,
+                    ap_data.information.ap_mfp.unwrap_or(false),
                     if pwnd_counter > 0 {
                         "\u{2705}\0".to_string()
                     } else {

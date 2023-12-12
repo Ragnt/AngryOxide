@@ -179,7 +179,7 @@ impl Interface {
             output.push('\n');
         }
         output.push_str(&pretty_print_band_lists(
-            &self.frequency_list.clone().unwrap(),
+            &self.frequency_list.clone().unwrap_or(vec!(BandList::default())),
         ));
 
         wrap_in_box(&output)
