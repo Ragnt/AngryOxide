@@ -140,8 +140,9 @@ pub fn access_points_pane(
             1 => "RSSI",
             2 => "CH",
             3 => "Clients",
-            4 => "4wHS",
-            5 => "PMKID",
+            4 => "Tx",
+            5 => "4wHS",
+            6 => "PMKID",
             _ => "Last",
         },
         match oxide.ui_state.sort_reverse {
@@ -186,8 +187,9 @@ pub fn access_points_pane(
         }),
         2 => access_points.sort_by(|a, b| b.1.channel.cmp(&a.1.channel)),
         3 => access_points.sort_by(|a, b| b.1.client_list.size().cmp(&a.1.client_list.size())),
-        4 => access_points.sort_by(|a, b| b.1.has_hs.cmp(&a.1.has_hs)),
-        5 => access_points.sort_by(|a, b| b.1.has_pmkid.cmp(&a.1.has_pmkid)),
+        4 => access_points.sort_by(|a, b| b.1.interactions.cmp(&a.1.interactions)),
+        5 => access_points.sort_by(|a, b| b.1.has_hs.cmp(&a.1.has_hs)),
+        6 => access_points.sort_by(|a, b| b.1.has_pmkid.cmp(&a.1.has_pmkid)),
         _ => {
             access_points.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv));
         }
@@ -202,6 +204,7 @@ pub fn access_points_pane(
         if ap_len < list_height - 2 {
             let unknown = "Unknown SSID".to_string();
             let mut ssid = ap_data.ssid.clone().unwrap_or(unknown);
+            ssid = ssid.replace("\0", "");
             if ssid.is_empty() {
                 ssid = "Hidden SSID".to_string()
             }
@@ -506,7 +509,7 @@ pub fn handshakes_pane(
         )
         .ok();
         hs_len += 1;
-        if hs_len >= list_height - 2 {
+        if hs_len >= list_height - 3 {
             if oxide.handshake_storage.count() > 6 {
                 write!(
                     output,

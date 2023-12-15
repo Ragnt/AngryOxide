@@ -342,16 +342,16 @@ impl NtSocket {
                     Nlattr::new(false, false, Nl80211Attr::AttrIfindex, interface_index).unwrap(),
                 );
                 let iftype_value: u16 = iftype.into();
-                let mut iftype_attr = Nlattr::new(false, false, Nl80211Attr::AttrIftype, iftype_value as u32)
-                .unwrap();
-                if active.is_some_and(|f| f) {
+                let mut iftype_attr = Nlattr::new(true, false, Nl80211Attr::AttrIftype, iftype_value as u32).unwrap();
+                if iftype == Nl80211Iftype::IftypeMonitor && active.is_some_and(|f| f) {
                     let _ = iftype_attr.add_nested_attribute(&Nlattr::new(
-                        true,
+                        false,
                         false,
                         Nl80211Attr::AttrMntrFlags,
                         Nl80211MntrFlags::MntrFlagActive,
                     )
                     .unwrap());
+                    
                 }
                 attrs.push(
                     iftype_attr
@@ -393,7 +393,7 @@ impl NtSocket {
                     }
                 },
                 Nlmsg::Done => break,
-                _ => (),
+                _ => println!("{:#?}", response),
             }
         }
         Ok(())

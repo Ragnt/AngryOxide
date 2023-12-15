@@ -63,30 +63,30 @@ impl fmt::Display for FourWayHandshake {
             if self.msg1.is_some() {
                 "\u{2705}\0" // The check-mark is two char's wide, so we add a null char so the fmt lib doesn't add a space when padding to two.
             } else {
-                "  "
+                "--"
             },
             if self.msg2.is_some() {
                 "\u{2705}\0"
             } else {
-                "  "
+                "--"
             },
             if self.msg3.is_some() {
                 "\u{2705}\0"
             } else {
-                "  "
+                "--"
             },
             if self.msg4.is_some() {
                 "\u{2705}\0"
             } else {
-                "  "
+                "--"
             },
             if self.mic.is_some() {
                 "\u{2705}\0"
             } else {
-                "  "
+                "--"
             },
-            if self.has_pmkid() { "\u{2705}\0" } else { "  " },
-            if self.complete() { "\u{2705}\0" } else { "  " },
+            if self.has_pmkid() { "\u{2705}\0" } else { "--" },
+            if self.complete() { "\u{2705}\0" } else { "--" },
         )
     }
 }

@@ -50,7 +50,7 @@ impl Deauthentication {
         bytes.extend_from_slice(&self.header.encode());
 
         // Serialize reason_code (2 bytes)
-        bytes.extend_from_slice(&(self.reason_code.clone() as u8).to_ne_bytes());
+        bytes.extend_from_slice(&(self.reason_code.clone() as u16).to_ne_bytes());
 
         bytes
     }
