@@ -2,6 +2,8 @@ use libwifi_macros::AddressHeader;
 
 use crate::frame::components::*;
 
+use super::DeauthenticationReason;
+
 #[derive(Clone, Debug, AddressHeader)]
 pub struct AssociationRequest {
     pub header: ManagementHeader,
@@ -117,6 +119,26 @@ impl ReassociationResponse {
 
         // Encode Association ID
         bytes.extend_from_slice(&self.association_id.to_le_bytes());
+
+        bytes
+    }
+}
+
+#[derive(Clone, Debug, AddressHeader)]
+pub struct Disassociation {
+    pub header: ManagementHeader,
+    pub reason_code: DeauthenticationReason,
+}
+
+impl Disassociation {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Encode the ManagementHeader
+        bytes.extend(self.header.encode());
+
+        // Encode Reason Code
+        bytes.extend_from_slice(&(self.reason_code.clone() as u16).to_ne_bytes());
 
         bytes
     }

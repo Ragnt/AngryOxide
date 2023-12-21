@@ -1,5 +1,5 @@
-use crate::ntlook::WiFiChannel;
 use libwifi::frame::components::MacAddress;
+use nl80211_ng::channels::WiFiChannel;
 use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // Constants for timeouts
-const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5);
-const CONST_T2_TIMEOUT: Duration = Duration::from_millis(200);
+const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change state unless five seconds has passed.
+const CONST_T2_TIMEOUT: Duration = Duration::from_millis(200); // Still need a purpose for this.
 
 //////////////////////////////////////////////////////////////////////
 #[derive(Clone, Debug)]
@@ -31,6 +31,7 @@ impl AuthSequence {
     }
 
     // Checks if CONST_T1_TIMEOUT has elapsed since t1
+    // Timer 1 is an interaction timer - elapsed means we have passed 1 second
     pub fn is_t1_timeout(&self) -> bool {
         self.t1
             .elapsed()
@@ -38,6 +39,7 @@ impl AuthSequence {
     }
 
     // Checks if CONST_T2_TIMEOUT has elapsed since t2
+    // Timer 2 is a timer of WHEN state last changed.
     pub fn is_t2_timeout(&self) -> bool {
         self.t2
             .elapsed()
@@ -70,6 +72,10 @@ impl AuthSequence {
 // Trait to restrict WiFiDeviceList
 pub trait WiFiDeviceType {}
 
+trait HasSSID {
+    fn ssid(&self) -> &Option<String>;
+}
+
 #[derive(Clone, Debug)]
 pub struct AccessPoint {
     pub mac_address: MacAddress,
@@ -87,6 +93,12 @@ pub struct AccessPoint {
 }
 
 impl WiFiDeviceType for AccessPoint {}
+
+impl HasSSID for AccessPoint {
+    fn ssid(&self) -> &Option<String> {
+        &self.ssid
+    }
+}
 
 impl Default for AccessPoint {
     fn default() -> Self {
@@ -210,7 +222,7 @@ impl AccessPoint {
 
     pub fn is_hs_complete(&self) -> bool {
         if self.has_hs {
-            return true
+            return true;
         }
         return false;
     }
@@ -288,6 +300,7 @@ pub struct Station {
     pub timer_auth: SystemTime,
     pub timer_assoc: SystemTime,
     pub timer_reassoc: SystemTime,
+    pub has_rogue_m2: bool,
 }
 
 impl WiFiDeviceType for Station {}
@@ -306,6 +319,7 @@ impl Default for Station {
             timer_auth: SystemTime::now(),
             timer_assoc: SystemTime::now(),
             timer_reassoc: SystemTime::now(),
+            has_rogue_m2: false,
         }
     }
 }
@@ -330,6 +344,7 @@ impl Station {
             timer_auth: SystemTime::now(),
             timer_assoc: SystemTime::now(),
             timer_reassoc: SystemTime::now(),
+            has_rogue_m2: false,
         }
     }
 
@@ -352,6 +367,7 @@ impl Station {
             timer_auth: SystemTime::now(),
             timer_assoc: SystemTime::now(),
             timer_reassoc: SystemTime::now(),
+            has_rogue_m2: false,
         }
     }
 
@@ -402,6 +418,22 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
         self.devices.get_mut(mac_address)
     }
 
+    // Retrieve a device by MAC address
+    pub fn get_device_by_ssid(&mut self, ssid: &str) -> Option<&mut T>
+    where
+        T: HasSSID,
+    {
+        self.devices
+            .values_mut() // Get a mutable iterator over the values
+            .find_map(|x: &mut T| {
+                if x.ssid().as_ref().map_or(false, |f| f == ssid) {
+                    Some(x)
+                } else {
+                    None
+                }
+            })
+    }
+
     // Retrieve all devices
     pub fn get_devices(&mut self) -> &mut HashMap<MacAddress, T> {
         &mut self.devices
@@ -443,8 +475,7 @@ impl WiFiDeviceList<AccessPoint> {
         mac_address: MacAddress,
         new_ap: &AccessPoint,
     ) -> &mut AccessPoint {
-        let exists = self.devices.contains_key(&mac_address);
-        if exists {
+        if self.devices.contains_key(&mac_address) {
             let ap = self.devices.get_mut(&mac_address).unwrap();
             // Update the existing access point
             ap.last_recv = new_ap.last_recv;
@@ -457,9 +488,15 @@ impl WiFiDeviceList<AccessPoint> {
                 ap.client_list.add_or_update_device(*mac, client);
             }
 
-            // Update other fields
-            if ap.ssid.is_none() {
-                ap.ssid = new_ap.ssid.clone();
+            if let Some(nssid) = &new_ap.ssid {
+                let new_ssid = nssid.replace('\0', "");
+                // Update other fields
+                if ap.ssid.is_none() {
+                    ap.ssid = Some(new_ssid);
+                } else if ap.ssid.clone().unwrap() == "" {
+                    let _ = "";
+                    ap.ssid = Some(new_ssid);
+                }
             }
             ap.information.update_with(&new_ap.information);
             return ap;

@@ -67,6 +67,7 @@ dependencies = [
  "neli",
  "neli-proc-macros",
  "nix",
+ "nl80211-ng",
  "radiotap",
  "rand",
  "ratatui",
@@ -696,6 +697,15 @@ dependencies = [
  "cfg-if",
  "libc",
  "memoffset",
+]
+
+[[package]]
+name = "nl80211-ng"
+version = "0.1.1"
+dependencies = [
+ "neli",
+ "neli-proc-macros",
+ "rand",
 ]
 
 [[package]]

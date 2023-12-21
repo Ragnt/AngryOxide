@@ -33,6 +33,10 @@ impl MacAddress {
         }
     }
 
+    pub fn broadcast() -> Self {
+        MacAddress([255, 255, 255, 255, 255, 255])
+    }
+
     /// Generate a random MAC address using the same OUI as the given MAC address
     pub fn random_with_oui(other: &MacAddress) -> Self {
         let mut rng = rand::thread_rng();
@@ -142,7 +146,8 @@ impl std::str::FromStr for MacAddress {
             input.split(':').collect()
         } else if input.len() == 12 {
             // If the input doesn't contain colons and is 12 characters long
-            input.as_bytes()
+            input
+                .as_bytes()
                 .chunks(2)
                 .map(|chunk| std::str::from_utf8(chunk).unwrap_or(""))
                 .collect()
@@ -163,7 +168,6 @@ impl std::str::FromStr for MacAddress {
         Ok(MacAddress(array))
     }
 }
-
 
 #[cfg(test)]
 mod test {

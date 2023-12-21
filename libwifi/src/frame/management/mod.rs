@@ -6,7 +6,8 @@ mod probe;
 
 pub use action::Action;
 pub use association::{
-    AssociationRequest, AssociationResponse, ReassociationRequest, ReassociationResponse,
+    AssociationRequest, AssociationResponse, Disassociation, ReassociationRequest,
+    ReassociationResponse,
 };
 pub use authentication::{Authentication, Deauthentication, DeauthenticationReason};
 pub use beacon::Beacon;

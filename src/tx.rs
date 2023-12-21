@@ -5,13 +5,14 @@ use libwifi::frame::{
         DataHeader, FrameControl, MacAddress, ManagementHeader, RsnAkmSuite, RsnCipherSuite,
         RsnInformation, SequenceControl, StationInfo,
     },
-    AssociationRequest, AssociationResponse, Authentication, Data, Deauthentication,
-    DeauthenticationReason, EapolKey, ProbeRequest, ProbeResponse, ReassociationRequest, Ack,
+    Ack, AssociationRequest, AssociationResponse, Authentication, Cts, Data, Deauthentication,
+    DeauthenticationReason, Disassociation, EapolKey, ProbeRequest, ProbeResponse,
+    ReassociationRequest,
 };
 
 const RTH: [u8; 10] = [
     0x00, 0x00, /* radiotap version and padding */
-    0x08, 0x00, /* radiotap header length */
+    0x0a, 0x00, /* radiotap header length */
     0x00, 0x00, 0x00, 0x00, /* bitmap */
     0x20, 0x00,
 ];
@@ -168,7 +169,7 @@ pub fn build_deauthentication_fm_client(
     rth
 }
 
-pub fn build_association_request_org(
+pub fn build_association_request_rg(
     addr1: &MacAddress,
     addr_rogue: &MacAddress,
     addr3: &MacAddress,
@@ -313,6 +314,40 @@ pub fn build_association_request(
     rth
 }
 
+pub fn build_disassocation_from_client(
+    ap_mac: &MacAddress,
+    client_mac: &MacAddress,
+    sequence: u16,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::Disassociation,
+        flags: 1u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: 15000u16.to_ne_bytes(),
+        address_1: *ap_mac,
+        address_2: *client_mac,
+        address_3: *ap_mac,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: sequence,
+        },
+    };
+
+    let frx = Disassociation {
+        header,
+        reason_code: DeauthenticationReason::DisassociatedBecauseSTALeavingBSS,
+    };
+    rth.extend(frx.encode());
+    rth
+}
+
 pub fn build_reassociation_request(
     ap_mac: &MacAddress,
     client_mac: &MacAddress,
@@ -327,12 +362,12 @@ pub fn build_reassociation_request(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::ReassociationRequest,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {
         frame_control,
-        duration: 15000u16.to_ne_bytes(),
+        duration: [0x01, 0x3a],
         address_1: *ap_mac,
         address_2: *client_mac,
         address_3: *ap_mac,
@@ -547,7 +582,7 @@ pub fn build_probe_response(
     rth
 }
 
-// Remember this is coming from an AP - this is a part of being rogue"
+// Remember this is coming from an AP - this is a part of being "rogue"
 pub fn build_association_response(
     addr_client: &MacAddress,
     addr_rogue_ap: &MacAddress,
@@ -654,16 +689,13 @@ pub fn build_eapol_m1(
     rth
 }
 
-
-pub fn build_ack(
-    addr: &MacAddress,
-) -> Vec<u8> {
+pub fn build_ack(addr: &MacAddress) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let frame_control = FrameControl {
         protocol_version: 0,
-        frame_type: libwifi::FrameType::Data,
-        frame_subtype: libwifi::FrameSubType::Data,
+        frame_type: libwifi::FrameType::Control,
+        frame_subtype: libwifi::FrameSubType::Ack,
         flags: 0u8,
     };
 
@@ -676,3 +708,21 @@ pub fn build_ack(
     rth
 }
 
+pub fn build_cts(dest: &MacAddress) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Control,
+        frame_subtype: libwifi::FrameSubType::Cts,
+        flags: 0u8,
+    };
+
+    let frx = Cts {
+        frame_control,
+        duration: [0x3a, 0x01],
+        destination: *dest,
+    };
+    rth.extend(frx.encode());
+    rth
+}

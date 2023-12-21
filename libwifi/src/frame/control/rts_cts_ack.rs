@@ -41,8 +41,7 @@ pub struct Cts {
     pub duration: [u8; 2],
     pub destination: MacAddress,
 }
-
-impl Ack {
+impl Cts {
     pub fn encode(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
 
@@ -97,5 +96,22 @@ impl Addresses for Ack {
 
     fn bssid(&self) -> Option<&MacAddress> {
         None
+    }
+}
+
+impl Ack {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // Serialize frame_control
+        bytes.extend_from_slice(&self.frame_control.encode());
+
+        // Serialize duration (2 bytes)
+        bytes.extend_from_slice(&self.duration);
+
+        // Serialize destination (MacAddress)
+        bytes.extend_from_slice(&self.destination.encode());
+
+        bytes
     }
 }

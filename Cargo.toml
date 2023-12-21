@@ -18,6 +18,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+nl80211-ng = {version = "0.1.1", path = "../nl80211-ng"}
 byteorder = "1.5.0"
 libc = "0.2.149"
 nix = { version = "0.27.1", features = [
