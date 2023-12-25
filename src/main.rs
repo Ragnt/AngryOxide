@@ -94,6 +94,9 @@ struct Arguments {
     #[arg(long)]
     /// Optional do not transmit, passive only
     notx: bool,
+    #[arg(long)]
+    /// Optional send deauths.
+    deauth: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -349,6 +352,7 @@ pub struct OxideRuntime {
     tx_socket: OwnedFd,
     ui_state: UiState,
     notx: bool,
+    deauth: bool,
     targets: Vec<MacAddress>,
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
@@ -370,6 +374,7 @@ impl OxideRuntime {
         notx: bool,
         rogue: Option<String>,
         targets: Option<Vec<String>>,
+        deauth: bool,
     ) -> Self {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
@@ -490,6 +495,7 @@ impl OxideRuntime {
             tx_socket,
             ui_state: state,
             notx,
+            deauth,
             targets: target_vec,
             frame_count: 0,
             eapol_count: 0,
@@ -604,7 +610,9 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     ap.beacon_count += 1;
                 };
                 let _ = m1_retrieval_attack(oxide, &bssid);
-                //let _ = deauth_attack(oxide, &bssid);
+                if oxide.deauth {
+                    let _ = deauth_attack(oxide, &bssid);
+                }
             }
             Frame::ProbeRequest(probe_request_frame) => {
                 oxide.counters.probe_requests += 1;
@@ -1670,7 +1678,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Arguments::parse();
 
-    let mut oxide = OxideRuntime::new(cli.interface, cli.notx, cli.rogue, cli.targets);
+    let mut oxide = OxideRuntime::new(cli.interface, cli.notx, cli.rogue, cli.targets, cli.deauth);
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
         "Starting...".to_string(),
