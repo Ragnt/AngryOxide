@@ -386,10 +386,7 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];
-    for (mut row, height) in rows {
-        /* if oxide.ui_state.paused {
-            row[2] = "Paused".to_owned();
-        } */
+    for (row, height) in rows {
         rows_vec.push(Row::new(row).height(height));
     }
 
