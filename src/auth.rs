@@ -1,35 +1,14 @@
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::HashMap,
+    fmt,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use libwifi::frame::{components::MacAddress, EapolKey, MessageType};
+use chrono::{DateTime, Local};
 
-// PMKID struct definition
-#[derive(Debug, Clone, Copy)]
-pub struct Pmkid {
-    pub id: u8,
-    pub len: u8,
-    pub oui: [u8; 3],
-    pub oui_type: u8,
-    pub pmkid: [u8; 16],
-}
+use libwifi::frame::{components::MacAddress, EapolKey, MessageType, Pmkid};
 
-// PMKID struct conversion implementation
-impl Pmkid {
-    fn from_bytes(bytes: &[u8]) -> Self {
-        // Ensure the slice has the correct length
-        if bytes.len() != 22 {
-            panic!("Invalid PMKID data length");
-        }
-        let mut pmkid = Pmkid {
-            id: bytes[0],
-            len: bytes[1],
-            oui: [bytes[2], bytes[3], bytes[4]],
-            oui_type: bytes[5],
-            pmkid: [0; 16],
-        };
-        pmkid.pmkid.copy_from_slice(&bytes[6..]);
-        pmkid
-    }
-}
+use crate::util::epoch_to_string;
 
 #[derive(Clone, Debug, Default)]
 pub struct FourWayHandshake {
@@ -61,30 +40,26 @@ impl fmt::Display for FourWayHandshake {
             f,
             " {:<2} {:<2} {:<2} {:<2} {:<2}     {:^2}    {:^8}",
             if self.msg1.is_some() {
-                "\u{2705}\0" // The check-mark is two char's wide, so we add a null char so the fmt lib doesn't add a space when padding to two.
+                "\u{2705}" // The check-mark is two char's wide, so we add a null char so the fmt lib doesn't add a space when padding to two.
             } else {
                 "--"
             },
             if self.msg2.is_some() {
-                "\u{2705}\0"
+                "\u{2705}"
             } else {
                 "--"
             },
             if self.msg3.is_some() {
-                "\u{2705}\0"
+                "\u{2705}"
             } else {
                 "--"
             },
             if self.msg4.is_some() {
-                "\u{2705}\0"
+                "\u{2705}"
             } else {
                 "--"
             },
-            if self.mic.is_some() {
-                "\u{2705}\0"
-            } else {
-                "--"
-            },
+            if self.mic.is_some() { "\u{2705}" } else { "--" },
             if self.has_pmkid() { "\u{2705}\0" } else { "--" },
             if self.complete() { "\u{2705}\0" } else { "--" },
         )
@@ -140,10 +115,82 @@ impl FourWayHandshake {
         }
     }
 
+    pub fn data_to_string(&self) -> (String, String, String, String, String, String, String) {
+        let mut tuple = (
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+        );
+
+        tuple.0 = if self.msg1.is_some() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+
+        tuple.1 = if self.msg2.is_some() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+
+        tuple.2 = if self.msg3.is_some() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+
+        tuple.3 = if self.msg4.is_some() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+
+        tuple.4 = if self.mic.is_some() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+
+        tuple.5 = if self.has_pmkid() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+
+        tuple.6 = if self.complete() {
+            "\u{2705}".to_string()
+        } else {
+            "--".to_string()
+        };
+        tuple
+    }
+
+    pub fn get_eapol_keys(&self) -> Vec<(u8, EapolKey)> {
+        let mut keys: Vec<(u8, EapolKey)> = Vec::new();
+
+        if let Some(ref key) = self.msg1 {
+            keys.push((1, key.clone()));
+        }
+        if let Some(ref key) = self.msg2 {
+            keys.push((2, key.clone()));
+        }
+        if let Some(ref key) = self.msg3 {
+            keys.push((3, key.clone()));
+        }
+        if let Some(ref key) = self.msg4 {
+            keys.push((4, key.clone()));
+        }
+
+        keys
+    }
+
     pub fn add_key(&mut self, new_key: &EapolKey) -> Result<(), &'static str> {
         let key_type = new_key.determine_key_type();
-        // Define the RSN Suite OUI for PMKID validation
-        let rsnsuiteoui: [u8; 3] = [0x00, 0x0f, 0xac];
 
         if key_type == MessageType::GTK {
             return Err("EAPOL is a GTK Update... ignoring.");
@@ -155,19 +202,9 @@ impl FourWayHandshake {
                 return Err("Invalid Message 1: MIC should not be present");
             }
 
-            // Check for PMKID presence and validity
-            if new_key.key_data_length as usize == 22 {
-                // Extract PMKID from the key data
-                let pmkid = Pmkid::from_bytes(&new_key.key_data);
-
-                if pmkid.oui == rsnsuiteoui
-                    && pmkid.len == 0x14
-                    && pmkid.oui_type == 4
-                    && pmkid.pmkid.iter().any(|&x| x != 0)
-                {
-                    self.pmkid = Some(pmkid)
-                }
-            }
+            if let Ok(pmkid) = new_key.has_pmkid() {
+                self.pmkid = Some(pmkid)
+            };
 
             self.anonce = Some(new_key.key_nonce);
             self.msg1 = Some(new_key.clone());
@@ -453,6 +490,7 @@ impl HandshakeSessionKey {
 }
 
 // Stores collected 4-way-handshakes
+#[derive(Debug, Clone)]
 pub struct HandshakeStorage {
     handshakes: HashMap<HandshakeSessionKey, Vec<FourWayHandshake>>,
 }
@@ -522,4 +560,255 @@ impl HandshakeStorage {
         handshake_list.push(new_handshake.clone());
         Ok(hs)
     }
+
+    pub fn get_table(
+        &mut self,
+        selected_row: Option<usize>,
+        sort: u8,
+        sort_reverse: bool,
+    ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
+        // Header fields
+        let headers = vec![
+            "Timestamp".to_string(),
+            "AP MAC".to_string(),
+            "Client MAC".to_string(),
+            "SSID".to_string(),
+            "M1".to_string(),
+            "M2".to_string(),
+            "M3".to_string(),
+            "M4".to_string(),
+            "MC".to_string(),
+            "PM".to_string(),
+            "RD".to_string(),
+        ];
+
+        // Make our handshakes list
+        let mut print_handshakes: Vec<&FourWayHandshake> = Vec::new();
+
+        let binding = self.get_handshakes();
+        for handshake_list in binding.values() {
+            for handshake in handshake_list {
+                print_handshakes.push(handshake);
+            }
+        }
+
+        print_handshakes.sort_by(|a, b| {
+            b.last_msg
+                .clone()
+                .unwrap()
+                .timestamp
+                .cmp(&a.last_msg.clone().unwrap().timestamp)
+        });
+
+        let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
+
+        for (idx, handshake) in print_handshakes.iter().enumerate() {
+            let mut height = 1;
+
+            let datetime: DateTime<Local> = handshake.last_msg.clone().unwrap().timestamp.into();
+            let timestamp_str = datetime.format("%H:%M:%S").to_string();
+
+            let mut hs_row = vec![
+                format!("{}", timestamp_str),                             // Timestamp 0
+                format!("{}", handshake.mac_ap.unwrap().to_string()),     // MAC Address 1
+                format!("{}", handshake.mac_client.unwrap().to_string()), // Client Mac 2
+                format!("{}", handshake.essid_to_string()),               // SSID 3
+                format!("{}", handshake.data_to_string().0),              // Messages 4
+                format!("{}", handshake.data_to_string().1),              // Messages 5
+                format!("{}", handshake.data_to_string().2),              // Messages 6
+                format!("{}", handshake.data_to_string().3),              // Messages 7
+                format!("{}", handshake.data_to_string().4),              // Messages 8
+                format!("{}", handshake.data_to_string().5),              // Messages 9
+                format!("{}", handshake.data_to_string().6),              // Messages 10
+            ];
+
+            if selected_row.is_some() && idx == selected_row.unwrap() {
+                let mut keys = handshake.get_eapol_keys();
+                if !keys.is_empty() {
+                    // add header row
+                    let merged = add_handshake_header_row(hs_row);
+                    hs_row = merged;
+                    height += 1;
+
+                    keys.sort_by(|a, b| b.1.timestamp.cmp(&a.1.timestamp));
+                    keys.reverse();
+                    let start_time = keys[0].1.timestamp;
+
+                    for (idx, (_keynum, key)) in keys.iter().enumerate() {
+                        let last = idx == keys.len() - 1;
+                        let merged = add_handshake_message_row(hs_row, key, last, start_time);
+                        hs_row = merged;
+                        height += 1;
+                    }
+                }
+            }
+            rows.push((hs_row, height));
+        }
+        (headers, rows)
+    }
+}
+
+fn add_handshake_header_row(hs_row: Vec<String>) -> Vec<String> {
+    let min_length = hs_row.len();
+
+    let icon = "└ ";
+    let mut merged = Vec::with_capacity(min_length);
+
+    // Timestamp
+    let new_str: String = format!("{}\n {}{}", hs_row[0], icon, "Relative");
+    merged.push(new_str);
+
+    // AP Mac
+    let new_str: String = format!("{}\n {}{}", hs_row[1], icon, "MIC");
+    merged.push(new_str);
+
+    // Client MAC
+    let new_str: String = format!("{}\n {}{}", hs_row[2], icon, "ReplayCounter");
+    merged.push(new_str);
+
+    // SSID
+    let new_str: String = format!("{}\n {}{}", hs_row[3], icon, "NOnce Trail");
+    merged.push(new_str);
+
+    // M1
+    let new_str: String = format!("{}\n", hs_row[4]);
+    merged.push(new_str);
+
+    // M2
+    let new_str: String = format!("{}\n", hs_row[5]);
+    merged.push(new_str);
+
+    // M3
+    let new_str: String = format!("{}\n", hs_row[6]);
+    merged.push(new_str);
+
+    // M4
+    let new_str: String = format!("{}\n", hs_row[7]);
+    merged.push(new_str);
+
+    // MC
+    let new_str: String = format!("{}\n", hs_row[8]);
+    merged.push(new_str);
+
+    // PM
+    let new_str: String = format!("{}\n", hs_row[9]);
+    merged.push(new_str);
+
+    // Complete 10
+    let new_str: String = format!("{}\n", hs_row[10]);
+    merged.push(new_str);
+
+    merged
+}
+
+fn add_handshake_message_row(
+    hs_row: Vec<String>,
+    message: &EapolKey,
+    last: bool,
+    start_time: SystemTime,
+) -> Vec<String> {
+    let min_length = hs_row.len();
+    let icon = if last { "└ " } else { "├ " };
+    let check = "\u{2714}".to_string();
+    let mut merged = Vec::with_capacity(min_length);
+
+    // Format the relative time to a decimal.
+    let relative_time = message
+        .timestamp
+        .duration_since(start_time)
+        .unwrap_or(Duration::from_secs(0));
+
+    let total_milliseconds =
+        (relative_time.as_secs() * 1000) as f64 + relative_time.subsec_millis() as f64;
+
+    let formatted_time = format!("{:.0}ms", total_milliseconds);
+
+    // Key Mic
+    let key_mic_hex: String = message
+        .key_mic
+        .iter()
+        .fold(String::new(), |mut acc, &byte| {
+            acc.push_str(&format!("{:02x}", byte));
+            acc
+        });
+
+    // AP MAC 0
+    let new_str: String = format!("{}\n  {}{}", hs_row[0], icon, formatted_time);
+    merged.push(new_str);
+
+    // Client MAC 1
+    let new_str: String = format!("{}\n  {}{}", hs_row[1], icon, key_mic_hex);
+    merged.push(new_str);
+
+    // SSID 2
+    let new_str: String = format!("{}\n  {}{}", hs_row[2], icon, message.replay_counter);
+    merged.push(new_str);
+
+    // M3 3
+    let last_four_hex: String = message.key_nonce[30..]
+        .iter()
+        .fold(String::new(), |acc, &byte| acc + &format!("{:02x}", byte));
+
+    let new_str: String = format!("{}\n  {}[{}]", hs_row[3], icon, last_four_hex);
+    merged.push(new_str);
+
+    // M1
+    if message.determine_key_type() == MessageType::Message1 {
+        let new_str: String = format!("{}\n{}", hs_row[4], check);
+        merged.push(new_str);
+    } else {
+        let new_str: String = format!("{}\n--", hs_row[4]);
+        merged.push(new_str);
+    }
+
+    // M2
+    if message.determine_key_type() == MessageType::Message2 {
+        let new_str: String = format!("{}\n{}", hs_row[5], check);
+        merged.push(new_str);
+    } else {
+        let new_str: String = format!("{}\n--", hs_row[5]);
+        merged.push(new_str);
+    }
+
+    // M3
+    if message.determine_key_type() == MessageType::Message3 {
+        let new_str: String = format!("{}\n{}", hs_row[6], check);
+        merged.push(new_str);
+    } else {
+        let new_str: String = format!("{}\n--", hs_row[6]);
+        merged.push(new_str);
+    }
+
+    // M4
+    if message.determine_key_type() == MessageType::Message4 {
+        let new_str: String = format!("{}\n{}", hs_row[7], check);
+        merged.push(new_str);
+    } else {
+        let new_str: String = format!("{}\n--", hs_row[7]);
+        merged.push(new_str);
+    }
+
+    // MC
+    if message.key_mic != [0u8; 16] {
+        let new_str: String = format!("{}\n{}", hs_row[8], check);
+        merged.push(new_str);
+    } else {
+        let new_str: String = format!("{}\n--", hs_row[8]);
+        merged.push(new_str);
+    }
+
+    // PM
+    if message.has_pmkid().is_ok() {
+        let new_str: String = format!("{}\n{}", hs_row[9], check);
+        merged.push(new_str);
+    } else {
+        let new_str: String = format!("{}\n--", hs_row[9]);
+        merged.push(new_str);
+    }
+
+    // Complete 10
+    let new_str: String = hs_row[10].to_string();
+    merged.push(new_str);
+
+    merged
 }

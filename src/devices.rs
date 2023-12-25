@@ -3,9 +3,13 @@ use nl80211_ng::channels::WiFiChannel;
 use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
+use ratatui::symbols;
+use ratatui::widgets::Row;
 use std::collections::HashMap;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use crate::util::epoch_to_string;
 
 // Constants for timeouts
 const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change state unless five seconds has passed.
@@ -395,12 +399,12 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
         }
     }
 
-    pub fn add_device(&mut self, mac_address: MacAddress, device: T) {
-        self.devices.insert(mac_address, device);
-    }
-
     pub fn size(&self) -> usize {
         self.devices.len()
+    }
+
+    pub fn add_device(&mut self, mac_address: MacAddress, device: T) {
+        self.devices.insert(mac_address, device);
     }
 
     pub fn get_random(&self) -> Option<&T> {
@@ -505,10 +509,306 @@ impl WiFiDeviceList<AccessPoint> {
         self.devices.insert(mac_address, new_ap.clone());
         self.devices.get_mut(&mac_address).unwrap()
     }
+
+    pub fn get_table(
+        &mut self,
+        selected_row: Option<usize>,
+        sort: u8,
+        sort_reverse: bool,
+    ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
+        // Header fields
+        let headers = vec![
+            "MAC Address".to_string(),
+            "CH".to_string(),
+            "RSSI".to_string(),
+            "Last".to_string(),
+            "SSID".to_string(),
+            "Clients".to_string(),
+            "Tx".to_string(),
+            "MFP".to_string(),
+            "4wHS".to_string(),
+            "PMKID".to_string(),
+        ];
+
+        let mut access_points: Vec<_> = self
+            .get_devices()
+            .iter()
+            .map(|(_, access_point)| access_point)
+            .collect();
+        match sort {
+            0 => access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv)),
+            1 => access_points.sort_by(|a, b| {
+                let a_val = a.last_signal_strength.value;
+                let b_val = b.last_signal_strength.value;
+
+                match (a_val, b_val) {
+                    // If both values are the same (and it doesn't matter if they are zero or not)
+                    _ if a_val == b_val => std::cmp::Ordering::Equal,
+
+                    // Prioritize any non-zero value over zero
+                    (0, _) => std::cmp::Ordering::Greater, // A is worse if it's zero
+                    (_, 0) => std::cmp::Ordering::Less,    // B is worse if it's zero
+
+                    // Otherwise, just do a normal comparison
+                    _ => b_val.cmp(&a_val),
+                }
+            }),
+            2 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)),
+            3 => access_points.sort_by(|a, b| b.client_list.size().cmp(&a.client_list.size())),
+            4 => access_points.sort_by(|a, b| b.interactions.cmp(&a.interactions)),
+            5 => access_points.sort_by(|a, b| b.has_hs.cmp(&a.has_hs)),
+            6 => access_points.sort_by(|a, b| b.has_pmkid.cmp(&a.has_pmkid)),
+            _ => {
+                access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv));
+            }
+        }
+
+        if sort_reverse {
+            access_points.reverse();
+        }
+
+        let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
+        for (idx, ap) in access_points.iter().enumerate() {
+            let mut ap_row = vec![
+                format!("{}", ap.mac_address), // MAC Address
+                ap.channel
+                    .as_ref()
+                    .map_or("".to_string(), |ch| ch.short_string().to_string()), // CH
+                format!(
+                    "{}",
+                    match ap.last_signal_strength.value {
+                        0 => "".to_string(),
+                        _ => ap.last_signal_strength.value.to_string(),
+                    }
+                ), // RSSI
+                format!("{}", epoch_to_string(ap.last_recv).to_string()), // Last
+                ap.ssid.as_ref().unwrap_or(&"".to_string()).clone(), // SSID
+                format!("{}", ap.client_list.size()), // Clients
+                format!("{}", ap.interactions), // Tx
+                format!(
+                    "{}",
+                    if ap.information.ap_mfp.unwrap_or(false) {
+                        "Yes"
+                    } else {
+                        "No"
+                    }
+                ), // MFP
+                if ap.has_hs {
+                    "\u{2705}".to_string()
+                } else {
+                    " ".to_string()
+                }, // 4wHS
+                if ap.has_pmkid {
+                    "\u{2705}".to_string()
+                } else {
+                    " ".to_string()
+                }, // PMKID
+            ];
+            let mut height = 1;
+            if selected_row.is_some() && idx == selected_row.unwrap() {
+                for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
+                    let last = idx == ap.client_list.size() - 1;
+                    let merged = add_client_rows(ap_row, client, last);
+                    ap_row = merged;
+                    height += 1;
+                }
+            }
+            rows.push((ap_row, height));
+        }
+        (headers, rows)
+    }
+}
+
+fn add_client_rows(ap_row: Vec<String>, client: &Station, last: bool) -> Vec<String> {
+    let min_length = ap_row.len();
+    let icon = if last { "└ " } else { "├ " };
+
+    let mut merged = Vec::with_capacity(min_length);
+    // Mac Address 0
+    let new_str: String = format!("{}\n  {}{}", ap_row[0], icon, client.mac_address);
+    merged.push(new_str);
+    // Channel 1
+    let new_str: String = ap_row[1].to_string();
+    merged.push(new_str);
+    // RSSI 2
+    let new_str: String = format!(
+        "{}\n{}",
+        ap_row[2],
+        match client.last_signal_strength.value {
+            0 => "".to_string(),
+            _ => client.last_signal_strength.value.to_string(),
+        }
+    );
+    merged.push(new_str);
+    // Last 3
+    let new_str: String = format!("{}\n{}", ap_row[3], epoch_to_string(client.last_recv));
+    merged.push(new_str);
+    // SSID 4
+    let new_str: String = ap_row[4].to_string();
+    merged.push(new_str);
+    // Clients 5
+    let new_str: String = ap_row[5].to_string();
+    merged.push(new_str);
+    // TX 6
+    let new_str: String = format!("{}\n{}", ap_row[6], client.interactions);
+    merged.push(new_str);
+    // MFP 7
+    let new_str: String = ap_row[7].to_string();
+    merged.push(new_str);
+    // 4wHS 8
+    let new_str: String = ap_row[8].to_string();
+    merged.push(new_str);
+    // PMKID 9
+    let new_str: String = ap_row[9].to_string();
+    merged.push(new_str);
+
+    merged
+}
+
+///  For now this function just adds the probed SSID's to the station.
+///  eventually I want to list if we got a Rogue M2 for that SSID. Based on:
+///     A) This station initiated the communication by sending the probe req.
+///     B) The SSID is what we responded with
+///     C) We actually got the M2.
+///
+///  Doing this will require refactoring the probe-storage so each Station's "Probe" is actually a struct that also has a RogueM2 bool.
+fn add_probe_rows(cl_row: Vec<String>, probe: &String, last: bool) -> Vec<String> {
+    let min_length = cl_row.len();
+    let icon = if last { "└ " } else { "├ " };
+
+    let mut merged = Vec::with_capacity(min_length);
+
+    // Mac Address 0
+    let new_str: String = format!("{}\n  {}{}", cl_row[0], icon, probe);
+    merged.push(new_str);
+
+    // RSSI 1
+    let new_str: String = cl_row[1].to_string();
+    merged.push(new_str);
+
+    // Last 2
+    let new_str: String = cl_row[2].to_string();
+    merged.push(new_str);
+
+    // Tx 3
+    let new_str: String = cl_row[3].to_string();
+    merged.push(new_str);
+
+    // Rogue 4
+    let new_str: String = cl_row[4].to_string();
+    merged.push(new_str);
+
+    // Probes 5
+    let new_str: String = cl_row[5].to_string();
+    merged.push(new_str);
+
+    merged
 }
 
 // Functions specific to a WiFiDeviceList holding Stations
 impl WiFiDeviceList<Station> {
+    pub fn get_table(
+        &mut self,
+        selected_row: Option<usize>,
+        sort: u8,
+        sort_reverse: bool,
+    ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
+        // Header fields
+        //"MAC Address", "RSSI", "Last", Tx, "Probes"
+        let headers = vec![
+            "MAC Address".to_string(),
+            "RSSI".to_string(),
+            "Last".to_string(),
+            "Tx".to_string(),
+            "Rogue M2".to_string(),
+            "Probes".to_string(),
+        ];
+
+        // Make our stations object
+
+        let mut stations: Vec<_> = self
+            .get_devices()
+            .iter()
+            .map(|(_, access_point)| access_point)
+            .collect();
+
+        match sort {
+            0 => stations.sort_by(|a, b| b.last_recv.cmp(&a.last_recv)), // 2
+            1 => stations.sort_by(|a, b| {
+                // 1
+                let a_val = a.last_signal_strength.value;
+                let b_val = b.last_signal_strength.value;
+
+                match (a_val, b_val) {
+                    // If both values are the same (and it doesn't matter if they are zero or not)
+                    _ if a_val == b_val => std::cmp::Ordering::Equal,
+
+                    // Prioritize any non-zero value over zero
+                    (0, _) => std::cmp::Ordering::Greater, // A is worse if it's zero
+                    (_, 0) => std::cmp::Ordering::Less,    // B is worse if it's zero
+
+                    // Otherwise, just do a normal comparison
+                    _ => b_val.cmp(&a_val),
+                }
+            }),
+            2 => stations.sort_by(|a, b| b.interactions.cmp(&a.interactions)), // 3
+            3 => stations.sort_by(|a, b| b.has_rogue_m2.cmp(&a.has_rogue_m2)), // 4
+            4 => stations.sort_by(|a, b| {
+                // 5
+                b.probes
+                    .as_ref()
+                    .map_or(0, |v| v.len())
+                    .cmp(&a.probes.as_ref().map_or(0, |v| v.len()))
+            }),
+            _ => {
+                stations.sort_by(|a, b| b.last_recv.cmp(&a.last_recv));
+            }
+        }
+
+        if sort_reverse {
+            stations.reverse();
+        }
+
+        let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
+        for (idx, station) in stations.iter().enumerate() {
+            let mut height = 1;
+
+            // Row is currently selected.
+            let mut cl_row = vec![
+                format!("{}", station.mac_address), // MAC Address
+                format!(
+                    "{}",
+                    match station.last_signal_strength.value {
+                        0 => "".to_string(),
+                        _ => station.last_signal_strength.value.to_string(),
+                    }
+                ), // RSSI
+                format!("{}", epoch_to_string(station.last_recv).to_string()), // Last
+                format!("{}", station.interactions), // Tx
+                if station.has_rogue_m2 {
+                    // Rogue M2
+                    "\u{2705}".to_string()
+                } else {
+                    " ".to_string()
+                },
+                format!("{}", station.probes.as_ref().map_or(0, |v| v.len())), // MFP
+            ];
+
+            if selected_row.is_some() && idx == selected_row.unwrap() {
+                if let Some(probes) = &station.probes {
+                    for (idx, probe) in probes.iter().enumerate() {
+                        let last = idx == probes.len() - 1;
+                        let merged = add_probe_rows(cl_row, probe, last);
+                        cl_row = merged;
+                        height += 1;
+                    }
+                }
+            }
+            rows.push((cl_row, height));
+        }
+        (headers, rows)
+    }
+
     pub fn add_or_update_device(
         &mut self,
         mac_address: MacAddress,

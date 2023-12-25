@@ -1,635 +1,637 @@
-use std::{
-    fmt::Write,
-    io::stdout,
-    process::exit,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+use derive_setters::Setters;
+use libwifi::frame::components::MacAddress;
+use std::{io::Result, time::Instant};
+
+use crate::{
+    snowstorm::Snowstorm,
+    tabbedblock::{
+        tab::{Position, Tab},
+        tabbedblock::TabbedBlock,
+        tabbedblock::{BorderType, TabType},
+    },
+    MenuType, OxideRuntime,
 };
-
-use crossterm::{
-    cursor::MoveTo,
-    execute,
-    style::Print,
-    terminal::{window_size, Clear, ClearType},
-};
-
-use libc::EXIT_FAILURE;
-
-use crate::{ascii::get_art, auth::FourWayHandshake, OxideRuntime};
 
 use nl80211_ng::get_interface_info_idx;
 
+// Ratatui imports:
+
+use ratatui::{
+    buffer::Buffer,
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect, SegmentSize},
+    prelude::{CrosstermBackend, Stylize, Terminal},
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
+    widgets::{
+        Block, Borders, Cell, Clear, HighlightSpacing, Padding, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Table, Widget, Wrap,
+    },
+    Frame,
+};
+
 pub fn print_ui(
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     oxide: &mut OxideRuntime,
     start_time: Instant,
     framerate: u64,
-) -> Result<(), std::io::Error> {
-    // Update interface
-    match get_interface_info_idx(oxide.interface.index) {
-        Ok(infos) => oxide.interface = infos,
-        Err(e) => {
-            eprintln!("Failed to get interface info: {}", e);
-            exit(EXIT_FAILURE);
+) -> Result<()> {
+    terminal.hide_cursor()?;
+    terminal.draw(|frame| {
+        if frame.size().width < 105 || frame.size().height < 20 {
+            let area = frame.size();
+
+            let popup_area = Rect {
+                x: area.width / 2 - 9,
+                y: area.height / 2 - 1,
+                width: 18,
+                height: 3,
+            };
+
+            let popup = Popup::default()
+                .content("Window too small")
+                .style(Style::new().yellow().bold())
+                .border_style(Style::new().red());
+            frame.render_widget(popup, popup_area);
+            return;
         }
-    }
 
-    if oxide.ui_state.paused {
-        return Ok(());
-    }
-    /////////// Clear and Print ///////////
-    execute!(stdout(), MoveTo(0, 0)).unwrap();
-    execute!(stdout(), Clear(ClearType::All)).unwrap();
+        let full_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![
+                Constraint::Length(3),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(frame.size());
 
-    let winsize = if let Ok(winsize) = window_size() {
-        (winsize.columns, winsize.rows)
-    } else {
-        (0, 0)
+        // Create the top status bar
+        create_status_bar(frame, full_layout[0], oxide, start_time, framerate);
+
+        // Setup tabbed area
+        let tabs = TabbedBlock::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .tab("Access Points")
+            .tab("Stations")
+            .tab("Handshakes")
+            .tab(Tab::from("Status").alignment(Alignment::Right))
+            .tab_type(TabType::Full)
+            .tab_position(Position::Top)
+            .select(oxide.ui_state.current_menu as usize);
+        frame.render_widget(tabs.clone(), full_layout[1]);
+
+        // Show tab content
+        match oxide.ui_state.current_menu {
+            MenuType::AccessPoints => create_ap_page(oxide, frame, tabs.inner(full_layout[1])),
+            MenuType::Clients => create_sta_page(oxide, frame, tabs.inner(full_layout[1])),
+            MenuType::Handshakes => create_hs_page(oxide, frame, tabs.inner(full_layout[1])),
+            MenuType::Messages => create_status_page(oxide, frame, tabs.inner(full_layout[1])),
+        }
+
+        // Create bottom info bar
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::raw("| quit: ").style(Style::new()),
+                Span::styled("[q]", Style::default().reversed()),
+                Span::raw(" | sort table: ").style(Style::new()),
+                Span::styled("[e]", Style::default().reversed()),
+                Span::raw(" | reverse: ").style(Style::new()),
+                Span::styled("[r]", Style::default().reversed()),
+                Span::raw(" | change tab: ").style(Style::new()),
+                Span::styled("[a]/[d]", Style::default().reversed()),
+                Span::raw(" | pause: ").style(Style::new()),
+                Span::styled("[space]", Style::default().reversed()),
+                Span::raw(" | scroll: ").style(Style::new()),
+                Span::styled("[w/W]/[s/S]", Style::default().reversed()),
+                Span::raw(" |").style(Style::new()),
+            ]))
+            .alignment(Alignment::Center),
+            full_layout[2],
+        );
+    })?;
+    Ok(())
+}
+
+fn create_status_bar(
+    frame: &mut Frame<'_>,
+    top_area: Rect,
+    oxide: &mut OxideRuntime,
+    start_time: Instant,
+    framerate: u64,
+) {
+    oxide.interface = get_interface_info_idx(oxide.interface.index).unwrap();
+    // Top Bar Layout
+    let top_layout: std::rc::Rc<[Rect]> = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Length(41), Constraint::Min(50)])
+        .horizontal_margin(2)
+        .split(top_area);
+
+    let right_side_layout: std::rc::Rc<[Rect]> = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(top_layout[1]);
+
+    // Logo
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::from("█▀█ █▀█ █▀▀ █▀▄ █ █").style(Style::new().fg(Color::Red)),
+                Span::from(" █▀█ █ █ ▀█▀ █▀▄ █▀▀").style(Style::new().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::from("█▀█ █ █ █ █ █▀▄  █ ").style(Style::new().fg(Color::Red)),
+                Span::from(" █ █ ▄▀▄  █  █ █ █▀▀").style(Style::new().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::from("▀ ▀ ▀ ▀ ▀▀▀ ▀ ▀  ▀ ").style(Style::new().fg(Color::Red)),
+                Span::from(" ▀▀▀ ▀ ▀ ▀▀▀ ▀▀  ▀▀▀").style(Style::new().fg(Color::White)),
+            ]),
+        ])
+        .alignment(Alignment::Left),
+        top_layout[0],
+    );
+
+    // Top Right
+    let total_seconds = start_time.elapsed().as_secs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let time_str = Line::from(format!(
+        "Runtime: {:02}:{:02}:{:02}",
+        hours, minutes, seconds
+    ));
+    let frame_count = Line::from(format!(
+        "Frames #: {} | Rate: {}/s",
+        oxide.frame_count, framerate
+    ));
+
+    let flow = match oxide.ui_state.paused {
+        true => Span::from("Paused").fg(Color::Red),
+        false => Span::from("Running"),
     };
 
-    if winsize.0 < 102 || winsize.1 < 9 {
-        let mid = winsize.1 / 2;
-        for n in 0..mid {
-            execute!(
-                stdout(),
-                Print(format!("{:^width$}", "", width = winsize.0 as usize))
-            )
-            .ok();
-        }
-        execute!(
-            stdout(),
-            Print(format!(
-                "{:^width$}",
-                "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓",
-                width = winsize.0 as usize
-            ))
-        )
-        .ok();
-        execute!(
-            stdout(),
-            Print(format!(
-                "{:^width$}",
-                "┃ AngryOxide terminal too small ┃",
-                width = winsize.0 as usize
-            ))
-        )
-        .ok();
-        execute!(
-            stdout(),
-            Print(format!(
-                "{:^width$}",
-                "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛",
-                width = winsize.0 as usize
-            ))
-        )
-        .ok();
-        return Ok(());
-    }
+    let dataflow = Line::from(vec![Span::from("Data: "), flow]);
 
-    match oxide.ui_state.menu {
-        0 => execute!(
-            stdout(),
-            Print(access_points_pane(oxide, winsize, start_time, framerate))
-        ),
-        1 => execute!(
-            stdout(),
-            Print(clients_pane(oxide, winsize, start_time, framerate))
-        ),
-        2 => execute!(
-            stdout(),
-            Print(handshakes_pane(oxide, winsize, start_time, framerate))
-        ),
-        3 => execute!(
-            stdout(),
-            Print(messages_pane(oxide, winsize, start_time, framerate))
-        ),
-        _ => Ok({}),
-    }
-}
+    let status_text = vec![time_str, frame_count, dataflow];
 
-pub fn access_points_pane(
-    oxide: &mut OxideRuntime,
-    winsize: (u16, u16),
-    start_time: Instant,
-    framerate: u64,
-) -> String {
-    let mut output = String::new();
-    let width = (winsize.0) as usize;
-    let height = winsize.1 as usize;
-
-    // Elapsed Time
-    let total_seconds = start_time.elapsed().as_secs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
-
-    // Status
-
-    let status = format!(
-        "{:^15} | {:^10}",
-        format!("Frames #: {}", oxide.frame_count),
-        format!("Rate: {}/s", framerate),
+    frame.render_widget(
+        Paragraph::new(status_text).alignment(Alignment::Right),
+        right_side_layout[1],
     );
 
-    let status2 = format!(
-        "Sort: {} {} | Errors: {}",
-        match oxide.ui_state.ap_sort {
-            0 => "Last",
-            1 => "RSSI",
-            2 => "CH",
-            3 => "Clients",
-            4 => "Tx",
-            5 => "4wHS",
-            6 => "PMKID",
-            _ => "Last",
-        },
-        match oxide.ui_state.sort_reverse {
-            true => "▲",
-            false => "▼",
-        },
-        oxide.error_count,
-    );
-
-    // Tabs
-    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
-    let tab_toptop = "┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓".to_string();
-    let tab_center = "┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃".to_string();
-    let tab_bottom = "┛               ┗━┻━━━━━━━━━━━┻━┻━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━━┻".to_string();
-    let top_diff = width - tab_toptop.chars().count();
-    let center_diff = width - tab_center.chars().count();
-    let _ = write!(output, "{:^width$}", title);
-    let _ = write!(output, "{}{:>top_diff$}", tab_toptop, status);
-    let _ = write!(output, "{}{:>center_diff$}", tab_center, status2);
-    let _ = write!(output, "{:━<width$}", tab_bottom);
-
-    /////////// Print Access Points ///////////
-
-    let list_height = height - 5;
-    write!(
-        output,
-        "{:<width$}",
-        format!(
-            "  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<7} {:<5} {:<5}",
-            "MAC Address", "CH", "RSSI", "Last", "SSID", "Clients", "Tx", "MFP", "4wHS", "PMKID"
-        )
-    )
-    .ok();
-
-    let mut access_points: Vec<_> = oxide.access_points.get_devices().iter().collect();
-    match oxide.ui_state.ap_sort {
-        0 => access_points.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv)),
-        1 => access_points.sort_by(|a, b| {
-            b.1.last_signal_strength
-                .value
-                .cmp(&a.1.last_signal_strength.value)
-        }),
-        2 => access_points.sort_by(|a, b| b.1.channel.cmp(&a.1.channel)),
-        3 => access_points.sort_by(|a, b| b.1.client_list.size().cmp(&a.1.client_list.size())),
-        4 => access_points.sort_by(|a, b| b.1.interactions.cmp(&a.1.interactions)),
-        5 => access_points.sort_by(|a, b| b.1.has_hs.cmp(&a.1.has_hs)),
-        6 => access_points.sort_by(|a, b| b.1.has_pmkid.cmp(&a.1.has_pmkid)),
-        _ => {
-            access_points.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv));
-        }
-    }
-
-    if oxide.ui_state.sort_reverse {
-        access_points.reverse();
-    }
-
-    let mut ap_len = 1;
-    for (mac, ap_data) in access_points.clone() {
-        if ap_len < list_height - 2 {
-            let unknown = "Unknown SSID".to_string();
-            let mut ssid = ap_data.ssid.clone().unwrap_or(unknown);
-            ssid = ssid.replace("\0", "");
-            if ssid.is_empty() {
-                ssid = "Hidden SSID".to_string()
-            }
-            if ssid.chars().count() > 30 {
-                ssid.truncate(27);
-                ssid += "...";
-            }
-            let clients_size = ap_data.client_list.clone().size();
-            let chan = if ap_data.channel.is_some() {
-                ap_data.clone().channel.unwrap().short_string()
-            } else {
-                "?".to_string()
-            };
-            let hss = oxide.handshake_storage.find_handshakes_by_ap(mac);
-            let mut pwnd_counter = 0;
-            let mut pmkid_counter = 0;
-            for (_, hs_list) in hss {
-                for fwhs in hs_list {
-                    if fwhs.complete() {
-                        pwnd_counter += 1;
-                    }
-                    if fwhs.has_pmkid() {
-                        pmkid_counter += 1;
-                    }
-                }
-            }
-            write!(
-                output,
-                "{:<width$}",
-                format!(
-                    "  {:<15} {:<4} {:<5} {:<5} {:<30} {:<10} {:<5} {:<7} {:<5} {:<5}",
-                    mac.to_string(),
-                    chan,
-                    ap_data.last_signal_strength.value.to_string(),
-                    epoch_to_string(ap_data.last_recv).to_string(),
-                    ssid,
-                    clients_size,
-                    ap_data.interactions,
-                    ap_data.information.ap_mfp.unwrap_or(false),
-                    if pwnd_counter > 0 {
-                        "\u{2705}\0".to_string()
-                    } else {
-                        " ".to_string()
-                    },
-                    if pmkid_counter > 0 {
-                        "\u{2705}\0".to_string()
-                    } else {
-                        " ".to_string()
-                    },
-                )
-            )
-            .ok();
-            ap_len += 1;
-        } else {
-            write!(
-                output,
-                "{:^width$}",
-                format!("---- +{} more ----", access_points.len() - ap_len + 1)
-            )
-            .ok();
-            break;
-        }
-    }
-
-    let display_height = output.chars().count() / width;
-    for _ in display_height..height - 2 {
-        write!(output, "{:width$}", "").ok();
-    }
-
-    write!(output, "{:─>width$}", "").ok();
-    write!(
-        output,
-        "{:^width$}",
-        "quit: [q] | sort APs: [a] | sort clients: [c] | reverse: [r] | change tab: [←]/[→] | pause: [space]"
-    )
-    .ok();
-
-    output
-}
-
-pub fn clients_pane(
-    oxide: &mut OxideRuntime,
-    winsize: (u16, u16),
-    start_time: Instant,
-    framerate: u64,
-) -> String {
-    let mut output = String::new();
-    let width = winsize.0 as usize;
-    let height = winsize.1 as usize;
-
-    // Elapsed Time
-    let total_seconds = start_time.elapsed().as_secs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
-
-    // Status
-    let status = format!(
-        "{:^15} | {:^10}",
-        format!("Frames #: {}", oxide.frame_count),
-        format!("Rate: {}/s", framerate),
-    );
-
-    let status2 = format!(
-        "Sort: {} {} | {}",
-        match oxide.ui_state.cl_sort {
-            0 => "Last",
-            1 => "RSSI",
-            _ => "Last",
-        },
-        match oxide.ui_state.sort_reverse {
-            true => "▲",
-            false => "▼",
-        },
-        format!("Errors: {}", oxide.error_count),
-    );
-
-    // Tabs
-    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
-    let tab_toptop = "┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓".to_string();
-    let tab_center = "┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃".to_string();
-    let tab_bottom = "┻━━━━━━━━━━━━━━━┻━┛           ┗━┻━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━━┻".to_string();
-    let top_diff = width - tab_toptop.chars().count();
-    let center_diff = width - tab_center.chars().count();
-    let _ = write!(output, "{:^width$}", title);
-    let _ = write!(output, "{}{:>top_diff$}", tab_toptop, status);
-    let _ = write!(output, "{}{:>center_diff$}", tab_center, status2);
-    let _ = write!(output, "{:━<width$}", tab_bottom);
-
-    let list_height = height - 5;
-
-    let mut client_devices: Vec<_> = oxide.unassoc_clients.get_devices().iter().collect();
-    let binding = oxide.access_points.get_all_clients();
-    let new_clients: Vec<_> = binding.iter().collect();
-    client_devices.extend(new_clients);
-
-    write!(
-        output,
-        "{:<width$}",
-        format!(
-            "  {:<15} {:<15} {:<8} {:<6} {:<30}",
-            "MAC Address", "Access Point", "RSSI", "Last", "Probes"
-        )
-    )
-    .ok();
-    match oxide.ui_state.cl_sort {
-        0 => client_devices.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv)),
-        1 => client_devices.sort_by(|a, b| {
-            b.1.last_signal_strength
-                .value
-                .cmp(&a.1.last_signal_strength.value)
-        }),
-        _ => client_devices.sort_by(|a, b| b.1.last_recv.cmp(&a.1.last_recv)),
-    }
-    if oxide.ui_state.sort_reverse {
-        client_devices.reverse();
-    }
-    let mut client_len = 1;
-    for (mac, station_data) in client_devices.clone() {
-        if client_len < list_height - 2 {
-            let ap = if let Some(access_point) = station_data.access_point {
-                access_point.to_string()
-            } else {
-                "".to_string()
-            };
-
-            let mut line = format!(
-                "  {:<15} {:<15} {:<8} {:<6} {:<30}",
-                mac.to_string(),
-                ap,
-                if station_data.last_signal_strength.value != 0 {
-                    station_data.last_signal_strength.value.to_string()
-                } else {
-                    "".to_string()
-                },
-                epoch_to_string(station_data.last_recv),
-                station_data.clone().probes_to_string_list(),
-            );
-            if line.chars().count() > width {
-                line.truncate(width - 3);
-                line = line + "...";
-            }
-            write!(output, "{:<width$}", line).ok();
-            client_len += 1;
-        } else {
-            write!(
-                output,
-                "{:^width$}",
-                format!("---- +{} more ----", client_devices.len() - client_len + 1)
-            )
-            .ok();
-            client_len += 1;
-            break;
-        }
-    }
-    let display_height = output.chars().count() / width;
-    for n in display_height..height - 2 {
-        write!(output, "{:width$}", "").ok();
-    }
-
-    write!(output, "{:─>width$}", "").ok();
-    write!(
-        output,
-        "{:^width$}",
-        "quit: [q] | sort APs: [a] | sort clients: [c] | reverse: [r] | change tab: [←]/[→] | pause: [space]"
-    )
-    .ok();
-
-    output
-}
-
-pub fn handshakes_pane(
-    oxide: &mut OxideRuntime,
-    winsize: (u16, u16),
-    start_time: Instant,
-    framerate: u64,
-) -> String {
-    let mut output = String::new();
-    let width = winsize.0 as usize;
-    let height = winsize.1 as usize;
-
-    // Elapsed Time
-    let total_seconds = start_time.elapsed().as_secs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
-
-    // Status
-    let status = format!(
-        "{:^15} | {:^10}",
-        format!("Frames #: {}", oxide.frame_count),
-        format!("Rate: {}/s", framerate),
-    );
-
-    let status2 = format!("{}", format!("Errors: {}", oxide.error_count),);
-
-    /// Tabs
-    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
-    let tab_toptop = "┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓".to_string();
-    let tab_center = "┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃".to_string();
-    let tab_bottom = "┻━━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━┻━┛              ┗━┻━━━━━━━━━━━━┻".to_string();
-    let top_diff = width - tab_toptop.chars().count();
-    let center_diff = width - tab_center.chars().count();
-    let _ = write!(output, "{:^width$}", title);
-    let _ = write!(output, "{}{:>top_diff$}", tab_toptop, status);
-    let _ = write!(output, "{}{:>center_diff$}", tab_center, status2);
-    let _ = write!(output, "{:━<width$}", tab_bottom);
-
-    /// List
-    let list_height = height - 5;
-
-    let headers = [
-        "AP MAC",
-        "Client MAC",
-        "SSID",
-        "[M1 M2 M3 M4 MC] | [PM] | COMPLETE",
-    ];
-    write!(
-        output,
-        "{:<width$}",
-        format!(
-            "  {:<15} {:<15} {:<30} {:<30}",
-            headers[0], headers[1], headers[2], headers[3],
-        )
-    )
-    .ok();
-
-    let mut print_handshakes: Vec<&FourWayHandshake> = Vec::new();
-    let mut hs_len = 0;
-    let binding = oxide.handshake_storage.get_handshakes();
-    for handshake_list in binding.values() {
-        for handshake in handshake_list {
-            print_handshakes.push(handshake);
-        }
-    }
-
-    print_handshakes.sort_by(|a, b| {
-        b.last_msg
+    let interface_name = String::from_utf8(
+        oxide
+            .interface
+            .name
             .clone()
-            .unwrap()
-            .timestamp
-            .cmp(&a.last_msg.clone().unwrap().timestamp)
-    });
-    for hs in print_handshakes {
-        let mut ssid = hs.essid_to_string();
-        if ssid.chars().count() > 30 {
-            ssid.truncate(27);
-            ssid += "...";
-        }
-        write!(
-            output,
-            "{:<width$}",
-            format!(
-                "  {:<15} {:<15} {:<30} {:<30}",
-                hs.mac_ap.unwrap().to_string(),
-                hs.mac_client.unwrap().to_string(),
-                ssid,
-                hs.to_string()
-            )
-        )
-        .ok();
-        hs_len += 1;
-        if hs_len >= list_height - 3 {
-            if oxide.handshake_storage.count() > 6 {
-                write!(
-                    output,
-                    "{:^width$}",
-                    format!(
-                        "---- +{} more ----",
-                        oxide.handshake_storage.count() - hs_len + 1
-                    )
-                )
-                .ok();
-            }
-            break;
-        }
-    }
-    let display_height = output.chars().count() / width;
-    for n in display_height..height - 2 {
-        write!(output, "{:width$}", "").ok();
-    }
-
-    write!(output, "{:─>width$}", "").ok();
-    write!(
-        output,
-        "{:^width$}",
-        "quit: [q] | sort APs: [a] | sort clients: [c] | reverse: [r] | change tab: [←]/[→] | pause: [space]"
-    )
-    .ok();
-
-    output
-}
-
-pub fn messages_pane(
-    oxide: &mut OxideRuntime,
-    winsize: (u16, u16),
-    start_time: Instant,
-    framerate: u64,
-) -> String {
-    let mut output = String::new();
-    let width = winsize.0 as usize;
-    let height = winsize.1 as usize;
-
-    // Elapsed Time
-    let total_seconds = start_time.elapsed().as_secs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
-
-    // Status
-    let status = format!(
-        "{:^15} | {:^10}",
-        format!("Frames #: {}", oxide.frame_count),
-        format!("Rate: {}/s", framerate),
+            .expect("Cannot get interface name"),
     );
 
-    let status2 = format!("{}", format!("Errors: {}", oxide.error_count),);
+    let mac_addr =
+        MacAddress::from_vec(oxide.interface.mac.clone().expect("Cannot get mac address"));
 
-    /// Tabs
-    let title = format!("𝘈𝘯𝘨𝘳𝘺𝘖𝘹𝘪𝘥𝘦 | v0.1 | rage 2023 | {}", time_str);
-    let tab_toptop = "┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━┓".to_string();
-    let tab_center = "┃ Access Points ┃ ┃  Clients  ┃ ┃  Handshakes  ┃ ┃  Messages  ┃".to_string();
-    let tab_bottom = "┻━━━━━━━━━━━━━━━┻━┻━━━━━━━━━━━┻━┻━━━━━━━━━━━━━━┻━┛            ┗".to_string();
-    let top_diff = width - tab_toptop.chars().count();
-    let center_diff = width - tab_center.chars().count();
-    let _ = write!(output, "{:^width$}", title);
-    let _ = write!(output, "{}{:>top_diff$}", tab_toptop, status);
-    let _ = write!(output, "{}{:>center_diff$}", tab_center, status2);
-    let _ = write!(output, "{:━<width$}", tab_bottom);
+    // Top Left
+    let interface = format!(
+        "Interface: {}",
+        interface_name.expect("Cannot get interface name")
+    );
+    let mac: String = format!("MacAddr: {}", mac_addr.expect("Cannot get mac address"));
+    let channel = format!(
+        "Frequency: {}",
+        oxide
+            .interface
+            .frequency
+            .clone()
+            .unwrap_or_default()
+            .print()
+    );
 
-    write!(
-        output,
-        "{:<width$}",
-        format!("  {:<25} {:<6} {}", "Date / Time", "Type", "Message")
-    )
-    .ok();
-    let list_height = height - 5;
+    let status_text = vec![interface.into(), mac.into(), channel.into()];
 
-    let mut recent_messages = oxide.status_log.get_recent_messages(list_height - 2);
-    recent_messages.reverse();
-    for message in recent_messages {
-        let mut line = format!(
-            "  {:<25} {:<6} {}",
-            message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
-            message.message_type.to_string(),
-            message.content.to_string()
-        );
-        if line.chars().count() > width {
-            line.truncate(width - 3);
-            line = line + "...";
-        }
-
-        write!(output, "{:<width$}", line).ok();
-    }
-    let display_height = output.chars().count() / width;
-    for n in display_height..height - 2 {
-        write!(output, "{:width$}", "").ok();
-    }
-
-    write!(output, "{:─>width$}", "").ok();
-    write!(
-        output,
-        "{:^width$}",
-        "quit: [q] | sort APs: [a] | sort clients: [c] | reverse: [r] | change tab: [←]/[→] | pause: [space]"
-    )
-    .ok();
-
-    output
+    // Top Right
+    frame.render_widget(
+        Paragraph::new(status_text).alignment(Alignment::Left),
+        right_side_layout[0],
+    );
 }
 
-fn epoch_to_string(epoch: u64) -> String {
-    match UNIX_EPOCH.checked_add(Duration::from_secs(epoch)) {
-        Some(epoch_time) => match SystemTime::now().duration_since(epoch_time) {
-            Ok(duration_since) => {
-                let elapsed_seconds = duration_since.as_secs();
-                if elapsed_seconds > 3600 {
-                    format!("{}h", elapsed_seconds / 3600)
-                } else if duration_since.as_secs() > 60 {
-                    format!("{}m", elapsed_seconds / 60)
-                } else {
-                    format!("{}s", elapsed_seconds)
-                }
+fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
+    // Update the table data (from the real source) - This allows us to "pause the data"
+    if !oxide.ui_state.paused {
+        oxide.ui_state.ap_table_data = oxide.access_points.clone();
+    }
+
+    let (mut headers, rows) = oxide.ui_state.ap_table_data.get_table(
+        oxide.ui_state.ap_state.selected(),
+        oxide.ui_state.ap_sort,
+        oxide.ui_state.ap_sort_reverse,
+    );
+
+    // Fill Rows
+    let mut rows_vec: Vec<Row> = vec![];
+    for (mut row, height) in rows {
+        if oxide.ui_state.paused {
+            row[3] = "Paused".to_owned();
+        }
+        rows_vec.push(Row::new(row).height(height));
+    }
+
+    // Set headers for sort
+    let sort_icon = if oxide.ui_state.ap_sort_reverse {
+        "▲"
+    } else {
+        "▼"
+    };
+    match oxide.ui_state.ap_sort {
+        0 => headers[3] = format!("{} {}", headers[3], sort_icon),
+        1 => headers[2] = format!("{} {}", headers[2], sort_icon),
+        2 => headers[1] = format!("{} {}", headers[1], sort_icon),
+        3 => headers[5] = format!("{} {}", headers[5], sort_icon),
+        4 => headers[6] = format!("{} {}", headers[6], sort_icon),
+        5 => headers[8] = format!("{} {}", headers[8], sort_icon),
+        6 => headers[9] = format!("{} {}", headers[9], sort_icon),
+        _ => headers[3] = format!("{} {}", headers[3], sort_icon),
+    };
+
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
+
+    let table: Table<'_> = Table::new(
+        rows_vec.clone(),
+        vec![
+            Constraint::Min(16),   // Mac
+            Constraint::Min(4),    // CH
+            Constraint::Min(6),    // RSSI
+            Constraint::Min(6),    // Last
+            Constraint::Min(25),   // SSID
+            Constraint::Min(9),    // Clients
+            Constraint::Length(5), // Tx
+            Constraint::Length(5), // MFP
+            Constraint::Min(6),    // 4wHS
+            Constraint::Min(7),    // PMKID
+        ],
+    )
+    .segment_size(SegmentSize::EvenDistribution)
+    .highlight_style(selected_style)
+    .header(Row::new(headers).style(Style::new().bold()))
+    .highlight_symbol(">> ")
+    .highlight_spacing(HighlightSpacing::Always)
+    .block(Block::default().borders(Borders::RIGHT));
+
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
+    let mut scrollbar_state = ScrollbarState::new(oxide.get_current_menu_len())
+        .position(oxide.ui_state.ap_state.selected().unwrap_or(0));
+
+    frame.render_stateful_widget(table, area, &mut oxide.ui_state.ap_state);
+    frame.render_stateful_widget(
+        scrollbar,
+        area.inner(&Margin {
+            vertical: 0,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+}
+
+fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
+    // Update the table data (from the real source) - This allows us to "pause the data"
+    if !oxide.ui_state.paused {
+        oxide.ui_state.cl_table_data = oxide.unassoc_clients.clone();
+    }
+
+    let (mut headers, rows) = oxide.ui_state.cl_table_data.get_table(
+        oxide.ui_state.cl_state.selected(),
+        oxide.ui_state.cl_sort,
+        oxide.ui_state.cl_sort_reverse,
+    );
+
+    // Fill Rows
+    let mut rows_vec: Vec<Row> = vec![];
+    for (mut row, height) in rows {
+        if oxide.ui_state.paused {
+            row[2] = "Paused".to_owned();
+        }
+        rows_vec.push(Row::new(row).height(height));
+    }
+
+    // Set headers for sort
+    let sort_icon = if oxide.ui_state.cl_sort_reverse {
+        "▲"
+    } else {
+        "▼"
+    };
+    match oxide.ui_state.cl_sort {
+        0 => headers[2] = format!("{} {}", headers[2], sort_icon),
+        1 => headers[1] = format!("{} {}", headers[1], sort_icon),
+        2 => headers[3] = format!("{} {}", headers[3], sort_icon),
+        3 => headers[4] = format!("{} {}", headers[4], sort_icon),
+        4 => headers[5] = format!("{} {}", headers[5], sort_icon),
+        _ => headers[2] = format!("{} {}", headers[2], sort_icon),
+    };
+
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
+
+    let table: Table<'_> = Table::new(
+        rows_vec.clone(),
+        vec![
+            Constraint::Min(30),    // Mac
+            Constraint::Length(10), // RSSI
+            Constraint::Length(10), // Last
+            Constraint::Length(10), // Tx
+            Constraint::Length(10), // M2
+            Constraint::Length(20), // Probes
+        ],
+    )
+    .segment_size(SegmentSize::EvenDistribution)
+    .highlight_style(selected_style)
+    .highlight_symbol(">> ")
+    .highlight_spacing(HighlightSpacing::Always)
+    .header(Row::new(headers).style(Style::new().bold()))
+    .block(Block::default().borders(Borders::RIGHT));
+
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
+    let mut scrollbar_state = ScrollbarState::new(oxide.get_current_menu_len())
+        .position(oxide.ui_state.cl_state.selected().unwrap_or(0));
+
+    frame.render_stateful_widget(table, area, &mut oxide.ui_state.cl_state);
+    frame.render_stateful_widget(
+        scrollbar,
+        area.inner(&Margin {
+            vertical: 0,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+}
+
+fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
+    // Update the table data (from the real source) - This allows us to "pause the data"
+    if !oxide.ui_state.paused {
+        oxide.ui_state.hs_table_data = oxide.handshake_storage.clone();
+    }
+
+    let (headers, rows) = oxide.ui_state.hs_table_data.get_table(
+        oxide.ui_state.hs_state.selected(),
+        oxide.ui_state.hs_sort,
+        oxide.ui_state.hs_sort_reverse,
+    );
+
+    // Fill Rows
+    let mut rows_vec: Vec<Row> = vec![];
+    for (mut row, height) in rows {
+        /* if oxide.ui_state.paused {
+            row[2] = "Paused".to_owned();
+        } */
+        rows_vec.push(Row::new(row).height(height));
+    }
+
+    /*
+    Timestamp
+    AP MAC
+    Client MAC
+    SSID
+    M1
+    M2
+    M3
+    M4
+    MC
+    PM
+    COMPLETE
+    */
+
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
+
+    let table: Table<'_> = Table::new(
+        rows_vec.clone(),
+        vec![
+            Constraint::Min(15),   // Timestamp
+            Constraint::Min(16),   // AP MAC
+            Constraint::Min(16),   // Client MAC
+            Constraint::Min(20),   // SSID
+            Constraint::Length(2), // M1
+            Constraint::Length(2), // M2
+            Constraint::Length(2), // M3
+            Constraint::Length(2), // M4
+            Constraint::Length(3), // MC
+            Constraint::Length(3), // PM
+            Constraint::Min(3),    // RD
+        ],
+    )
+    .segment_size(SegmentSize::EvenDistribution)
+    .highlight_style(selected_style)
+    .header(Row::new(headers).style(Style::new().bold()))
+    .highlight_symbol(">> ")
+    .highlight_spacing(HighlightSpacing::Always)
+    .block(Block::default().borders(Borders::RIGHT));
+
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
+    let mut scrollbar_state = ScrollbarState::new(oxide.get_current_menu_len())
+        .position(oxide.ui_state.hs_state.selected().unwrap_or(0));
+
+    frame.render_stateful_widget(table, area, &mut oxide.ui_state.hs_state);
+    frame.render_stateful_widget(
+        scrollbar,
+        area.inner(&Margin {
+            vertical: 0,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+}
+
+fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
+    let status_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Length(9), Constraint::Percentage(75)])
+        .split(area);
+
+    let top_area = status_layout[0];
+    let bottom_area = status_layout[1];
+
+    // Splits top area in half
+    let top_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(top_area);
+
+    let top_left_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Stats for nerds ")
+        .padding(Padding::uniform(1));
+
+    let top_right_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Snowfall for geeks ");
+
+    // Splits Top Left Block in half
+    let top_left_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(top_left_block.inner(top_layout[0]));
+
+    frame.render_widget(top_left_block, top_layout[0]);
+
+    let snowstorm = Snowstorm::frame(
+        oxide.ui_state.snowstorm.clone(),
+        top_right_block.inner(top_layout[1]),
+    );
+    oxide.ui_state.snowstorm = snowstorm.clone();
+
+    frame.render_widget(snowstorm, top_right_block.inner(top_layout[1]));
+    frame.render_widget(top_right_block, top_layout[1]);
+
+    let mut status_text_one = vec![];
+    status_text_one.push(Line::from(format!("Beacons: {}", oxide.counters.beacons)));
+    status_text_one.push(Line::from(format!(
+        "Probe Requests: {}",
+        oxide.counters.probe_requests
+    )));
+    status_text_one.push(Line::from(format!(
+        "Probe Responses: {}",
+        oxide.counters.probe_responses
+    )));
+    status_text_one.push(Line::from(format!(
+        "Authentications: {}",
+        oxide.counters.authentication
+    )));
+    status_text_one.push(Line::from(format!(
+        "Associations: {}",
+        oxide.counters.association
+    )));
+
+    let mut status_text_two = vec![];
+    status_text_two.push(Line::from(format!(
+        "Deauthentications: {}",
+        oxide.counters.deauthentication
+    )));
+    status_text_two.push(Line::from(format!(
+        "Reassociations: {}",
+        oxide.counters.reassociation
+    )));
+    status_text_two.push(Line::from(format!(
+        "Control Frames: {}",
+        oxide.counters.control_frames
+    )));
+    status_text_two.push(Line::from(format!("Data: {}", oxide.counters.data)));
+
+    status_text_two.push(Line::from(format!(
+        "Null Data: {}",
+        oxide.counters.null_data
+    )));
+
+    let para_one = Paragraph::new(status_text_one).alignment(Alignment::Left);
+    let para_two = Paragraph::new(status_text_two).alignment(Alignment::Left);
+
+    frame.render_widget(para_one, top_left_layout[0]);
+    frame.render_widget(para_two, top_left_layout[1]);
+
+    // Handle the Messages Window
+    // Update the table data (from the real source) - This allows us to "pause the data"
+    if !oxide.ui_state.paused {
+        oxide.ui_state.messages_table_data = oxide.status_log.get_all_messages();
+        oxide.ui_state.messages_table_data.reverse();
+    }
+
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
+    let headers = vec![
+        Cell::from("Timestamp".to_string()),
+        Cell::from("Type".to_string()),
+        Cell::from("Content".to_string()),
+    ];
+
+    // Fill Rows
+    let mut rows_vec: Vec<Row> = vec![];
+    for status in &oxide.ui_state.messages_table_data {
+        let time_cell = Cell::from(format!(
+            "{}",
+            status.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
+        let type_cell = match status.message_type {
+            crate::status::MessageType::Error => {
+                Cell::from(status.message_type.to_string()).style(Style::new().fg(Color::Red))
             }
-            Err(_) => "Time is in the future".to_string(),
-        },
-        None => "Invalid timestamp".to_string(),
+            crate::status::MessageType::Warning => {
+                Cell::from(status.message_type.to_string()).style(Style::new().fg(Color::Yellow))
+            }
+            crate::status::MessageType::Info => Cell::from(status.message_type.to_string()),
+        };
+
+        rows_vec.push(Row::new(vec![
+            time_cell,
+            type_cell,
+            Cell::from(status.content.to_string()),
+        ]));
+    }
+
+    let table: Table<'_> = Table::new(
+        rows_vec,
+        vec![
+            Constraint::Length(20), // Timestamp
+            Constraint::Length(10), // Type
+            Constraint::Min(50),    // Message
+        ],
+    )
+    .segment_size(SegmentSize::EvenDistribution)
+    .highlight_style(selected_style)
+    .highlight_spacing(HighlightSpacing::Never)
+    .header(Row::new(headers).bold())
+    .block(Block::default().borders(Borders::ALL).title(" Messages "));
+
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
+    let mut scrollbar_state = ScrollbarState::new(oxide.status_log.size())
+        .position(oxide.ui_state.messages_state.selected().unwrap_or(0));
+
+    frame.render_stateful_widget(table, bottom_area, &mut oxide.ui_state.messages_state);
+    frame.render_stateful_widget(
+        scrollbar,
+        bottom_area.inner(&Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        &mut scrollbar_state,
+    );
+}
+
+#[derive(Debug, Default, Setters)]
+struct Popup<'a> {
+    #[setters(into)]
+    title: Line<'a>,
+    #[setters(into)]
+    content: Text<'a>,
+    border_style: Style,
+    title_style: Style,
+    style: Style,
+}
+
+impl Widget for Popup<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        // ensure that all cells under the popup are cleared to avoid leaking content
+        Clear.render(area, buf);
+        let block = Block::new()
+            .title(self.title)
+            .title_style(self.title_style)
+            .borders(Borders::ALL)
+            .border_style(self.border_style);
+        Paragraph::new(self.content)
+            .wrap(Wrap { trim: true })
+            .style(self.style)
+            .block(block)
+            .render(area, buf);
     }
 }

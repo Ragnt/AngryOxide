@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use std::{collections::VecDeque, fmt};
 
 // Define an enum for message types
+
+#[derive(Clone)]
 pub enum MessageType {
     Error,
     Warning,
@@ -19,6 +21,7 @@ impl fmt::Display for MessageType {
     }
 }
 
+#[derive(Clone)]
 pub struct StatusMessage {
     pub timestamp: DateTime<Utc>,
     pub message_type: MessageType,
@@ -36,26 +39,25 @@ impl StatusMessage {
 }
 
 pub struct MessageLog {
-    messages: VecDeque<StatusMessage>,
-    capacity: usize,
+    messages: Vec<StatusMessage>,
 }
 
 impl MessageLog {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new() -> Self {
         MessageLog {
-            messages: VecDeque::with_capacity(capacity),
-            capacity,
+            messages: Vec::new(), // No capacity needed
         }
     }
 
     pub fn add_message(&mut self, message: StatusMessage) {
-        if self.messages.len() == self.capacity {
-            self.messages.pop_front();
-        }
-        self.messages.push_back(message);
+        self.messages.push(message);
     }
 
-    pub fn get_recent_messages(&self, count: usize) -> Vec<&StatusMessage> {
-        self.messages.iter().rev().take(count).collect()
+    pub fn get_all_messages(&self) -> Vec<StatusMessage> {
+        self.messages.clone()
+    }
+
+    pub fn size(&self) -> usize {
+        self.messages.len()
     }
 }

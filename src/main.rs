@@ -3,9 +3,12 @@ mod attack;
 mod auth;
 mod devices;
 mod rawsocks;
+mod snowstorm;
 mod status;
+mod tabbedblock;
 mod tx;
 mod ui;
+mod util;
 
 extern crate libc;
 extern crate nix;
@@ -16,7 +19,10 @@ use attack::{
     rogue_m2_attack_directed, rogue_m2_attack_undirected,
 };
 
-use crossterm::event::{poll, Event, KeyCode};
+use crossterm::event::{
+    poll, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    ModifierKeyCode, MouseEvent, MouseEventKind,
+};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -33,6 +39,10 @@ use nl80211_ng::{
 
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Rect;
+use ratatui::widgets::{Row, ScrollbarState, TableState};
+use ratatui::Terminal;
 use rawsocks::{open_socket_rx, open_socket_tx};
 use tx::{
     build_ack, build_association_response, build_authentication_response, build_cts,
@@ -42,6 +52,7 @@ use tx::{
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
+use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::print_ui;
 
@@ -51,6 +62,7 @@ use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::io;
 use std::io::stdout;
+use std::iter::Cycle;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::process::exit;
 use std::str::FromStr;
@@ -84,59 +96,118 @@ struct Arguments {
     notx: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum MenuType {
+    AccessPoints,
+    Clients,
+    Handshakes,
+    Messages,
+}
+
+impl MenuType {
+    pub fn index(&self) -> usize {
+        *self as usize
+    }
+
+    pub fn get(usize: usize) -> MenuType {
+        match usize {
+            0 => MenuType::AccessPoints,
+            1 => MenuType::Clients,
+            2 => MenuType::Handshakes,
+            3 => MenuType::Messages,
+            _ => MenuType::AccessPoints,
+        }
+    }
+
+    pub fn next(&self) -> MenuType {
+        let mut idx = *self as usize;
+        idx += 1;
+        if idx > 3 {
+            idx = 3
+        }
+        MenuType::get(idx)
+    }
+
+    pub fn previous(&self) -> MenuType {
+        let mut idx = *self as usize;
+        idx = idx.saturating_sub(1);
+        MenuType::get(idx)
+    }
+}
+
 pub struct UiState {
-    menu: u8,
+    current_menu: MenuType,
     paused: bool,
+    // AP Menu Options
     ap_sort: u8,
+    ap_state: TableState,
+    ap_table_data: WiFiDeviceList<AccessPoint>,
+    ap_sort_reverse: bool,
+
+    // Client Menu Options
     cl_sort: u8,
+    cl_state: TableState,
+    cl_table_data: WiFiDeviceList<Station>,
+    cl_sort_reverse: bool,
+
+    // Handshake Menu Options
     hs_sort: u8,
-    sort_reverse: bool,
+    hs_state: TableState,
+    hs_table_data: HandshakeStorage,
+    hs_sort_reverse: bool,
+
+    messages_sort: u8,
+    messages_state: TableState,
+    messages_table_data: Vec<StatusMessage>,
+    messages_sort_reverse: bool,
+
+    snowstorm: Snowstorm,
 }
 
 impl UiState {
-    pub fn menu_next(&mut self) -> u8 {
-        if self.menu == 3 {
-            self.menu = 0;
-            return self.menu;
-        }
-        self.menu += 1;
-        self.menu
+    pub fn menu_next(&mut self) {
+        self.current_menu = self.current_menu.next();
     }
 
-    pub fn menu_back(&mut self) -> u8 {
-        if self.menu == 0 {
-            self.menu = 3;
-            return self.menu;
-        }
-        self.menu -= 1;
-        self.menu
+    pub fn menu_back(&mut self) {
+        self.current_menu = self.current_menu.previous();
     }
 
-    pub fn ap_sort_next(&mut self) -> u8 {
-        if self.ap_sort == 6 {
-            self.ap_sort = 0;
-            return self.ap_sort;
-        }
+    pub fn sort_next(&mut self) {
+        match self.current_menu {
+            MenuType::AccessPoints => self.ap_sort_next(),
+            MenuType::Clients => self.cl_sort_next(),
+            MenuType::Handshakes => self.hs_sort_next(),
+            MenuType::Messages => (),
+        };
+    }
+
+    fn ap_sort_next(&mut self) {
         self.ap_sort += 1;
-        self.ap_sort
-    }
-
-    pub fn cl_sort_next(&mut self) -> u8 {
-        if self.cl_sort == 1 {
-            self.cl_sort = 0;
-            return self.cl_sort;
+        if self.ap_sort == 7 {
+            self.ap_sort = 0;
         }
-        self.cl_sort += 1;
-        self.cl_sort
     }
 
-    pub fn hs_sort_next(&mut self) -> u8 {
+    fn cl_sort_next(&mut self) {
+        self.cl_sort += 1;
+        if self.cl_sort == 5 {
+            self.cl_sort = 0;
+        }
+    }
+
+    fn hs_sort_next(&mut self) {
+        self.hs_sort += 1;
         if self.hs_sort == 4 {
             self.hs_sort = 0;
-            return self.hs_sort;
         }
-        self.hs_sort += 1;
-        self.hs_sort
+    }
+
+    fn messages_sort_next(&mut self) {
+        self.messages_sort += 1;
+        if self.messages_sort == 2 {
+            self.messages_sort = 0;
+        }
     }
 
     pub fn toggle_pause(&mut self) {
@@ -144,7 +215,82 @@ impl UiState {
     }
 
     pub fn toggle_reverse(&mut self) {
-        self.sort_reverse = !self.sort_reverse
+        let sort = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_sort_reverse,
+            MenuType::Clients => &mut self.cl_sort_reverse,
+            MenuType::Handshakes => &mut self.hs_sort_reverse,
+            MenuType::Messages => &mut self.messages_sort_reverse,
+        };
+        *sort = !*sort;
+    }
+
+    pub fn table_next_item(&mut self, table_size: usize) {
+        let state = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(i) => {
+                if i >= table_size - 1 {
+                    table_size - 1
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+
+    pub fn table_next_item_big(&mut self, table_size: usize) {
+        let state = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(mut i) => {
+                i += 10;
+                if i >= table_size - 1 {
+                    table_size - 1
+                } else {
+                    i
+                }
+            }
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+
+    pub fn table_previous_item(&mut self) {
+        let state: &mut TableState = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(i) => i.saturating_sub(1),
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+
+    pub fn table_previous_item_big(&mut self) {
+        let state: &mut TableState = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(i) => i.saturating_sub(10),
+            None => 0,
+        };
+        state.select(Some(i));
     }
 }
 
@@ -155,6 +301,16 @@ pub struct Counters {
     pub seq3: u16,
     pub seq4: u16,
     pub prespidx: u8,
+    pub beacons: usize,
+    pub data: usize,
+    pub null_data: usize,
+    pub probe_requests: usize,
+    pub probe_responses: usize,
+    pub control_frames: usize,
+    pub authentication: usize,
+    pub deauthentication: usize,
+    pub association: usize,
+    pub reassociation: usize,
 }
 
 impl Counters {
@@ -218,7 +374,7 @@ impl OxideRuntime {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
-        let mut log = status::MessageLog::new(10000);
+        let mut log = status::MessageLog::new();
         let iface = match get_interface_info_name(&interface_name) {
             Ok(inf) => inf,
             Err(e) => {
@@ -308,13 +464,27 @@ impl OxideRuntime {
         ));
 
         let state = UiState {
-            menu: 0,
+            current_menu: MenuType::AccessPoints,
             paused: false,
             ap_sort: 0,
+            ap_state: TableState::new(),
+            ap_table_data: access_points.clone(),
+            ap_sort_reverse: false,
             cl_sort: 0,
+            cl_state: TableState::new(),
+            cl_table_data: unassoc_clients.clone(),
+            cl_sort_reverse: false,
             hs_sort: 0,
-            sort_reverse: false,
+            hs_state: TableState::new(),
+            hs_table_data: handshake_storage.clone(),
+            hs_sort_reverse: false,
+            messages_sort: 0,
+            messages_state: TableState::new(),
+            messages_table_data: log.get_all_messages(),
+            messages_sort_reverse: false,
+            snowstorm: Snowstorm::new_rainbow(Rect::new(1, 2, 3, 4)),
         };
+
         OxideRuntime {
             rx_socket,
             tx_socket,
@@ -331,8 +501,17 @@ impl OxideRuntime {
             rogue_ap,
             interface: iface,
             counters: Counters::default(),
-            status_log: status::MessageLog::new(100),
+            status_log: status::MessageLog::new(),
             current_channel: WiFiChannel::Channel2GHz(1),
+        }
+    }
+
+    fn get_current_menu_len(&self) -> usize {
+        match self.ui_state.current_menu {
+            MenuType::AccessPoints => self.access_points.size(),
+            MenuType::Clients => self.unassoc_clients.size(),
+            MenuType::Handshakes => self.handshake_storage.count(),
+            MenuType::Messages => self.status_log.size(),
         }
     }
 }
@@ -362,6 +541,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     match libwifi::parse_frame(payload, fcs) {
         Ok(frame) => match frame {
             Frame::Beacon(beacon_frame) => {
+                oxide.counters.beacons += 1;
+
                 let bssid = beacon_frame.header.address_3;
 
                 let signal_strength = radiotap
@@ -426,6 +607,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 //let _ = deauth_attack(oxide, &bssid);
             }
             Frame::ProbeRequest(probe_request_frame) => {
+                oxide.counters.probe_requests += 1;
+
                 let client_mac = probe_request_frame.header.address_2; // MAC address of the client
                 let ap_mac = probe_request_frame.header.address_1; // MAC address of the client
                 let bssid = probe_request_frame.header.address_3; // MAC address of the AP (BSSID)
@@ -490,6 +673,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 // Assumption:
                 //  Only an AP will send a probe response.
                 //
+                oxide.counters.probe_responses += 1;
                 let bssid = &probe_response_frame.header.address_3;
                 let signal_strength = radiotap
                     .antenna_signal
@@ -551,6 +735,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
             }
             Frame::Authentication(auth_frame) => {
+                oxide.counters.authentication += 1;
+
                 // Assumption:
                 //  Authentication packets can be sent by the AP or Client.
                 //  We will use the sequence number to decipher.
@@ -623,6 +809,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 }
             }
             Frame::Deauthentication(deauth_frame) => {
+                oxide.counters.deauthentication += 1;
+
                 // Assumption:
                 //  Deauthentication packets can be sent by the AP or Client.
                 //
@@ -738,6 +926,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
             Frame::AssociationRequest(assoc_request_frame) => {
+                oxide.counters.association += 1;
+
                 // Assumption:
                 //  Only a client/potential client will ever submit an association request.
                 //  This is how we will know to send a fake M1 and try to get an M2 from it.
@@ -787,6 +977,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 }
             }
             Frame::AssociationResponse(assoc_response_frame) => {
+                oxide.counters.association += 1;
+
                 // Assumption:
                 //  Only a AP will ever submit an association response.
                 //
@@ -868,6 +1060,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
             }
             Frame::ReassociationRequest(frame) => {
+                oxide.counters.reassociation += 1;
+
                 // Assumption:
                 //  Only a client will ever submit an reassociation request.
                 //  Attack includes sending a reassociation response and M1 frame- looks very similar to attacking an associataion request.
@@ -919,6 +1113,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
             }
             Frame::ReassociationResponse(frame) => {
+                oxide.counters.reassociation += 1;
                 // Assumption:
                 //  Only a AP will ever submit a reassociation response.
                 //
@@ -962,6 +1157,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
             }
             Frame::Rts(frame) => {
+                oxide.counters.control_frames += 1;
                 // Most drivers (Mediatek, Ralink, Atheros) don't seem to be actually sending these to userspace (on linux).
                 let source_mac = frame.source; // MAC address of the source
                 let dest_mac = frame.destination; // MAC address of the destination
@@ -1033,12 +1229,15 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
             Frame::Cts(_) => {
+                oxide.counters.control_frames += 1;
                 // Not really doing anything with these yet...
             }
             Frame::Ack(_) => {
+                oxide.counters.control_frames += 1;
                 // Not really doing anything with these yet...
             }
             Frame::BlockAck(frame) => {
+                oxide.counters.control_frames += 1;
                 //println!("BlockAck: {} => {}", frame.source, frame.destination);
                 let source_mac = frame.source; // MAC address of the source
                 let dest_mac = frame.destination; // MAC address of the destination
@@ -1097,6 +1296,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 oxide.access_points.add_or_update_device(ap_addr, &ap);
             }
             Frame::BlockAckRequest(frame) => {
+                oxide.counters.control_frames += 1;
                 let source_mac = frame.source; // MAC address of the source
                 let dest_mac = frame.destination; // MAC address of the destination
                 let from_ds: bool = frame.frame_control.from_ds();
@@ -1226,6 +1426,8 @@ fn handle_data_frame(
     oxide: &mut OxideRuntime,
     chan: u8,
 ) -> Result<(), String> {
+    oxide.counters.data += 1;
+
     let source = data_frame.header().src().expect("Unable to get src");
     let dest = data_frame.header().dest();
     let from_ds: bool = data_frame.header().frame_control.from_ds();
@@ -1352,6 +1554,7 @@ fn handle_null_data_frame(
     oxide: &mut OxideRuntime,
     chan: u8,
 ) -> Result<(), String> {
+    oxide.counters.null_data += 1;
     let from_ds: bool = data_frame.header().frame_control.from_ds();
     let to_ds: bool = data_frame.header().frame_control.to_ds();
     let powersave: bool = data_frame.header().frame_control.pwr_mgmt();
@@ -1489,7 +1692,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut frame_rate = 0u64;
 
     let mut last_status_time = Instant::now();
-    let status_interval = Duration::from_millis(50);
+    let status_interval = Duration::from_millis(300);
 
     let mut last_interactions_clear = Instant::now();
     let interactions_interval = Duration::from_secs(120);
@@ -1519,80 +1722,103 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let start_time = Instant::now();
-    execute!(stdout(), Hide).unwrap();
-    let _ = execute!(io::stdout(), EnterAlternateScreen)?;
+    let mut terminal =
+        Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
+    execute!(stdout(), Hide)?;
+    execute!(stdout(), EnterAlternateScreen)?;
+    execute!(stdout(), EnableMouseCapture)?;
+    enable_raw_mode()?;
     let mut err = false;
-    let _ = enable_raw_mode();
-    {
-        // Manage scope for cleanup
-        let cleanup = CleanUp;
-        while running.load(Ordering::SeqCst) {
-            // Calculate last packet rate
-            if seconds_timer.elapsed() >= seconds_interval {
-                seconds_timer = Instant::now();
+    initialize_panic_handler();
 
-                // Calculate the frame rate
-                let frames_processed = oxide.frame_count - frame_count_old;
-                frame_count_old = oxide.frame_count;
-                frame_rate = frames_processed;
-            }
+    while running.load(Ordering::SeqCst) {
+        // Calculate last packet rate
+        if seconds_timer.elapsed() >= seconds_interval {
+            seconds_timer = Instant::now();
 
-            if last_hop_time.elapsed() >= hop_interval {
-                if let Some(&channel) = cycle_iter.next() {
-                    if let Err(e) = set_interface_chan(idx, channel) {
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Error,
-                            format!("Error: {e:?}"),
-                        ));
-                    }
-                    last_hop_time = Instant::now();
-                }
-            }
-
-            // Start UI Messages
-            if last_status_time.elapsed() >= status_interval {
-                last_status_time = Instant::now();
-                if poll(Duration::ZERO)? {
-                    let event = crossterm::event::read()?;
-                    if event == Event::Key(KeyCode::Right.into()) {
-                        oxide.ui_state.menu_next();
-                    } else if event == Event::Key(KeyCode::Left.into()) {
-                        oxide.ui_state.menu_back();
-                    } else if event == Event::Key(KeyCode::Char('q').into()) {
-                        running.store(false, Ordering::SeqCst);
-                    } else if event == Event::Key(KeyCode::Char(' ').into()) {
-                        oxide.ui_state.toggle_pause();
-                    } else if event == Event::Key(KeyCode::Char('a').into()) {
-                        oxide.ui_state.ap_sort_next();
-                    } else if event == Event::Key(KeyCode::Char('c').into()) {
-                        oxide.ui_state.cl_sort_next();
-                    } else if event == Event::Key(KeyCode::Char('r').into()) {
-                        oxide.ui_state.toggle_reverse();
-                    }
-                }
-                let _ = print_ui(&mut oxide, start_time, frame_rate);
-            }
-
-            if last_interactions_clear.elapsed() >= interactions_interval {
-                last_interactions_clear = Instant::now();
-                oxide.access_points.clear_all_interactions();
-            }
-
-            // Read Packet
-            match read_packet(&mut oxide) {
-                Ok(packet) => {
-                    if !packet.is_empty() {
-                        let _ = handle_frame(&mut oxide, &packet);
-                    }
-                }
-                Err(_) => {
-                    err = true;
-                    running.store(false, Ordering::SeqCst);
-                }
-            };
+            // Calculate the frame rate
+            let frames_processed = oxide.frame_count - frame_count_old;
+            frame_count_old = oxide.frame_count;
+            frame_rate = frames_processed;
         }
+
+        if last_hop_time.elapsed() >= hop_interval {
+            if let Some(&channel) = cycle_iter.next() {
+                if let Err(e) = set_interface_chan(idx, channel) {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Error,
+                        format!("Error: {e:?}"),
+                    ));
+                }
+                last_hop_time = Instant::now();
+            }
+        }
+        let table_len = oxide.get_current_menu_len();
+
+        if poll(Duration::from_millis(0))? {
+            let event = crossterm::event::read()?;
+            if let Event::Key(key) = event {
+                if key.kind == KeyEventKind::Press {
+                    match key.code {
+                        KeyCode::Char('d') => oxide.ui_state.menu_next(),
+                        KeyCode::Char('a') => oxide.ui_state.menu_back(),
+                        KeyCode::Char('w') | KeyCode::Char('W') => {
+                            if key.modifiers.intersects(KeyModifiers::SHIFT) {
+                                oxide.ui_state.table_previous_item_big();
+                            } else {
+                                oxide.ui_state.table_previous_item();
+                            }
+                        }
+                        KeyCode::Char('s') | KeyCode::Char('S') => {
+                            if key.modifiers.intersects(KeyModifiers::SHIFT) {
+                                oxide.ui_state.table_next_item_big(table_len);
+                            } else {
+                                oxide.ui_state.table_next_item(table_len);
+                            }
+                        }
+                        KeyCode::Char('q') => running.store(false, Ordering::SeqCst),
+                        KeyCode::Char(' ') => oxide.ui_state.toggle_pause(),
+                        KeyCode::Char('e') => oxide.ui_state.sort_next(),
+                        KeyCode::Char('r') => oxide.ui_state.toggle_reverse(),
+                        _ => {}
+                    }
+                }
+            } else if let Event::Mouse(event) = event {
+                match event.kind {
+                    MouseEventKind::ScrollDown => oxide.ui_state.table_next_item(table_len),
+                    MouseEventKind::ScrollUp => oxide.ui_state.table_previous_item(),
+                    _ => {}
+                }
+            }
+        }
+
+        let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+
+        // Start UI Messages
+        if last_status_time.elapsed() >= status_interval {
+            last_status_time = Instant::now();
+        }
+
+        if last_interactions_clear.elapsed() >= interactions_interval {
+            last_interactions_clear = Instant::now();
+            oxide.access_points.clear_all_interactions();
+        }
+
+        // Read Packet
+        match read_packet(&mut oxide) {
+            Ok(packet) => {
+                if !packet.is_empty() {
+                    let _ = handle_frame(&mut oxide, &packet);
+                }
+            }
+            Err(_) => {
+                err = true;
+                running.store(false, Ordering::SeqCst);
+            }
+        };
     }
 
+    reset_terminal();
     // Execute cleanup
     println!("Cleaning up...");
     if !err {
@@ -1629,14 +1855,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-struct CleanUp;
+pub fn initialize_panic_handler() {
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        reset_terminal();
+        original_hook(panic_info);
+    }));
+}
 
-impl Drop for CleanUp {
-    fn drop(&mut self) {
-        execute!(stdout(), Show).unwrap();
-        execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
-        let _ = disable_raw_mode();
-    }
+fn reset_terminal() {
+    execute!(stdout(), Show).expect("Could not show cursor.");
+    execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
+    execute!(stdout(), DisableMouseCapture).expect("Could not disable mouse capture.");
+    disable_raw_mode().expect("Could not disable raw mode.");
 }
 
 #[allow(dead_code)]

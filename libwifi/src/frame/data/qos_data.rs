@@ -1,4 +1,5 @@
 use libwifi_macros::AddressHeader;
+use nom::Err;
 
 use crate::frame::components::*;
 
@@ -293,9 +294,33 @@ impl EapolKey {
             MessageType::GTK
         }
     }
+
+    pub fn has_pmkid(&self) -> Result<Pmkid, ()> {
+        if self.determine_key_type() != MessageType::Message1 {
+            return Err(());
+        }
+
+        // Define the RSN Suite OUI for PMKID validation
+        let rsnsuiteoui: [u8; 3] = [0x00, 0x0f, 0xac];
+
+        // Check for PMKID presence and validity
+        if self.key_data_length as usize == 22 {
+            // Extract PMKID from the key data
+            let pmkid = Pmkid::from_bytes(&self.key_data);
+
+            if pmkid.oui == rsnsuiteoui
+                && pmkid.len == 0x14
+                && pmkid.oui_type == 4
+                && pmkid.pmkid.iter().any(|&x| x != 0)
+            {
+                return Ok(pmkid);
+            }
+        }
+        Err(())
+    }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MessageType {
     Message1,
     Message2,
@@ -315,5 +340,34 @@ impl std::fmt::Display for MessageType {
             MessageType::GTK => write!(f, "Group Temporal Key"),
             MessageType::Error => write!(f, "Unknown Message"),
         }
+    }
+}
+
+// PMKID struct definition
+#[derive(Debug, Clone, Copy)]
+pub struct Pmkid {
+    pub id: u8,
+    pub len: u8,
+    pub oui: [u8; 3],
+    pub oui_type: u8,
+    pub pmkid: [u8; 16],
+}
+
+// PMKID struct conversion implementation
+impl Pmkid {
+    fn from_bytes(bytes: &[u8]) -> Self {
+        // Ensure the slice has the correct length
+        if bytes.len() != 22 {
+            panic!("Invalid PMKID data length");
+        }
+        let mut pmkid = Pmkid {
+            id: bytes[0],
+            len: bytes[1],
+            oui: [bytes[2], bytes[3], bytes[4]],
+            oui_type: bytes[5],
+            pmkid: [0; 16],
+        };
+        pmkid.pmkid.copy_from_slice(&bytes[6..]);
+        pmkid
     }
 }

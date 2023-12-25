@@ -23,6 +23,19 @@ impl Hash for MacAddress {
 }
 
 impl MacAddress {
+    pub fn from_vec(vec: Vec<u8>) -> Option<MacAddress> {
+        if vec.len() == 6 {
+            let mut arr = [0u8; 6];
+            for (place, element) in arr.iter_mut().zip(vec.iter()) {
+                *place = *element;
+            }
+            Some(MacAddress(arr))
+        } else {
+            // Return None if the Vec is not exactly 6 bytes long
+            None
+        }
+    }
+
     /// Generate random valid mac
     pub fn random() -> Self {
         loop {

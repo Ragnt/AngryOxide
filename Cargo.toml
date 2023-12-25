@@ -37,10 +37,14 @@ hex = "0.4.3"
 rand = "0.8.5"
 ctrlc = "3.4.1"
 crossterm = "0.27.0"
-ratatui = { version = "0.24.0", features = ["all-widgets"] }
+ratatui = { version = "0.25.0", features = ["all-widgets", "unstable-segment-size"] }
 chrono = "0.4.31"
 crc = "3.0.1"
 clap = { version = "4.4.10", features = ["derive"] }
+strum = "0.25.0"
+strum_macros = "0.25.3"
+mac_oui = { version = "0.4.8", features = ["with-db"] }
+derive_setters = "0.1.6"
 
 [target.mips-unknown-linux-musl]
 linker = "mips-linux-musl-gcc"
