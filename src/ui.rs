@@ -378,11 +378,10 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         oxide.ui_state.hs_table_data = oxide.handshake_storage.clone();
     }
 
-    let (headers, rows) = oxide.ui_state.hs_table_data.get_table(
-        oxide.ui_state.hs_state.selected(),
-        oxide.ui_state.hs_sort,
-        oxide.ui_state.hs_sort_reverse,
-    );
+    let (headers, rows) = oxide
+        .ui_state
+        .hs_table_data
+        .get_table(oxide.ui_state.hs_state.selected());
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];

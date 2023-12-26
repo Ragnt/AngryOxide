@@ -202,11 +202,40 @@ impl FourWayHandshake {
                 return Err("Invalid Message 1: MIC should not be present");
             }
 
+            // Compare RC to MSG 1
+            if self.msg2.is_some()
+                && new_key.replay_counter <= self.msg2.clone().unwrap().replay_counter
+                && new_key.replay_counter
+                    > self.msg2.clone().unwrap().replay_counter.saturating_sub(3)
+            {
+                return Err("Invalid Message 1: RC value not within range.");
+            }
+
+            //Temporal Checking
+            if self.last_msg.clone().is_some_and(|msg| {
+                new_key
+                    .timestamp
+                    .duration_since(msg.timestamp)
+                    .unwrap()
+                    .as_secs()
+                    > 2
+            }) {
+                return Err("Invalid Message 1: Time difference too great.");
+            }
+
+            // Check ANonce against M3 if M3 already present
+            if self.msg3.is_some() && new_key.key_nonce != self.msg3.clone().unwrap().key_nonce {
+                return Err("Invalid Message 1: M1 came after M3 with incorrect ANonce");
+            }
+
+            // Check for PMKID
             if let Ok(pmkid) = new_key.has_pmkid() {
                 self.pmkid = Some(pmkid)
             };
-
-            self.anonce = Some(new_key.key_nonce);
+            // Only update the anonce if there isn't one, because if we have one we have a msg3 already.
+            if self.anonce.is_none() {
+                self.anonce = Some(new_key.key_nonce);
+            }
             self.msg1 = Some(new_key.clone());
             self.last_msg = Some(new_key.clone());
         } else if key_type == MessageType::Message2 && self.msg2.is_none() {
@@ -222,17 +251,17 @@ impl FourWayHandshake {
 
             // Compare RC to MSG 1
             if self.msg1.is_some()
-                && new_key.replay_counter <= self.msg1.clone().unwrap().replay_counter
-                && new_key.replay_counter > self.msg1.clone().unwrap().replay_counter + 3
+                && new_key.replay_counter >= self.msg1.clone().unwrap().replay_counter
+                && new_key.replay_counter < self.msg1.clone().unwrap().replay_counter + 3
             {
                 return Err("Invalid Message 2: RC value not within range.");
             }
 
             //Temporal Checking
-            if self.msg1.clone().is_some_and(|msg1| {
+            if self.last_msg.clone().is_some_and(|msg| {
                 new_key
                     .timestamp
-                    .duration_since(msg1.timestamp)
+                    .duration_since(msg.timestamp)
                     .unwrap()
                     .as_secs()
                     > 2
@@ -251,8 +280,28 @@ impl FourWayHandshake {
             if new_key.key_mic == [0u8; 16] {
                 return Err("Invalid Message 3: MIC should be present");
             }
+
             if new_key.key_nonce == [0u8; 32] {
                 return Err("Invalid Message 3: Anonce should be present.");
+            }
+
+            if self.msg2.is_some()
+                && new_key.replay_counter <= self.msg2.clone().unwrap().replay_counter
+                && new_key.replay_counter > self.msg2.clone().unwrap().replay_counter + 3
+            {
+                return Err("Invalid Message 3: RC value not within range.");
+            }
+
+            //Temporal Checking
+            if self.last_msg.clone().is_some_and(|msg| {
+                new_key
+                    .timestamp
+                    .duration_since(msg.timestamp)
+                    .unwrap()
+                    .as_secs()
+                    > 2
+            }) {
+                return Err("Invalid Message 3: Time difference too great.");
             }
 
             // Nonce-correction logic
@@ -281,46 +330,34 @@ impl FourWayHandshake {
                 self.anonce = Some(new_key.key_nonce);
                 false
             };
-
-            if self.msg2.is_some()
-                && new_key.replay_counter <= self.msg2.clone().unwrap().replay_counter
-                && new_key.replay_counter > self.msg2.clone().unwrap().replay_counter + 3
-            {
-                return Err("Invalid Message 3: RC value not within range.");
-            }
-
-            //Temporal Checking
-            if self.msg2.clone().is_some_and(|msg2| {
-                new_key
-                    .timestamp
-                    .duration_since(msg2.timestamp)
-                    .unwrap()
-                    .as_secs()
-                    > 2
-            }) {
-                return Err("Invalid Message 3: Time difference too great.");
-            }
-
             self.msg3 = Some(new_key.clone());
             self.last_msg = Some(new_key.clone());
-            // Message 3 cannot be used for the EAPOL_CLIENT because it is sent by the AP.
         } else if key_type == MessageType::Message4 && self.msg4.is_none() {
             // Validate Message 4: should have MIC
             if new_key.key_mic == [0u8; 16] {
                 return Err("Invalid Message 4: MIC should be present");
             }
+
+            // Validate Replay Counter
             if self.msg3.is_some()
-                && new_key.replay_counter <= self.msg3.clone().unwrap().replay_counter
-                && new_key.replay_counter > self.msg3.clone().unwrap().replay_counter + 3
+                && new_key.replay_counter >= self.msg3.clone().unwrap().replay_counter
+                && new_key.replay_counter < self.msg3.clone().unwrap().replay_counter + 3
+            {
+                return Err("Invalid Message 4: RC value not within range.");
+            }
+
+            if self.msg2.is_some()
+                && new_key.replay_counter >= self.msg2.clone().unwrap().replay_counter
+                && new_key.replay_counter < (self.msg2.clone().unwrap().replay_counter + 3)
             {
                 return Err("Invalid Message 4: RC value not within range.");
             }
 
             //Temporal Checking
-            if self.msg3.clone().is_some_and(|msg3| {
+            if self.last_msg.clone().is_some_and(|msg: EapolKey| {
                 new_key
                     .timestamp
-                    .duration_since(msg3.timestamp)
+                    .duration_since(msg.timestamp)
                     .unwrap()
                     .as_secs()
                     > 2
@@ -330,12 +367,13 @@ impl FourWayHandshake {
 
             self.msg4 = Some(new_key.clone());
             self.last_msg = Some(new_key.clone());
+
             // If we dont have an snonce, theres a chance our M4 isn't zeroed and therefore we can use the snonce from it.
             if self.snonce.is_none() && new_key.key_nonce != [0u8; 32] {
                 self.snonce = Some(new_key.key_nonce);
 
                 // If we don't have a message 2, we will use the M4 as our EAPOL_CLIENT (only if it's non-zeroed).
-                if self.eapol_client.is_none() {
+                if self.eapol_client.is_none() && new_key.key_mic != [0u8; 16] {
                     self.mic = Some(new_key.key_mic);
                     self.eapol_client = Some(new_key.to_bytes().unwrap())
                 }
@@ -465,12 +503,16 @@ impl FourWayHandshake {
         // Determine the basic message pair based on messages present
         if self.msg2.is_some() && self.msg3.is_some() {
             message_pair |= 0x02; // M2+M3, EAPOL from M2
+            return format!("{:02x}", message_pair);
         } else if self.msg1.is_some() && self.msg2.is_some() {
             message_pair |= 0x00; // M1+M2, EAPOL from M2 (challenge)
+            return format!("{:02x}", message_pair);
         } else if self.msg1.is_some() && self.msg4.is_some() {
             message_pair |= 0x01; // M1+M4, EAPOL from M4
+            return format!("{:02x}", message_pair);
         } else if self.msg3.is_some() && self.msg4.is_some() {
             message_pair |= 0x05; // M3+M4, EAPOL from M4
+            return format!("{:02x}", message_pair);
         }
 
         format!("{:02x}", message_pair)
@@ -564,8 +606,6 @@ impl HandshakeStorage {
     pub fn get_table(
         &mut self,
         selected_row: Option<usize>,
-        sort: u8,
-        sort_reverse: bool,
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         let headers = vec![
@@ -667,7 +707,7 @@ fn add_handshake_header_row(hs_row: Vec<String>) -> Vec<String> {
     merged.push(new_str);
 
     // SSID
-    let new_str: String = format!("{}\n {}{}", hs_row[3], icon, "NOnce Trail");
+    let new_str: String = format!("{}\n {}{}", hs_row[3], icon, "NOnce");
     merged.push(new_str);
 
     // M1
@@ -745,11 +785,15 @@ fn add_handshake_message_row(
     merged.push(new_str);
 
     // M3 3
-    let last_four_hex: String = message.key_nonce[30..]
+    let first_2_hex: String = message.key_nonce[..2]
         .iter()
         .fold(String::new(), |acc, &byte| acc + &format!("{:02x}", byte));
 
-    let new_str: String = format!("{}\n  {}[{}]", hs_row[3], icon, last_four_hex);
+    let last_2_hex: String = message.key_nonce[30..]
+        .iter()
+        .fold(String::new(), |acc, &byte| acc + &format!("{:02x}", byte));
+
+    let new_str: String = format!("{}\n  {}{}..{}", hs_row[3], icon, first_2_hex, last_2_hex);
     merged.push(new_str);
 
     // M1
