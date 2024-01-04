@@ -119,7 +119,7 @@ fn create_status_bar(
     start_time: Instant,
     framerate: u64,
 ) {
-    oxide.interface = get_interface_info_idx(oxide.interface.index).unwrap();
+    oxide.interface = get_interface_info_idx(oxide.interface.index.unwrap()).unwrap();
     // Top Bar Layout
     let top_layout: std::rc::Rc<[Rect]> = Layout::default()
         .direction(Direction::Horizontal)

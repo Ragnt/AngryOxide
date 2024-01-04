@@ -397,7 +397,7 @@ impl OxideRuntime {
             vec![]
         };
 
-        let idx = iface.index;
+        let idx = iface.index.unwrap();
 
         println!(
             "
@@ -1684,7 +1684,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Starting...".to_string(),
     ));
     let iface = oxide.interface.clone();
-    let idx = iface.index;
+    let idx = iface.index.unwrap();
     let interface_name =
         String::from_utf8(iface.name.unwrap()).expect("cannot get interface name from bytes.");
 
