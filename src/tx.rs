@@ -14,7 +14,7 @@ const RTH: [u8; 10] = [
     0x00, 0x00, /* radiotap version and padding */
     0x0a, 0x00, /* radiotap header length */
     0x00, 0x00, 0x00, 0x00, /* bitmap */
-    0x20, 0x00,
+    0x20, 0x00, /* tx flags */
 ];
 
 const RTH_NO_ACK: [u8; 10] = [
@@ -588,6 +588,7 @@ pub fn build_association_response(
     addr_rogue_ap: &MacAddress,
     bssid: &MacAddress,
     sequence: u16,
+    ssid: &String,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
@@ -614,11 +615,11 @@ pub fn build_association_response(
         header,
         capability_info: 0x431,
         status_code: 0,
-        association_id: 1,
+        association_id: 49153u16,
         station_info: StationInfo {
             supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
             extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
-            ssid: None,
+            ssid: Some(ssid.to_string()),
             ds_parameter_set: None,
             tim: None,
             country_info: None,
@@ -640,6 +641,7 @@ pub fn build_eapol_m1(
     addr_rogue_ap: &MacAddress,
     bssid: &MacAddress,
     sequence: u16,
+    rogue_m1: &EapolKey,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
@@ -647,7 +649,7 @@ pub fn build_eapol_m1(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Data,
         frame_subtype: libwifi::FrameSubType::Data,
-        flags: 0u8,
+        flags: 2u8,
     };
 
     let header: DataHeader = DataHeader {
@@ -664,25 +666,12 @@ pub fn build_eapol_m1(
         qos: None,
     };
 
+    let mut rogue = rogue_m1.clone();
+    rogue.timestamp = SystemTime::now();
+
     let frx = Data {
         header,
-        eapol_key: Some(EapolKey {
-            protocol_version: 2u8,
-            timestamp: SystemTime::now(),
-            packet_type: 3u8,
-            packet_length: 0u16,
-            descriptor_type: 2u8,
-            key_information: 138u16,
-            key_length: 0u16,
-            replay_counter: 0u64,
-            key_nonce: [0u8; 32],
-            key_iv: [0u8; 16],
-            key_rsc: 0u64,
-            key_id: 0u64,
-            key_mic: [0u8; 16],
-            key_data_length: 0u16,
-            key_data: Vec::new(),
-        }),
+        eapol_key: Some(rogue),
         data: Vec::new(),
     };
     rth.extend(frx.encode());

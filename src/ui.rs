@@ -398,9 +398,9 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
     M2
     M3
     M4
-    MC
     PM
-    COMPLETE
+    OK
+    NC
     */
 
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
@@ -415,10 +415,10 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
             Constraint::Length(2), // M1
             Constraint::Length(2), // M2
             Constraint::Length(2), // M3
-            Constraint::Length(2), // M4
-            Constraint::Length(3), // MC
+            Constraint::Length(3), // M4
             Constraint::Length(3), // PM
-            Constraint::Min(3),    // RD
+            Constraint::Length(3), // OK
+            Constraint::Min(3),    // NC
         ],
     )
     .segment_size(SegmentSize::EvenDistribution)

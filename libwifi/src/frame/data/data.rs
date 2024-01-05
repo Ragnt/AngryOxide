@@ -18,8 +18,11 @@ impl Data {
         // Serialize header
         bytes.extend_from_slice(&self.header.encode());
 
+        let eapol_llc_header: [u8; 8] = [0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8e];
+
         // Serialize EAPOL key if present
         if let Some(eapol_key) = &self.eapol_key {
+            bytes.extend(eapol_llc_header);
             bytes.extend(eapol_key.encode().unwrap()); // Unwrap the result
         }
 

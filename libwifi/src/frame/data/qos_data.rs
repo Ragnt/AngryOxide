@@ -186,18 +186,16 @@ impl EapolKey {
     pub fn encode(&self) -> Result<Vec<u8>, std::io::Error> {
         let key_data_length = self.key_data.len() as u16;
 
-        // Assuming key_length is the length of the key_nonce for this example
-        let key_length = self.key_nonce.len() as u16;
-
         // Calculate the packet length dynamically
-        let header_size = 1 + 1 + 2 + 1 + 2 + 2; // Sizes of the fields before replay_counter
-        let packet_length = header_size as u16
+        let packet_length = 1 // descriptor_type
+            + 2 // key_information
+            + 2 // key_length
             + 8 // replay_counter
-            + self.key_nonce.len() as u16
-            + self.key_iv.len() as u16
+            + 32
+            + 16
             + 8 // key_rsc
             + 8 // key_id
-            + self.key_mic.len() as u16
+            + 16
             + 2 // key_data_length
             + key_data_length;
 
@@ -207,7 +205,7 @@ impl EapolKey {
         buf.write_u16::<BigEndian>(packet_length)?;
         buf.write_u8(self.descriptor_type)?;
         buf.write_u16::<BigEndian>(self.key_information)?;
-        buf.write_u16::<BigEndian>(key_length)?;
+        buf.write_u16::<BigEndian>(self.key_length)?;
         buf.write_u64::<BigEndian>(self.replay_counter)?;
         buf.extend_from_slice(&self.key_nonce);
         buf.extend_from_slice(&self.key_iv);

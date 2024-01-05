@@ -50,6 +50,7 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
             let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
             ap_data.interactions += 1;
         }
+        return Ok(());
     } */
 
     // If the interaction cooldown isn't timed out (aka timer1).
@@ -115,7 +116,7 @@ pub fn m1_retrieval_attack_phase_2(
     }
 
     // It's been more than 5 seconds since our last interaction
-    /* if ap_data.auth_sequence.is_t1_timeout() {
+    if ap_data.auth_sequence.is_t1_timeout() {
         // Reset state to 0 and update timers.
         if ap_data.auth_sequence.state > 0 {
             ap_data.auth_sequence.state = 0;
@@ -126,7 +127,7 @@ pub fn m1_retrieval_attack_phase_2(
             ));
         }
         return Ok(());
-    } */
+    }
 
     if oxide.handshake_storage.has_m1_for_ap(ap_mac) {
         return Ok(());
@@ -248,6 +249,19 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     Ok(())
 }
 
+//////////////////////////////////////////////////////////////
+//                                                          //
+//             Anonymous Reasasociation Attack              //
+//   An anonmyous reassociaation attack sends an AP a       //
+//  reassociation frame with a source address of broadcast. //
+//  as a result, some AP's will send a deauthentication     //
+//  as a response with "Station attempting reassociation is //
+//  not associated" to the broadcast address, resulting in  //
+//  deauthentication of all of it's clients. This bypasses  //
+//  any Management Frame Protections.                       //
+//                                                          //
+//////////////////////////////////////////////////////////////
+
 pub fn anon_reassociation_attack(
     oxide: &mut OxideRuntime,
     ap_mac: &MacAddress,
@@ -315,7 +329,7 @@ pub fn anon_reassociation_attack(
 //                                                          //
 //////////////////////////////////////////////////////////////
 
-// Our definition of "directed" is that it is sending a probe-request to a specific AP mac, specifically in order to facilitate the authentication/association process.
+// Our definition of "directed" is that it is sending a probe-request to a specific AP mac.
 pub fn rogue_m2_attack_directed(
     oxide: &mut OxideRuntime,
     probe: ProbeRequest,
