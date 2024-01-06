@@ -45,6 +45,7 @@ strum = "0.25.0"
 strum_macros = "0.25.3"
 mac_oui = { version = "0.4.8", features = ["with-db"] }
 derive_setters = "0.1.6"
+pcap-file = "2.0.0"
 
 [target.mips-unknown-linux-musl]
 linker = "mips-linux-musl-gcc"

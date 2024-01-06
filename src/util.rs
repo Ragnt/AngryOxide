@@ -1,5 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use radiotap::field::ext::TimeUnit;
+
 pub fn epoch_to_string(epoch: u64) -> String {
     match UNIX_EPOCH.checked_add(Duration::from_secs(epoch)) {
         Some(epoch_time) => match SystemTime::now().duration_since(epoch_time) {
@@ -30,4 +32,12 @@ pub fn merge_with_newline(vec1: Vec<String>, vec2: Vec<String>) -> Vec<String> {
     }
 
     merged
+}
+
+pub fn ts_to_system_time(timestamp: u64, unit: TimeUnit) -> SystemTime {
+    match unit {
+        TimeUnit::Milliseconds => UNIX_EPOCH + Duration::from_millis(timestamp),
+        TimeUnit::Microseconds => UNIX_EPOCH + Duration::from_micros(timestamp),
+        TimeUnit::Nanoseconds => UNIX_EPOCH + Duration::from_nanos(timestamp),
+    }
 }

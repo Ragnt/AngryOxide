@@ -25,7 +25,7 @@ const CRC_32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 /// Parse IEE 802.11 frames from raw bytes.
 ///
 pub fn parse_frame(input: &[u8], fcs_included: bool) -> Result<Frame, Error> {
-    /* if fcs_included {
+    if fcs_included {
         if input.len() < 4 {
             return Err(Error::Failure(
                 "Input frame is too short to contain an FCS".to_string(),
@@ -52,7 +52,7 @@ pub fn parse_frame(input: &[u8], fcs_included: bool) -> Result<Frame, Error> {
                 input.to_vec(),
             ));
         }
-    } */
+    }
 
     let (input, frame_control) = parse_frame_control(input)?;
 
