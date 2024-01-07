@@ -416,8 +416,6 @@ impl FourWayHandshake {
             return Some(output);
         }
 
-        output.push('\n');
-
         let mic_hex = self
             .mic
             .as_ref()?

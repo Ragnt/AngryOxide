@@ -1,4 +1,5 @@
 use byteorder::{ByteOrder, LE};
+use crc32fast::Hasher;
 use libwifi::frame::components::MacAddress;
 use nl80211_ng::Interface;
 use pcap_file::pcapng::blocks::enhanced_packet::{EnhancedPacketBlock, EnhancedPacketOption};
@@ -21,23 +22,69 @@ use std::{
     thread,
     time::SystemTime,
 };
+use uuid::Uuid;
 
 use crate::gps::{self, GpsData};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FrameData {
-    timestamp: SystemTime,
-    gps_data: Option<GpsData>,
-    data: Vec<u8>,
+    pub timestamp: SystemTime,
+    pub packetid: u64,
+    pub gps_data: Option<GpsData>,
+    pub data: Vec<u8>,
+    pub source: MacAddress,
+    pub destination: MacAddress,
+    pub frequency: Option<f64>,
+    pub signal: Option<i32>,
+    pub datarate: Option<f64>,
+    pub datasource: Uuid,
 }
 
 impl FrameData {
-    pub fn new(timestamp: SystemTime, data: Vec<u8>, gps_data: Option<GpsData>) -> Self {
+    pub fn new(
+        timestamp: SystemTime,
+        packetid: u64,
+        data: Vec<u8>,
+        gps_data: Option<GpsData>,
+        source: MacAddress,
+        destination: MacAddress,
+        frequency: Option<f64>,
+        signal: Option<i32>,
+        datarate: Option<f64>,
+        datasource: Uuid,
+    ) -> Self {
         FrameData {
             timestamp,
+            packetid,
             gps_data,
             data,
+            source,
+            destination,
+            frequency,
+            signal,
+            datarate,
+            datasource,
         }
+    }
+
+    pub fn ts_sec(&self) -> u64 {
+        match self.timestamp.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs(),
+            Err(_) => 0, // Handle timestamp before UNIX_EPOCH, return 0 or handle as needed
+        }
+    }
+
+    pub fn ts_usec(&self) -> u64 {
+        match self.timestamp.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.subsec_micros() as u64,
+            Err(_) => 0, // Handle timestamp before UNIX_EPOCH, return 0 or handle as needed
+        }
+    }
+
+    pub fn crc32(&self) -> u32 {
+        let mut hasher = Hasher::new();
+        hasher.update(&self.data);
+        hasher.finalize()
     }
 }
 
@@ -135,5 +182,7 @@ impl PcapWriter {
             .expect("Called stop on non-running thread")
             .join()
             .expect("Could not join spawned thread");
+
+        println!("Stopped PCAPNG Thread");
     }
 }

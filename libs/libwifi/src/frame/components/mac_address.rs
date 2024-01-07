@@ -36,6 +36,14 @@ impl MacAddress {
         }
     }
 
+    /// Generate string with delimitters.
+    pub fn to_long_string(&self) -> String {
+        format!(
+            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5],
+        )
+    }
+
     /// Generate random valid mac
     pub fn random() -> Self {
         loop {

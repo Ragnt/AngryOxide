@@ -1,6 +1,7 @@
 mod ascii;
 mod attack;
 mod auth;
+mod database;
 mod devices;
 mod gps;
 mod pcapng;
@@ -24,11 +25,12 @@ use attack::{
 use chrono::Local;
 use crossterm::event::{
     poll, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
-    ModifierKeyCode, MouseEvent, MouseEventKind,
+    MouseEventKind,
 };
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use database::DatabaseWriter;
 use gps::GPSDSource;
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
@@ -41,20 +43,24 @@ use nl80211_ng::{
     set_interface_monitor, set_interface_station, set_interface_up, Interface,
 };
 
+use flate2::write::GzEncoder;
+use flate2::Compression;
+
 use pcapng::{FrameData, PcapWriter};
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
 use rand::{thread_rng, Rng};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
-use ratatui::widgets::{Row, ScrollbarState, TableState};
+use ratatui::widgets::TableState;
 use ratatui::Terminal;
 use rawsocks::{open_socket_rx, open_socket_tx};
+use tar::Builder;
 use tx::{
-    build_ack, build_association_response, build_authentication_response, build_cts,
+    build_association_response, build_authentication_response, build_cts,
     build_disassocation_from_client, build_eapol_m1,
 };
-use util::ts_to_system_time;
+use uuid::Uuid;
 
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
@@ -68,11 +74,11 @@ use libwifi::{Addresses, Frame};
 
 use crossterm::{cursor::Hide, cursor::Show, execute};
 
-use std::alloc::System;
+use std::collections::HashMap;
+use std::fs::{self, File};
 use std::io;
 use std::io::stdout;
-use std::iter::Cycle;
-use std::net::{IpAddr, Ipv4Addr};
+use std::io::Write;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::process::exit;
 use std::str::FromStr;
@@ -105,7 +111,7 @@ struct Arguments {
     /// Optional tx mac for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(long, default_value = "127.0.0.1:2947")]
-    /// Optional HOST:Port for GPSD connection. Default: 127.0.0.1:2947
+    /// Optional HOST:Port for GPSD connection.
     gpsd: String,
     #[arg(long)]
     /// Optional do not transmit, passive only
@@ -315,6 +321,7 @@ impl UiState {
 
 #[derive(Default)]
 pub struct Counters {
+    pub packet_id: u64,
     pub seq1: u16,
     pub seq2: u16,
     pub seq3: u16,
@@ -333,6 +340,11 @@ pub struct Counters {
 }
 
 impl Counters {
+    pub fn packet_id(&mut self) -> u64 {
+        self.packet_id += 1;
+        self.packet_id
+    }
+
     pub fn sequence1(&mut self) -> u16 {
         self.seq1 = if self.seq1 >= 4096 { 1 } else { self.seq1 + 1 };
         self.seq1
@@ -379,8 +391,10 @@ pub struct OxideRuntime {
     eapol_count: u64,
     error_count: u64,
     interface: Interface,
+    interface_uuid: Uuid,
     counters: Counters,
     pcap_file: PcapWriter,
+    database: DatabaseWriter,
     gps_source: GPSDSource,
     status_log: status::MessageLog,
     current_channel: WiFiChannel,
@@ -393,17 +407,18 @@ impl OxideRuntime {
         rogue: Option<String>,
         targets: Option<Vec<String>>,
         deauth: bool,
-        output: Option<String>,
+        filename: String,
         cli_gpsd: String,
     ) -> Self {
-        println!(
-            "
-     █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████ 
-    ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██      
-    ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████   
-    ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██      
-    ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
-        );
+        /* println!(
+                "
+         █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████
+        ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██
+        ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████
+        ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██
+        ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
+            ); */
+        println!("Starting AngryOxide... 😈");
 
         // Setup initial lists / logs
         let access_points = WiFiDeviceList::new();
@@ -421,6 +436,8 @@ impl OxideRuntime {
         };
 
         let idx = iface.index.unwrap();
+        let interface_uuid = Uuid::new_v4();
+        println!("Interface Summary:");
         println!("{}", iface.pretty_print());
 
         // Setup targets
@@ -543,17 +560,20 @@ impl OxideRuntime {
             snowstorm: Snowstorm::new_rainbow(Rect::new(1, 2, 3, 4)),
         };
 
-        // Setup PCAP writing
-        let filename = if let Some(fname) = output {
-            format!("{}.pcapng", fname)
-        } else {
-            let now = Local::now();
-            let filename = now.format("oxide-%Y-%m-%d_%H-%M-%S").to_string();
-            format!("{}.pcapng", filename)
-        };
+        // Setup Filename writing
 
-        let mut pcap_file = PcapWriter::new(&iface, &filename);
+        let pcap_filename = format!("{}.pcapng", filename);
+        let mut pcap_file = PcapWriter::new(&iface, &pcap_filename);
         pcap_file.start();
+
+        // Setup KismetDB Writing
+        let kismetdb_filename = format!("{}.kismet", filename);
+        let mut database = DatabaseWriter::new(
+            &kismetdb_filename,
+            interface_uuid.hyphenated().to_string(),
+            iface.clone(),
+        );
+        database.start();
 
         // Setup GPSD
         let (host, port) = if let Ok((host, port)) = parse_ip_address_port(&cli_gpsd) {
@@ -582,8 +602,10 @@ impl OxideRuntime {
             rogue_client,
             rogue_m1,
             interface: iface,
+            interface_uuid,
             counters: Counters::default(),
             pcap_file,
+            database,
             gps_source: gpsd,
             status_log: status::MessageLog::new(),
             current_channel: WiFiChannel::Channel2GHz(1),
@@ -613,24 +635,26 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
         }
     };
 
+    oxide.frame_count += 1;
+    let packet_id = oxide.counters.packet_id();
+
+    // Get Channel Values
     let current_channel = oxide.interface.frequency.clone().unwrap().channel.unwrap();
     oxide.current_channel = current_channel.clone();
     let channel_u8: u8 = current_channel.get_channel_number();
 
-    oxide.frame_count += 1;
-
     let payload = &packet[radiotap.header.length..];
 
-    let fcs = if let Some(flags) = radiotap.flags {
-        flags.fcs
-    } else {
-        false
-    };
-
+    let fcs = radiotap.flags.map_or(false, |flags| flags.fcs);
     let gps_data = oxide.gps_source.get_gps();
+    let source: MacAddress;
+    let destination: MacAddress;
 
     match libwifi::parse_frame(payload, fcs) {
         Ok(frame) => {
+            source = *frame.src().unwrap_or(&MacAddress([0, 0, 0, 0, 0, 0]));
+            destination = *frame.dest();
+
             // Pre Processing
             match frame.clone() {
                 Frame::Beacon(beacon_frame) => {
@@ -1514,17 +1538,52 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     }
                 }
             }
+            return Err("Parsing Error".to_owned());
         }
     };
 
-    // Pcap Related Info
+    // Build FrameData package for sending to Database/PCAP-NG
     let pcapgps = if gps_data.has_fix() {
         Some(gps_data)
     } else {
         None
     };
-    let frxdata = FrameData::new(SystemTime::now(), packet.to_vec(), pcapgps);
-    oxide.pcap_file.send(frxdata);
+
+    let freq = if let Some(freq) = current_channel.to_frequency() {
+        Some(freq as f64)
+    } else {
+        None
+    };
+
+    let signal = if let Some(signal) = radiotap.antenna_signal {
+        Some(signal.value as i32)
+    } else {
+        None
+    };
+
+    let rate = if let Some(rate) = radiotap.rate {
+        Some(rate.value as f64)
+    } else {
+        None
+    };
+
+    let frxdata = FrameData::new(
+        SystemTime::now(),
+        packet_id,
+        packet.to_vec(),
+        pcapgps,
+        source,
+        destination,
+        freq,
+        signal,
+        rate,
+        oxide.interface_uuid,
+    );
+
+    // Send to pcap
+    oxide.pcap_file.send(frxdata.clone());
+    // Send to database
+    oxide.database.send(frxdata.clone());
 
     Ok(())
 }
@@ -1781,13 +1840,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Arguments::parse();
 
+    let filename = if let Some(fname) = cli.output {
+        format!("{}", fname)
+    } else {
+        let now = Local::now();
+        let filename = now.format("oxide-%Y-%m-%d_%H-%M-%S").to_string();
+        format!("{}", filename)
+    };
+
+    let mut output_files = vec![
+        format!("{}.kismet", filename),
+        format!("{}.pcapng", filename),
+    ];
+
     let mut oxide = OxideRuntime::new(
         cli.interface,
         cli.notransmit,
         cli.rogue,
         cli.targets,
         cli.deauth,
-        cli.output,
+        filename.clone(),
         cli.gpsd,
     );
     oxide.status_log.add_message(StatusMessage::new(
@@ -1936,42 +2008,122 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
     }
 
-    reset_terminal();
     // Execute cleanup
+    reset_terminal();
     println!("Cleaning up...");
-    if !err {
-        println!("Setting {} down.", interface_name);
-        match set_interface_down(idx) {
-            Ok(_) => {}
-            Err(e) => println!("Error: {e:?}"),
-        }
-
-        println!("Setting {} to station mode.", interface_name);
-        match set_interface_station(idx) {
-            Ok(_) => {}
-            Err(e) => println!("Error: {e:?}"),
-        }
-    } else {
+    if err {
         println!("{}", get_art("A serious packet read error occured."))
     }
 
+    println!("Setting {} down.", interface_name);
+    match set_interface_down(idx) {
+        Ok(_) => {}
+        Err(e) => println!("Error: {e:?}"),
+    }
+
+    println!("Setting {} to station mode.", interface_name);
+    match set_interface_station(idx) {
+        Ok(_) => {}
+        Err(e) => println!("Error: {e:?}"),
+    }
+
+    println!("Stopping Threads");
     oxide.pcap_file.stop();
     oxide.gps_source.stop();
 
     println!();
+
+    // Hashmap<SSID, Vec<hashline>>
+    let mut handshakes_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    // Write handshakes to their respective files.
     for (_, handshakes) in oxide.handshake_storage.get_handshakes() {
         if !handshakes.is_empty() {
             for hs in handshakes {
-                if let Some(hc) = hs.to_hashcat_22000_format() {
-                    println!("================================================================");
-                    println!("{:^64}", hs.essid_to_string());
-                    println!("================================================================");
-                    println!("{}", hc);
-                    println!("================================================================");
+                if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
+                    let essid = hs.essid_to_string();
+                    let hashline = hashcat_string;
+                    handshakes_map.entry(essid).or_default().push(hashline);
                 }
             }
         }
     }
+
+    let hashfiles = write_handshakes(&handshakes_map).expect("Error writing handshakes");
+    print_handshake_summary(&handshakes_map);
+    output_files.extend(hashfiles);
+
+    println!("📦 Creating Output Tarball ({}.tar.gz)...", filename);
+    let _ = tar_and_compress_files(output_files, &filename);
+
+    Ok(())
+}
+
+fn write_handshakes(handshakes_map: &HashMap<String, Vec<String>>) -> Result<Vec<String>, ()> {
+    let mut hashfiles = Vec::new();
+    for (key, values) in handshakes_map {
+        // Open a file for writing with the name format [key].hc22000
+        let file_name = format!("{}.hc22000", key);
+        let mut file = File::create(&file_name).expect("Could not open hashfile for writing.");
+
+        // Write all the values from the Vec<String> to the file, separated by newlines
+        for value in values {
+            writeln!(file, "{}", value);
+        }
+        hashfiles.push(file_name);
+    }
+    Ok(hashfiles)
+}
+
+fn print_handshake_summary(handshakes_map: &HashMap<String, Vec<String>>) {
+    if !handshakes_map.is_empty() {
+        println!("😈 Results:");
+        for (key, values) in handshakes_map {
+            let (handshake_count, pmkid_count) =
+                values
+                    .iter()
+                    .fold((0, 0), |(handshake_acc, pmkid_acc), value| {
+                        if value.starts_with("WPA*02") {
+                            (handshake_acc + 1, pmkid_acc)
+                        } else if value.starts_with("WPA*01") {
+                            (handshake_acc, pmkid_acc + 1)
+                        } else {
+                            (handshake_acc, pmkid_acc)
+                        }
+                    });
+
+            println!(
+                "[{}] : 4wHS: {} | PMKID: {}",
+                key, handshake_count, pmkid_count
+            );
+        }
+        println!();
+    } else {
+        println!(
+            "AngryOxide did not collect any results. 😔 Try running longer, or check your interface?"
+        );
+    }
+}
+
+fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Result<()> {
+    let file = File::create(format!("{}.tar.gz", filename))?;
+    let enc = GzEncoder::new(file, Compression::default());
+    let mut tar = Builder::new(enc);
+
+    for path in &output_files {
+        let mut file = File::open(path)?;
+        tar.append_file(path, &mut file)?;
+    }
+
+    tar.into_inner()?.finish()?;
+
+    // Delete original files after they are successfully added to the tarball
+    for path in &output_files {
+        if let Err(e) = fs::remove_file(path) {
+            eprintln!("Failed to delete file {}: {}", path, e);
+        }
+    }
+
     Ok(())
 }
 

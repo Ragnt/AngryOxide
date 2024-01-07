@@ -4,6 +4,7 @@ use itertools::Itertools;
 
 use std::io::{self, BufReader, BufWriter};
 use std::net::TcpStream;
+use std::os::unix::thread::JoinHandleExt;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{
     net::IpAddr,
@@ -203,11 +204,11 @@ impl GPSDSource {
             // Setup connection initially:
             let mut reader: BufReader<&TcpStream>;
             let mut stream: TcpStream;
-            while alive.load(Ordering::SeqCst) {
+            'th: while alive.load(Ordering::SeqCst) {
                 // Setup connection and do handshake
-                loop {
+                'setup: loop {
                     if !alive.load(Ordering::SeqCst) {
-                        return;
+                        break 'th;
                     }
                     stream = if let Ok(strm) = TcpStream::connect(format!("{}:{}", host, port)) {
                         strm
@@ -215,6 +216,9 @@ impl GPSDSource {
                         thread::sleep(Duration::from_secs(3));
                         continue;
                     };
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(1)))
+                        .expect("set_read_timeout call failed");
 
                     let mut r = io::BufReader::new(&stream);
                     let mut w = io::BufWriter::new(&stream);
@@ -224,12 +228,12 @@ impl GPSDSource {
                         continue;
                     }
                     reader = r;
-                    break;
+                    break 'setup;
                 }
 
-                while let Ok(msg) = get_data(&mut reader) {
+                'runtime: while let Ok(msg) = get_data(&mut reader) {
                     if !alive.load(Ordering::SeqCst) {
-                        return;
+                        break 'th;
                     }
                     match msg {
                         ResponseData::Tpv(t) => {
@@ -289,6 +293,7 @@ impl GPSDSource {
             .expect("Called stop on non-running thread")
             .join()
             .expect("Could not join spawned thread");
+        println!("Stopped GPS Thread");
     }
 }
 
