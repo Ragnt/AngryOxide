@@ -34,7 +34,7 @@ impl Snowstorm {
         Snowstorm::frame(
             Snowstorm {
                 snowflakes: Vec::new(),
-                density: 8,
+                density: 20,
                 rainbow: false,
             },
             area,
@@ -45,7 +45,7 @@ impl Snowstorm {
         Snowstorm::frame(
             Snowstorm {
                 snowflakes: Vec::new(),
-                density: 10,
+                density: 20,
                 rainbow: true,
             },
             area,
@@ -121,7 +121,7 @@ impl Snowflake {
         let mut rng = thread_rng();
         let new_x = rng.gen_range(left_edge..right_edge);
 
-        let velocity = rng.gen_range(0.01..0.03);
+        let velocity = rng.gen_range(0.04..0.08);
 
         Snowflake {
             x: new_x,

@@ -1,0 +1,19 @@
+[package]
+name = "libwifi_macros"
+version = "0.0.2"
+description = "A library providing macros for the libwifi crate."
+authors = ["Arne Beer <contact@arne.beer>"]
+homepage = "https://github.com/nukesor/libwifi"
+repository = "https://github.com/nukesor/libwifi"
+documentation = "https://docs.rs/libwifi/"
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2"
+proc-macro2 = "1"
+quote = "1"

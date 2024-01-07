@@ -276,6 +276,13 @@ impl FourWayHandshake {
                 return Err("Invalid Message 2: Time difference too great.");
             }
 
+            if self.msg1.is_some()
+                && new_key.replay_counter > self.msg1.clone().unwrap().replay_counter
+            {
+                // Mark for Nonce Correction
+                self.nc = true;
+            }
+
             self.snonce = Some(new_key.key_nonce);
             self.msg2 = Some(new_key.clone());
             self.last_msg = Some(new_key.clone());

@@ -2,6 +2,7 @@ mod ascii;
 mod attack;
 mod auth;
 mod devices;
+mod gps;
 mod pcapng;
 mod rawsocks;
 mod snowstorm;
@@ -28,6 +29,7 @@ use crossterm::event::{
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use gps::GPSDSource;
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
 use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
@@ -60,6 +62,7 @@ use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::print_ui;
+use crate::util::parse_ip_address_port;
 
 use libwifi::{Addresses, Frame};
 
@@ -69,6 +72,7 @@ use std::alloc::System;
 use std::io;
 use std::io::stdout;
 use std::iter::Cycle;
+use std::net::{IpAddr, Ipv4Addr};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::process::exit;
 use std::str::FromStr;
@@ -80,9 +84,9 @@ use std::time::{Duration, Instant, SystemTime};
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(name = "WPOxide")]
-#[command(author = "Ragnt")]
-#[command(version = "0.1.0")]
+#[command(name = "AngryOxide")]
+#[command(author = "Ryan Butler (Ragnt)")]
+#[command(version = "0.4.0")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 struct Arguments {
     #[arg(short, long)]
@@ -92,14 +96,17 @@ struct Arguments {
     /// Optional list of channels to scan.
     channels: Vec<u8>,
     #[arg(short, long)]
+    /// Optional list of targets to attack - will attack everything if excluded.
+    targets: Option<Vec<String>>,
+    #[arg(short, long)]
     /// Optional output filename.
     output: Option<String>,
     #[arg(short, long)]
     /// Optional tx mac for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
-    #[arg(short, long)]
-    /// Optional list of targets to attack - will attack everything if excluded.
-    targets: Option<Vec<String>>,
+    #[arg(long, default_value = "127.0.0.1:2947")]
+    /// Optional HOST:Port for GPSD connection. Default: 127.0.0.1:2947
+    gpsd: String,
     #[arg(long)]
     /// Optional do not transmit, passive only
     notransmit: bool,
@@ -374,6 +381,7 @@ pub struct OxideRuntime {
     interface: Interface,
     counters: Counters,
     pcap_file: PcapWriter,
+    gps_source: GPSDSource,
     status_log: status::MessageLog,
     current_channel: WiFiChannel,
 }
@@ -386,6 +394,7 @@ impl OxideRuntime {
         targets: Option<Vec<String>>,
         deauth: bool,
         output: Option<String>,
+        cli_gpsd: String,
     ) -> Self {
         println!(
             "
@@ -546,6 +555,17 @@ impl OxideRuntime {
         let mut pcap_file = PcapWriter::new(&iface, &filename);
         pcap_file.start();
 
+        // Setup GPSD
+        let (host, port) = if let Ok((host, port)) = parse_ip_address_port(&cli_gpsd) {
+            (host, port)
+        } else {
+            println!("GPSD argument {} not valid... ignoring.", cli_gpsd);
+            parse_ip_address_port("127.0.0.1:2974").unwrap()
+        };
+
+        let mut gpsd = GPSDSource::new(host, port);
+        gpsd.start();
+
         OxideRuntime {
             rx_socket,
             tx_socket,
@@ -564,6 +584,7 @@ impl OxideRuntime {
             interface: iface,
             counters: Counters::default(),
             pcap_file,
+            gps_source: gpsd,
             status_log: status::MessageLog::new(),
             current_channel: WiFiChannel::Channel2GHz(1),
         }
@@ -605,6 +626,8 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     } else {
         false
     };
+
+    let gps_data = oxide.gps_source.get_gps();
 
     match libwifi::parse_frame(payload, fcs) {
         Ok(frame) => {
@@ -1494,10 +1517,13 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
         }
     };
 
-    // Post Processing
-
     // Pcap Related Info
-    let frxdata = FrameData::new(SystemTime::now(), packet.to_vec());
+    let pcapgps = if gps_data.has_fix() {
+        Some(gps_data)
+    } else {
+        None
+    };
+    let frxdata = FrameData::new(SystemTime::now(), packet.to_vec(), pcapgps);
     oxide.pcap_file.send(frxdata);
 
     Ok(())
@@ -1762,6 +1788,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.targets,
         cli.deauth,
         cli.output,
+        cli.gpsd,
     );
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
@@ -1784,7 +1811,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut frame_rate = 0u64;
 
     let mut last_status_time = Instant::now();
-    let status_interval = Duration::from_millis(300);
+    let status_interval = Duration::from_millis(50);
 
     let mut last_interactions_clear = Instant::now();
     let interactions_interval = Duration::from_secs(120);
@@ -1884,11 +1911,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
-
         // Start UI Messages
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
+            let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
         }
 
         if last_interactions_clear.elapsed() >= interactions_interval {
@@ -1930,6 +1956,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     oxide.pcap_file.stop();
+    oxide.gps_source.stop();
 
     println!();
     for (_, handshakes) in oxide.handshake_storage.get_handshakes() {
@@ -1945,7 +1972,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
     Ok(())
 }
 

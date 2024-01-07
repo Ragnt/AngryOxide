@@ -1,6 +1,7 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use radiotap::field::ext::TimeUnit;
+use std::net::IpAddr;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub fn epoch_to_string(epoch: u64) -> String {
     match UNIX_EPOCH.checked_add(Duration::from_secs(epoch)) {
@@ -40,4 +41,27 @@ pub fn ts_to_system_time(timestamp: u64, unit: TimeUnit) -> SystemTime {
         TimeUnit::Microseconds => UNIX_EPOCH + Duration::from_micros(timestamp),
         TimeUnit::Nanoseconds => UNIX_EPOCH + Duration::from_nanos(timestamp),
     }
+}
+
+pub fn parse_ip_address_port(input: &str) -> Result<(IpAddr, u16), &'static str> {
+    let parts: Vec<&str> = input.split(':').collect();
+
+    // Check if there are exactly two parts
+    if parts.len() != 2 {
+        return Err("Input should be in the format IP_ADDRESS:PORT");
+    }
+
+    // Parse IP address
+    let ip = match IpAddr::from_str(parts[0]) {
+        Ok(ip) => ip,
+        Err(_) => return Err("Invalid IP address"),
+    };
+
+    // Parse port
+    let port = match parts[1].parse::<u16>() {
+        Ok(port) => port,
+        Err(_) => return Err("Invalid port number"),
+    };
+
+    Ok((ip, port))
 }

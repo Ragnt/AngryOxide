@@ -1,9 +1,11 @@
+use byteorder::{ByteOrder, LE};
 use libwifi::frame::components::MacAddress;
 use nl80211_ng::Interface;
-use pcap_file::pcapng::blocks::enhanced_packet::EnhancedPacketBlock;
+use pcap_file::pcapng::blocks::enhanced_packet::{EnhancedPacketBlock, EnhancedPacketOption};
 use pcap_file::pcapng::blocks::interface_description::{
     InterfaceDescriptionBlock, InterfaceDescriptionOption,
 };
+use pcap_file::pcapng::blocks::opt_common::CustomBinaryOption;
 use pcap_file::pcapng::{PcapNgBlock, PcapNgWriter};
 use pcap_file::DataLink;
 use std::borrow::Cow;
@@ -20,15 +22,22 @@ use std::{
     time::SystemTime,
 };
 
+use crate::gps::{self, GpsData};
+
 #[derive(Clone)]
 pub struct FrameData {
     timestamp: SystemTime,
+    gps_data: Option<GpsData>,
     data: Vec<u8>,
 }
 
 impl FrameData {
-    pub fn new(timestamp: SystemTime, data: Vec<u8>) -> Self {
-        FrameData { timestamp, data }
+    pub fn new(timestamp: SystemTime, data: Vec<u8>, gps_data: Option<GpsData>) -> Self {
+        FrameData {
+            timestamp,
+            gps_data,
+            data,
+        }
     }
 }
 
@@ -58,7 +67,7 @@ impl PcapWriter {
             ],
         };
 
-        pcap_writer.write_pcapng_block(interface);
+        let _ = pcap_writer.write_pcapng_block(interface);
 
         PcapWriter {
             handle: None,
@@ -88,15 +97,33 @@ impl PcapWriter {
                         continue;
                     };
 
-                let packet = EnhancedPacketBlock {
-                    interface_id: 0,
-                    timestamp: frx.timestamp.duration_since(UNIX_EPOCH).unwrap(),
-                    original_len: frx.data.len() as u32,
-                    data: frx.data.into(),
-                    options: vec![],
-                };
+                if let Some(gps) = frx.gps_data {
+                    let option_block = gps.create_option_block(); // Create and store the block
+                    let custom_binary_option = CustomBinaryOption::from_slice::<LE>(
+                        2989,
+                        &option_block, // Borrow from the stored block
+                    )
+                    .unwrap();
+                    let packet = EnhancedPacketBlock {
+                        interface_id: 0,
+                        timestamp: frx.timestamp.duration_since(UNIX_EPOCH).unwrap(),
+                        original_len: frx.data.len() as u32,
+                        data: frx.data.into(),
+                        options: vec![EnhancedPacketOption::CustomBinary(custom_binary_option)],
+                    };
 
-                let _ = writer.lock().unwrap().write_pcapng_block(packet);
+                    let _ = writer.lock().unwrap().write_pcapng_block(packet);
+                } else {
+                    let packet = EnhancedPacketBlock {
+                        interface_id: 0,
+                        timestamp: frx.timestamp.duration_since(UNIX_EPOCH).unwrap(),
+                        original_len: frx.data.len() as u32,
+                        data: frx.data.into(),
+                        options: vec![],
+                    };
+
+                    let _ = writer.lock().unwrap().write_pcapng_block(packet);
+                };
             }
         }));
     }

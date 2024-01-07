@@ -1,4 +1,5 @@
 use derive_setters::Setters;
+use gpsd_proto::Mode;
 use libwifi::frame::components::MacAddress;
 use std::{io::Result, time::Instant};
 
@@ -467,28 +468,125 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
         .title(" Stats for nerds ")
         .padding(Padding::uniform(1));
 
-    let top_right_block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Snowfall for geeks ");
+    /*
+    self.lat = new_data.lat.or(self.lat);
+    self.lon = new_data.lon.or(self.lon);
+    self.alt = new_data.alt.or(self.alt);
+    self.alt_g = new_data.alt_g.or(self.alt_g);
+    self.eph = new_data.eph.or(self.eph);
+    self.epv = new_data.epv.or(self.epv);
+    self.speed = new_data.speed.or(self.speed);
+    self.heading = new_data.heading.or(self.heading);
+    self.fix = new_data.fix.or(self.fix);
+    self.hdop = new_data.hdop.or(self.hdop);
+    self.vdop = new_data.vdop.or(self.vdop);
+    self.timestamp = new_data.timestamp.or(self.timestamp.clone());
+    */
+
+    let gpsdata = oxide.gps_source.get_gps();
+    if gpsdata.has_fix() {
+        let top_right_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" GPS Data ")
+            .padding(Padding::uniform(1));
+
+        // Splits Top Right Block in half
+        let top_right_layout: std::rc::Rc<[Rect]> = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(top_right_block.inner(top_layout[1]));
+
+        frame.render_widget(top_right_block, top_layout[1]);
+        let mut gps_text_one: Vec<Line<'_>> = vec![];
+        let mut gps_text_two: Vec<Line<'_>> = vec![];
+
+        if let Some(fix) = gpsdata.fix {
+            let fix_str = match fix {
+                1 => Span::styled("2D Fix", Style::new().light_magenta()),
+                2 => Span::styled("3D Fix", Style::new().green()),
+                _ => Span::styled("No Fix", Style::new().red()), // If the u8 value doesn't correspond to a Mode
+            };
+            gps_text_one.push(Line::from(vec![Span::from("Fix: "), fix_str]));
+        } else {
+            gps_text_one.push(Line::from("Fix: ?".to_string()));
+        }
+        if let Some(lat) = gpsdata.lat {
+            gps_text_one.push(Line::from(format!("Latitude: {}°", lat)));
+        } else {
+            gps_text_one.push(Line::from("Latitude: ?".to_string()));
+        }
+        if let Some(lon) = gpsdata.lon {
+            gps_text_one.push(Line::from(format!("Longitude: {}°", lon)));
+        } else {
+            gps_text_one.push(Line::from("Longitude: ?".to_string()));
+        }
+        if let Some(alt) = gpsdata.alt {
+            gps_text_one.push(Line::from(format!("Alt (MSL): {}m", alt)));
+        } else {
+            gps_text_one.push(Line::from("Alt (MSL): ?".to_string()));
+        }
+        if let Some(alt) = gpsdata.alt_g {
+            gps_text_one.push(Line::from(format!("Alt (AGL): {}m", alt)));
+        } else {
+            gps_text_one.push(Line::from("Alt (AGL): ?".to_string()));
+        }
+
+        if let Some(speed) = gpsdata.speed {
+            gps_text_two.push(Line::from(format!("Speed: {}m/s", speed)));
+        } else {
+            gps_text_two.push(Line::from("Speed: ?".to_string()));
+        }
+        if let Some(heading) = gpsdata.heading {
+            gps_text_two.push(Line::from(format!("Heading: {}°", heading)));
+        } else {
+            gps_text_two.push(Line::from("Heading: ?".to_string()));
+        }
+
+        if let Some(eph) = gpsdata.eph {
+            gps_text_two.push(Line::from(format!("EPH: {}m", eph)));
+        } else {
+            gps_text_two.push(Line::from("EPH: ?".to_string()));
+        }
+        if let Some(epv) = gpsdata.epv {
+            gps_text_two.push(Line::from(format!("EPV: {}m", epv)));
+        } else {
+            gps_text_two.push(Line::from("EPV: ?".to_string()));
+        }
+        if let Some(time) = gpsdata.timestamp {
+            gps_text_two.push(Line::from(format!("Time: {}", time)));
+        } else {
+            gps_text_two.push(Line::from("Time: ?".to_string()));
+        }
+
+        let para_one = Paragraph::new(gps_text_one).alignment(Alignment::Left);
+        let para_two = Paragraph::new(gps_text_two).alignment(Alignment::Left);
+
+        frame.render_widget(para_one, top_right_layout[0]);
+        frame.render_widget(para_two, top_right_layout[1]);
+    } else {
+        let top_right_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Snowfall for geeks (No GPS) ");
+
+        let snowstorm = Snowstorm::frame(
+            oxide.ui_state.snowstorm.clone(),
+            top_right_block.inner(top_layout[1]),
+        );
+        oxide.ui_state.snowstorm = snowstorm.clone();
+
+        frame.render_widget(snowstorm, top_right_block.inner(top_layout[1]));
+        frame.render_widget(top_right_block, top_layout[1]);
+    }
 
     // Splits Top Left Block in half
-    let top_left_layout = Layout::default()
+    let top_left_layout: std::rc::Rc<[Rect]> = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(top_left_block.inner(top_layout[0]));
 
     frame.render_widget(top_left_block, top_layout[0]);
 
-    let snowstorm = Snowstorm::frame(
-        oxide.ui_state.snowstorm.clone(),
-        top_right_block.inner(top_layout[1]),
-    );
-    oxide.ui_state.snowstorm = snowstorm.clone();
-
-    frame.render_widget(snowstorm, top_right_block.inner(top_layout[1]));
-    frame.render_widget(top_right_block, top_layout[1]);
-
-    let mut status_text_one = vec![];
+    let mut status_text_one: Vec<Line<'_>> = vec![];
     status_text_one.push(Line::from(format!("Beacons: {}", oxide.counters.beacons)));
     status_text_one.push(Line::from(format!(
         "Probe Requests: {}",
