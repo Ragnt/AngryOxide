@@ -2,7 +2,7 @@
 members = ["libs/libwifi", "libs/libwifi_macros", "libs/pcap-file"]
 
 [workspace.package]
-version = "0.5.4"
+version = "0.5.5"
 authors = ["Ryan Butler"]
 description = "80211 Attack Platfrom"
 license = "MIT"
@@ -15,7 +15,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nl80211-ng = { version = "0.1.1" }
+nl80211-ng = { version = "0.1.4" }
 libwifi = { version = "0.3.1", path = "libs/libwifi" }
 pcap-file = { version = "2.0.0", path = "libs/pcap-file" }
 byteorder = "1.5.0"
