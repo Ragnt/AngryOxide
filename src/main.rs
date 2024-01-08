@@ -1696,22 +1696,8 @@ fn handle_data_frame(
                 essid.cloned(),
             );
 
-            // Make sure it added and set the handshake to AP-Less
-            match result {
-                Ok(mut handshake) => {
-                    oxide.status_log.add_message(StatusMessage::new(
-                        MessageType::Info,
-                        format!("New Rogue M2: {dest} ({})", essid.unwrap()),
-                    ));
-                    handshake.apless = true;
-                }
-                Err(e) => {
-                    oxide.status_log.add_message(StatusMessage::new(
-                        MessageType::Info,
-                        format!("Eapol Failed to Add Rogue M2 | {e}"),
-                    ));
-                }
-            }
+            // Set to apless
+            oxide.handshake_storage.set_apless_for_ap(&ap_addr);
 
             // Set the Station that we collected a RogueM2
             if let Some(station) = oxide.unassoc_clients.get_device(&station_addr) {

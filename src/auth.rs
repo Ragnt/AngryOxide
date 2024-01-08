@@ -577,6 +577,16 @@ impl HandshakeStorage {
             .collect()
     }
 
+    pub fn set_apless_for_ap(&mut self, ap_mac: &MacAddress) {
+        for (key, handshakes) in self.handshakes.iter_mut() {
+            if &key.ap_mac == ap_mac {
+                for handshake in handshakes {
+                    handshake.apless = true;
+                }
+            }
+        }
+    }
+
     pub fn has_complete_handshake_for_ap(&self, ap_mac: &MacAddress) -> bool {
         self.handshakes.iter().any(|(key, handshakes)| {
             &key.ap_mac == ap_mac && handshakes.iter().any(|hs| hs.complete())
