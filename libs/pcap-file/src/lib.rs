@@ -17,7 +17,3 @@ pub(crate) mod read_buffer;
 
 pub mod pcap;
 pub mod pcapng;
-
-#[allow(dead_code)]
-#[doc = include_str!("../README.md")]
-fn readme_compile_exemples() {}
