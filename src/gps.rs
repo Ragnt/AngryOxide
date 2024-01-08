@@ -217,7 +217,7 @@ impl GPSDSource {
                         continue;
                     };
                     stream
-                        .set_read_timeout(Some(Duration::from_secs(1)))
+                        .set_read_timeout(Some(Duration::from_secs(2)))
                         .expect("set_read_timeout call failed");
 
                     let mut r = io::BufReader::new(&stream);
