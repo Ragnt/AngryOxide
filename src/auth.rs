@@ -170,7 +170,11 @@ impl FourWayHandshake {
                 "\u{2705}".to_string()
             }
         } else {
-            "--".to_string()
+            if self.apless {
+                "RG".to_string()
+            } else {
+                "--".to_string()
+            }
         };
         tuple
     }
