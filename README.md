@@ -1,7 +1,6 @@
+# AngryOxide 😡
 
 ![Logo](death.png)
-
-# AngryOxide 😡
 
 ### A Rust WPA2 Attack tool.
 
@@ -12,25 +11,28 @@ The overall goal of this tool is to provide a single-interface survey capability
 ## Features
 
 - Active state-based attack engine used to retrieve relevent EAPOL messages from Access Points and clients.
-- Target List 
+- Target List option to limit attack scope.
+- A Terminal-UI that presents all relevent data while still living in the terminal for easy usage over SSH.
 - Avoids DEAUTHENTICATION frames that cause more damage than good to the authentication sequence.
 - EAPOL 4-Way-Handshake validation using Nonce Correction, Replay Counter validation, and Temporal validation.
-- PMKID collection and validation.
-- GPSD support.
+- Automatically elicits PMKID from access points where available.
+- Utilizes GPSD with ability to set remote GPSD service address.
 - Provides pcapng files with embedded GPS using the [Kismet Format](https://www.kismetwireless.net/docs/dev/pcapng_gps/).
-- Provides a kismetdb file with all frames+GPS for post-processing.
-- Wraps all output files in a GZipped Tarball.
+- Provides a kismetdb file with all frames (with GPS) for post-processing.
+- Wraps all output files in a gzipped tarball.
 
 ## Attacks
 
 Will by default attack ALL access points in range, unless atleast one target is supplied, at which point the tool will only transmit against defined targets. (But will still passively collect on other access points).
 
 - Attempts authentication/association sequence to produce EAPOL Message 1 (PMKID Collection)
-- Attempts to retrieve hidden SSID's with undirect probe requests.
-- Utilized Anonymous Reassociation to force Accesspoints to Deauthenticate their own clients (Bypass MFP)
-- Attempts to downgrade RSN modes to WPA2/CCMP (Probe Response Injection)
+- Attempts to retrieve hidden SSID's with undirected probe requests.
+- Utilized Anonymous Reassociation to force Access Points to deauthenticate their own clients (MFP Bypass)
+- Attempts to downgrade RSN modes to WPA2-CCMP (Probe Response Injection)
 - Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
 - Will send controlled deauthentication frames if told to do so (--deauth)
+
+All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC. 
 
 ## Help
 
