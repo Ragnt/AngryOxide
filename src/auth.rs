@@ -407,6 +407,7 @@ impl FourWayHandshake {
         if let Some(pmkid) = &self.pmkid {
             if let Some(pmkid_format) = self.generate_pmkid_hashcat_format(pmkid) {
                 output += &pmkid_format;
+                output += "\n";
             }
         }
 

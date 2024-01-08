@@ -2,7 +2,7 @@
 members = ["libs/libwifi", "libs/libwifi_macros", "libs/pcap-file"]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Ryan Butler"]
 description = "80211 Attack Platfrom"
 license = "MIT"
@@ -15,7 +15,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nl80211-ng = {version = "0.1.1" }
+nl80211-ng = { version = "0.1.1" }
 libwifi = { version = "0.3.1", path = "libs/libwifi" }
 pcap-file = { version = "2.0.0", path = "libs/pcap-file" }
 byteorder = "1.5.0"
@@ -35,7 +35,10 @@ hex = "0.4.3"
 rand = "0.8.5"
 ctrlc = "3.4.1"
 crossterm = "0.27.0"
-ratatui = { version = "0.25.0", features = ["all-widgets", "unstable-segment-size"] }
+ratatui = { version = "0.25.0", features = [
+    "all-widgets",
+    "unstable-segment-size",
+] }
 chrono = "0.4.31"
 crc = "3.0.1"
 clap = { version = "4.4.10", features = ["derive"] }

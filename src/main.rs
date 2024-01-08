@@ -92,7 +92,7 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
 #[command(author = "Ryan Butler (Ragnt)")]
-#[command(version = "0.5.1")]
+#[command(version = "0.5.2")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 struct Arguments {
     #[arg(short, long)]
@@ -2102,10 +2102,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (_, handshakes) in oxide.handshake_storage.get_handshakes() {
         if !handshakes.is_empty() {
             for hs in handshakes {
-                if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
-                    let essid = hs.essid_to_string();
-                    let hashline = hashcat_string;
-                    handshakes_map.entry(essid).or_default().push(hashline);
+                if hs.complete() {
+                    if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
+                        let essid = hs.essid_to_string();
+                        let hashline = hashcat_string;
+                        handshakes_map.entry(essid).or_default().push(hashline);
+                    }
                 }
             }
         }
@@ -2124,11 +2126,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn write_handshakes(handshakes_map: &HashMap<String, Vec<String>>) -> Result<Vec<String>, ()> {
     let mut hashfiles = Vec::new();
     for (key, values) in handshakes_map {
-        // Open a file for writing with the name format [key].hc22000
         let file_name = format!("{}.hc22000", key);
         let mut file = File::create(&file_name).expect("Could not open hashfile for writing.");
 
-        // Write all the values from the Vec<String> to the file, separated by newlines
         for value in values {
             writeln!(file, "{}", value);
         }
