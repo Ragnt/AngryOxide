@@ -220,7 +220,7 @@ impl FourWayHandshake {
                 new_key
                     .timestamp
                     .duration_since(msg.timestamp)
-                    .unwrap()
+                    .unwrap_or(Duration::from_secs(1))
                     .as_millis()
                     > 200
             }) {
