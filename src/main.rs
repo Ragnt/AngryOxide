@@ -2135,14 +2135,14 @@ fn print_handshake_summary(handshakes_map: &HashMap<String, Vec<String>>) {
             let (handshake_count, pmkid_count) =
                 values
                     .iter()
-                    .fold((0, 0), |(handshake_acc, pmkid_acc), value| {
-                        if value.starts_with("WPA*02") {
-                            (handshake_acc + 1, pmkid_acc)
-                        } else if value.starts_with("WPA*01") {
-                            (handshake_acc, pmkid_acc + 1)
-                        } else {
-                            (handshake_acc, pmkid_acc)
+                    .fold((0, 0), |(mut handshake_acc, mut pmkid_acc), value| {
+                        if value.contains("WPA*02*") {
+                            handshake_acc += 1;
                         }
+                        if value.contains("WPA*01") {
+                            pmkid_acc += 1;
+                        }
+                        (handshake_acc, pmkid_acc)
                     });
 
             println!(
