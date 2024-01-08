@@ -2,11 +2,19 @@
 
 ![Logo](death.png)
 
-### A Rust WPA2 Attack tool.
+### A 802.11 Attack tool built in Rust 🦀
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
 The overall goal of this tool is to provide a single-interface survey capability with advanced automated attacks that result in valid hashlines you can crack with [Hashcat](https://hashcat.net/hashcat/).
+
+This tool is heavily inspired by [hcxdumptool](https://github.com/ZerBea/hcxdumptool) and development wouldn't have been possible without help from ZerBea.
+
+## I wanna use it!
+
+You can download pre-compiled binaries of AngryOxide in the [releases](https://github.com/Ragnt/AngryOxide/releases/latest).
+
+More architectures will be added as I confirm there is no endianess-related issues associated with them.
 
 ## Features
 
