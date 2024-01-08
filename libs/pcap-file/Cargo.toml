@@ -1,0 +1,33 @@
+[package]
+name = "pcap-file"
+edition = "2021"
+version = "2.0.0"
+authors = ["Courvoif <courvoif@pm.me>"]
+description = "A crate to parse, read and write Pcap and PcapNg"
+
+license = "MIT"
+documentation = "https://docs.rs/pcap-file/"
+repository = "https://github.com/courvoif/pcap-file"
+readme = "README.md"
+keywords = ["pcap", "pcapng", "parse", "read", "write"]
+categories = ["encoding", "parsing"]
+
+exclude = ["benches/bench.pcap", "benches/bench.pcapng", "fuzz", "tests"]
+
+
+[dependencies]
+byteorder_slice = "3.0.0"
+derive-into-owned = "0.2.0"
+thiserror = "1.0.35"
+
+[dev-dependencies]
+criterion = "0.4.0"
+glob = "0.3.0"
+hex = "0.4.3"
+
+[[bench]]
+name = "benches"
+harness = false
+
+[profile.bench]
+lto = "fat"

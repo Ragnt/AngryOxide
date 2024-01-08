@@ -1,0 +1,44 @@
+
+[package]
+name = "pcap-file-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.3"
+
+[dependencies.pcap-file]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "pcap_parser"
+path = "fuzz_targets/pcap_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "pcap_ng_parser"
+path = "fuzz_targets/pcap_ng_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "pcap_reader"
+path = "fuzz_targets/pcap_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "pcap_ng_reader"
+path = "fuzz_targets/pcap_ng_reader.rs"
+test = false
+doc = false
