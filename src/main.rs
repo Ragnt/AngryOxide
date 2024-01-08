@@ -1987,12 +1987,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if last_hop_time.elapsed() >= hop_interval {
             if let Some(&channel) = cycle_iter.next() {
-                if let Err(e) = set_interface_chan(idx, channel) {
+                threaded_set_channel(idx, channel);
+                /* if let Err(e) = set_interface_chan(idx, channel) {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Error: {e:?}"),
                     ));
-                }
+                } */
                 last_hop_time = Instant::now();
             }
         }
@@ -2194,31 +2195,10 @@ fn reset_terminal() {
     disable_raw_mode().expect("Could not disable raw mode.");
 }
 
-#[allow(dead_code)]
-fn start_channel_hopping_thread(
-    running: Arc<AtomicBool>,
-    hop_interval: Duration,
-    idx: i32,
-    channels: Vec<u8>,
-) -> thread::JoinHandle<()> {
+fn threaded_set_channel(idx: i32, channel: u8) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let mut cycle_iter = channels.iter().cycle();
-        let mut last_hop_time = Instant::now();
-        if let Some(&channel) = cycle_iter.next() {
-            if let Err(e) = set_interface_chan(idx, channel) {
-                eprintln!("{}", e);
-            }
-        }
-        while running.load(Ordering::SeqCst) {
-            if last_hop_time.elapsed() >= hop_interval {
-                if let Some(&channel) = cycle_iter.next() {
-                    if let Err(e) = set_interface_chan(idx, channel) {
-                        eprintln!("{}", e);
-                    }
-                    last_hop_time = Instant::now();
-                }
-            }
-            thread::sleep(Duration::from_millis(10));
+        if let Err(e) = set_interface_chan(idx, channel) {
+            eprintln!("{}", e);
         }
     })
 }
