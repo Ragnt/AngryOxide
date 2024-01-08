@@ -15,7 +15,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nl80211-ng = {version = "0.1.1", path = "../nl80211-ng"}
+nl80211-ng = {version = "0.1.1" }
 libwifi = { version = "0.3.1", path = "libs/libwifi" }
 pcap-file = { version = "2.0.0", path = "libs/pcap-file" }
 byteorder = "1.5.0"
