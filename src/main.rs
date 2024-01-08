@@ -1674,12 +1674,17 @@ fn handle_data_frame(
             && (eapol.determine_key_type() == libwifi::frame::MessageType::Message2)
         {
             let essid = oxide.rogue_essids.get(&station_addr);
+            let mut rogue_eapol = oxide.rogue_m1.clone();
+            rogue_eapol.timestamp = eapol
+                .timestamp
+                .checked_sub(Duration::from_millis(10))
+                .unwrap_or(eapol.timestamp);
 
             // Add our rogue M1
             let _ = oxide.handshake_storage.add_or_update_handshake(
                 &ap_addr,
                 &station_addr,
-                oxide.rogue_m1.clone(),
+                rogue_eapol,
                 essid.cloned(),
             );
 
