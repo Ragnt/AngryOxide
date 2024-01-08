@@ -2,7 +2,7 @@
 members = ["libs/libwifi", "libs/libwifi_macros", "libs/pcap-file"]
 
 [workspace.package]
-version = "0.5.5"
+version = "0.5.6"
 authors = ["Ryan Butler"]
 description = "80211 Attack Platfrom"
 license = "MIT"

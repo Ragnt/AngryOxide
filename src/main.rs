@@ -40,7 +40,7 @@ use nix::unistd::geteuid;
 use nl80211_ng::channels::WiFiChannel;
 use nl80211_ng::{
     get_interface_info_name, set_interface_chan, set_interface_down, set_interface_mac,
-    set_interface_monitor, set_interface_station, set_interface_up, Interface,
+    set_interface_monitor, set_interface_station, set_interface_up, Interface, Nl80211,
 };
 
 use flate2::write::GzEncoder;
@@ -377,6 +377,7 @@ impl Counters {
 pub struct OxideRuntime {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
+    netlink: Nl80211,
     ui_state: UiState,
     notx: bool,
     deauth: bool,
@@ -410,14 +411,6 @@ impl OxideRuntime {
         filename: String,
         cli_gpsd: String,
     ) -> Self {
-        /* println!(
-                "
-         █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████
-        ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██
-        ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████
-        ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██
-        ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
-            ); */
         println!("Starting AngryOxide... 😈");
 
         // Setup initial lists / logs
@@ -427,12 +420,19 @@ impl OxideRuntime {
         let mut log = status::MessageLog::new();
 
         // Get + Setup Interface
-        let iface = match get_interface_info_name(&interface_name) {
-            Ok(inf) => inf,
-            Err(e) => {
-                println!("{}", get_art(&e));
-                exit(EXIT_FAILURE);
-            }
+
+        let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
+
+        let iface = if let Some(interface) = netlink
+            .get_interfaces()
+            .iter()
+            .find(|&(_, iface)| iface.name_as_string() == interface_name)
+            .map(|(_, iface)| iface.clone())
+        {
+            interface
+        } else {
+            println!("{}", get_art("Interface not found"));
+            exit(EXIT_FAILURE);
         };
 
         let idx = iface.index.unwrap();
@@ -461,12 +461,11 @@ impl OxideRuntime {
         // Put interface into the right mode
         thread::sleep(Duration::from_secs(1));
         println!("Setting {} down.", interface_name);
-        set_interface_down(idx).ok();
+        netlink.set_interface_down(idx).ok();
         thread::sleep(Duration::from_millis(500));
 
         // Setup Rogue Mac's
         let mut rogue_client = MacAddress::random();
-        let rogue_ap = MacAddress::random();
 
         if let Some(rogue) = rogue {
             if let Ok(mac) = MacAddress::from_str(&rogue) {
@@ -481,7 +480,7 @@ impl OxideRuntime {
         } else {
             println!("Randomizing {} mac to {}", interface_name, rogue_client);
         }
-        set_interface_mac(idx, &rogue_client.0).ok();
+        netlink.set_interface_mac(idx, &rogue_client.0).ok();
 
         // Put into monitor mode
         thread::sleep(Duration::from_millis(500));
@@ -490,16 +489,17 @@ impl OxideRuntime {
             interface_name,
             iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x)
         );
-        set_interface_monitor(
-            idx,
-            iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x),
-        )
-        .ok();
+        netlink
+            .set_interface_monitor(
+                iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x),
+                idx,
+            )
+            .ok();
 
         // Set interface up
         thread::sleep(Duration::from_millis(500));
         println!("Setting {} up.", interface_name);
-        set_interface_up(idx).ok();
+        netlink.set_interface_up(idx).ok();
 
         // Open sockets
         let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
@@ -591,6 +591,7 @@ impl OxideRuntime {
         OxideRuntime {
             rx_socket,
             tx_socket,
+            netlink,
             ui_state: state,
             notx,
             deauth,
@@ -1987,13 +1988,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if last_hop_time.elapsed() >= hop_interval {
             if let Some(&channel) = cycle_iter.next() {
-                threaded_set_channel(idx, channel);
-                /* if let Err(e) = set_interface_chan(idx, channel) {
+                if let Err(e) = oxide.netlink.set_interface_chan(idx, channel) {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Error: {e:?}"),
                     ));
-                } */
+                }
                 last_hop_time = Instant::now();
             }
         }
@@ -2069,13 +2069,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Setting {} down.", interface_name);
-    match set_interface_down(idx) {
+    match oxide.netlink.set_interface_down(idx) {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }
 
     println!("Setting {} to station mode.", interface_name);
-    match set_interface_station(idx) {
+    match oxide.netlink.set_interface_station(idx) {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }
@@ -2193,12 +2193,4 @@ fn reset_terminal() {
     execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
     execute!(stdout(), DisableMouseCapture).expect("Could not disable mouse capture.");
     disable_raw_mode().expect("Could not disable raw mode.");
-}
-
-fn threaded_set_channel(idx: i32, channel: u8) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        if let Err(e) = set_interface_chan(idx, channel) {
-            eprintln!("{}", e);
-        }
-    })
 }
