@@ -92,7 +92,7 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
 #[command(author = "Ryan Butler (Ragnt)")]
-#[command(version = "0.4.0")]
+#[command(version = "0.5.0")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 struct Arguments {
     #[arg(short, long)]
