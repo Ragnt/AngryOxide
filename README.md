@@ -21,6 +21,17 @@ The overall goal of this tool is to provide a single-interface survey capability
 - Provides a kismetdb file with all frames+GPS for post-processing.
 - Wraps all output files in a GZipped Tarball.
 
+## Attacks
+
+Will by default attack ALL access points in range, unless atleast one target is supplied, at which point the tool will only transmit against defined targets. (But will still passively collect on other access points).
+
+- Attempts authentication/association sequence to produce EAPOL Message 1 (PMKID Collection)
+- Attempts to retrieve hidden SSID's with undirect probe requests.
+- Utilized Anonymous Reassociation to force Accesspoints to Deauthenticate their own clients (Bypass MFP)
+- Attempts to downgrade RSN modes to WPA2/CCMP (Probe Response Injection)
+- Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
+- Will send controlled deauthentication frames if told to do so (--deauth)
+
 ## Help
 
 ```bash

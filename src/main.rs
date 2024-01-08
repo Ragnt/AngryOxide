@@ -58,7 +58,7 @@ use rawsocks::{open_socket_rx, open_socket_tx};
 use tar::Builder;
 use tx::{
     build_association_response, build_authentication_response, build_cts,
-    build_disassocation_from_client, build_eapol_m1,
+    build_disassocation_from_client, build_eapol_m1, build_probe_request_undirected,
 };
 use uuid::Uuid;
 
@@ -386,6 +386,7 @@ pub struct OxideRuntime {
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
     rogue_m1: EapolKey,
+    rogue_essids: HashMap<MacAddress, String>,
     handshake_storage: HandshakeStorage,
     frame_count: u64,
     eapol_count: u64,
@@ -586,6 +587,8 @@ impl OxideRuntime {
         let mut gpsd = GPSDSource::new(host, port);
         gpsd.start();
 
+        let rogue_essids: HashMap<MacAddress, String> = HashMap::new();
+
         OxideRuntime {
             rx_socket,
             tx_socket,
@@ -601,6 +604,7 @@ impl OxideRuntime {
             unassoc_clients,
             rogue_client,
             rogue_m1,
+            rogue_essids,
             interface: iface,
             interface_uuid,
             counters: Counters::default(),
@@ -649,6 +653,12 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     let gps_data = oxide.gps_source.get_gps();
     let source: MacAddress;
     let destination: MacAddress;
+
+    // Send a probe request out there every 100 beacons.
+    if oxide.counters.beacons % 200 == 0 && !oxide.notx {
+        let frx = build_probe_request_undirected(&oxide.rogue_client, oxide.counters.sequence2());
+        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+    }
 
     match libwifi::parse_frame(payload, fcs) {
         Ok(frame) => {
@@ -1083,13 +1093,14 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                     };
 
                     if ap_mac == oxide.rogue_client {
+                        let rogue_ssid = ssid.unwrap_or("".to_string());
                         // We need to send an association response back
                         let frx = build_association_response(
                             &client_mac,
                             &ap_mac,
                             &ap_mac,
                             oxide.counters.sequence3(),
-                            &ssid.unwrap_or("".to_string()),
+                            &rogue_ssid,
                         );
                         write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
                         // Then an M1
@@ -1100,6 +1111,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             oxide.counters.sequence3(),
                             &oxide.rogue_m1,
                         );
+                        oxide.rogue_essids.insert(client_mac, rogue_ssid);
                         write_packet(oxide.tx_socket.as_raw_fd(), &m1)?;
                     }
                 }
@@ -1622,40 +1634,90 @@ fn handle_data_frame(
         .antenna_signal
         .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
 
-    if station_addr.is_real_device() && station_addr != oxide.rogue_client {
-        // Make sure this isn't a broadcast or something
-        let client = &Station::new_station(
-            station_addr,
-            if to_ds {
+    if ap_addr != oxide.rogue_client {
+        if station_addr.is_real_device() && station_addr != oxide.rogue_client {
+            // Make sure this isn't a broadcast or something
+            let client = &Station::new_station(
+                station_addr,
+                if to_ds {
+                    signal
+                } else {
+                    AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
+                },
+                Some(ap_addr),
+            );
+            clients.add_or_update_device(station_addr, client);
+            oxide.unassoc_clients.remove_device(&station_addr);
+        }
+
+        // Create and Add/Update AccessPoint
+        let ap = AccessPoint::new_with_clients(
+            ap_addr,
+            if from_ds {
                 signal
             } else {
                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
             },
-            Some(ap_addr),
+            None,
+            Some(chan),
+            None,
+            clients,
+            oxide.rogue_client,
         );
-        clients.add_or_update_device(station_addr, client);
-        oxide.unassoc_clients.remove_device(&station_addr);
+        oxide.access_points.add_or_update_device(ap_addr, &ap);
     }
-
-    // Create and Add/Update AccessPoint
-    let ap = AccessPoint::new_with_clients(
-        ap_addr,
-        if from_ds {
-            signal
-        } else {
-            AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
-        },
-        None,
-        Some(chan),
-        None,
-        clients,
-        oxide.rogue_client,
-    );
-    oxide.access_points.add_or_update_device(ap_addr, &ap);
 
     // Handle frames that contain EAPOL.
     if let Some(eapol) = data_frame.eapol_key().clone() {
         oxide.eapol_count += 1;
+
+        if ap_addr == oxide.rogue_client
+            && (eapol.determine_key_type() == libwifi::frame::MessageType::Message2)
+        {
+            let essid = oxide.rogue_essids.get(&station_addr);
+
+            // Add our rogue M1
+            let _ = oxide.handshake_storage.add_or_update_handshake(
+                &ap_addr,
+                &station_addr,
+                oxide.rogue_m1.clone(),
+                essid.cloned(),
+            );
+
+            // Add the RogueM2
+            let result = oxide.handshake_storage.add_or_update_handshake(
+                &ap_addr,
+                &station_addr,
+                eapol.clone(),
+                essid.cloned(),
+            );
+
+            // Make sure it added and set the handshake to AP-Less
+            match result {
+                Ok(mut handshake) => {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Info,
+                        format!("New Rogue M2: {dest} ({})", essid.unwrap()),
+                    ));
+                    handshake.apless = true;
+                }
+                Err(e) => {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Info,
+                        format!("Eapol Failed to Add Rogue M2 | {e}"),
+                    ));
+                }
+            }
+
+            // Set the Station that we collected a RogueM2
+            if let Some(station) = oxide.unassoc_clients.get_device(&station_addr) {
+                station.has_rogue_m2 = true;
+            }
+
+            // Don't need to go any further, because we know this wasn't a valid handshake otherwise.
+            return Ok(());
+        }
+
         let ap = if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
             ap
         } else {

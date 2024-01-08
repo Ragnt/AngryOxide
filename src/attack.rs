@@ -41,18 +41,6 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     };
 
-    // attempt to get SSID using a probe request if there isn't one.
-    // This sends way too many undirected probe requests.
-    /* if ap_data.ssid.is_none() || ap_data.ssid.clone().unwrap() == "" {
-        // Attempt to get the SSID.
-        let frx = build_probe_request_undirected(&oxide.rogue_client, oxide.counters.sequence2());
-        if !oxide.notx {
-            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-            ap_data.interactions += 1;
-        }
-        return Ok(());
-    } */
-
     // If the interaction cooldown isn't timed out (aka timer1).
     if !ap_data.auth_sequence.is_t1_timeout() {
         return Ok(());
