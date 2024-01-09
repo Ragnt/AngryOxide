@@ -60,6 +60,7 @@ use tx::{
     build_association_response, build_authentication_response, build_cts,
     build_disassocation_from_client, build_eapol_m1, build_probe_request_undirected,
 };
+use ui::UiState;
 use uuid::Uuid;
 
 use crate::ascii::get_art;
@@ -67,7 +68,7 @@ use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
-use crate::ui::print_ui;
+use crate::ui::{print_ui, MenuType};
 use crate::util::parse_ip_address_port;
 
 use libwifi::{Addresses, Frame};
@@ -121,204 +122,6 @@ struct Arguments {
     #[arg(long)]
     /// Optional send deauths.
     deauth: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum MenuType {
-    AccessPoints,
-    Clients,
-    Handshakes,
-    Messages,
-}
-
-impl MenuType {
-    pub fn index(&self) -> usize {
-        *self as usize
-    }
-
-    pub fn get(usize: usize) -> MenuType {
-        match usize {
-            0 => MenuType::AccessPoints,
-            1 => MenuType::Clients,
-            2 => MenuType::Handshakes,
-            3 => MenuType::Messages,
-            _ => MenuType::AccessPoints,
-        }
-    }
-
-    pub fn next(&self) -> MenuType {
-        let mut idx = *self as usize;
-        idx += 1;
-        if idx > 3 {
-            idx = 3
-        }
-        MenuType::get(idx)
-    }
-
-    pub fn previous(&self) -> MenuType {
-        let mut idx = *self as usize;
-        idx = idx.saturating_sub(1);
-        MenuType::get(idx)
-    }
-}
-
-pub struct UiState {
-    current_menu: MenuType,
-    paused: bool,
-    // AP Menu Options
-    ap_sort: u8,
-    ap_state: TableState,
-    ap_table_data: WiFiDeviceList<AccessPoint>,
-    ap_sort_reverse: bool,
-
-    // Client Menu Options
-    cl_sort: u8,
-    cl_state: TableState,
-    cl_table_data: WiFiDeviceList<Station>,
-    cl_sort_reverse: bool,
-
-    // Handshake Menu Options
-    hs_sort: u8,
-    hs_state: TableState,
-    hs_table_data: HandshakeStorage,
-    hs_sort_reverse: bool,
-
-    messages_sort: u8,
-    messages_state: TableState,
-    messages_table_data: Vec<StatusMessage>,
-    messages_sort_reverse: bool,
-
-    snowstorm: Snowstorm,
-}
-
-impl UiState {
-    pub fn menu_next(&mut self) {
-        self.current_menu = self.current_menu.next();
-    }
-
-    pub fn menu_back(&mut self) {
-        self.current_menu = self.current_menu.previous();
-    }
-
-    pub fn sort_next(&mut self) {
-        match self.current_menu {
-            MenuType::AccessPoints => self.ap_sort_next(),
-            MenuType::Clients => self.cl_sort_next(),
-            MenuType::Handshakes => self.hs_sort_next(),
-            MenuType::Messages => (),
-        };
-    }
-
-    fn ap_sort_next(&mut self) {
-        self.ap_sort += 1;
-        if self.ap_sort == 7 {
-            self.ap_sort = 0;
-        }
-    }
-
-    fn cl_sort_next(&mut self) {
-        self.cl_sort += 1;
-        if self.cl_sort == 5 {
-            self.cl_sort = 0;
-        }
-    }
-
-    fn hs_sort_next(&mut self) {
-        self.hs_sort += 1;
-        if self.hs_sort == 4 {
-            self.hs_sort = 0;
-        }
-    }
-
-    fn messages_sort_next(&mut self) {
-        self.messages_sort += 1;
-        if self.messages_sort == 2 {
-            self.messages_sort = 0;
-        }
-    }
-
-    pub fn toggle_pause(&mut self) {
-        self.paused = !self.paused
-    }
-
-    pub fn toggle_reverse(&mut self) {
-        let sort = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_sort_reverse,
-            MenuType::Clients => &mut self.cl_sort_reverse,
-            MenuType::Handshakes => &mut self.hs_sort_reverse,
-            MenuType::Messages => &mut self.messages_sort_reverse,
-        };
-        *sort = !*sort;
-    }
-
-    pub fn table_next_item(&mut self, table_size: usize) {
-        let state = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => {
-                if i >= table_size - 1 {
-                    table_size - 1
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        state.select(Some(i));
-    }
-
-    pub fn table_next_item_big(&mut self, table_size: usize) {
-        let state = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(mut i) => {
-                i += 10;
-                if i >= table_size - 1 {
-                    table_size - 1
-                } else {
-                    i
-                }
-            }
-            None => 0,
-        };
-        state.select(Some(i));
-    }
-
-    pub fn table_previous_item(&mut self) {
-        let state: &mut TableState = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => i.saturating_sub(1),
-            None => 0,
-        };
-        state.select(Some(i));
-    }
-
-    pub fn table_previous_item_big(&mut self) {
-        let state: &mut TableState = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => i.saturating_sub(10),
-            None => 0,
-        };
-        state.select(Some(i));
-    }
 }
 
 #[derive(Default)]
