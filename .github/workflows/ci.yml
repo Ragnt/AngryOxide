@@ -2,9 +2,8 @@ name: Builds and Release
 
 on:
   push:
-    branches:
-      - "**"
-  pull_request:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 env:
   CRATE_NAME: angry_oxide
