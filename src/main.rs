@@ -107,10 +107,10 @@ struct Arguments {
     /// Optional output filename.
     output: Option<String>,
     #[arg(short, long)]
-    /// Optional tx mac for rogue-based attacks - will randomize if excluded.
+    /// Optional TX MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(long, default_value = "127.0.0.1:2947")]
-    /// Optional HOST:Port for GPSD connection.
+    /// Optionally alter default HOST:Port for GPSD connection.
     gpsd: String,
     #[arg(long)]
     /// Optional do not transmit, passive only
