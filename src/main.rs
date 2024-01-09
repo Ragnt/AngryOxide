@@ -1929,7 +1929,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 running.store(false, Ordering::SeqCst);
             }
         };
-        //thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_micros(100));
     }
 
     // Execute cleanup
