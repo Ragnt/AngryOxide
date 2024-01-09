@@ -40,7 +40,7 @@ Will by default attack ALL access points in range, unless atleast one target is 
 - Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
 - Will send controlled deauthentication frames if told to do so (--deauth)
 
-All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC. 
+All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC.
 
 ## Help
 
@@ -62,7 +62,7 @@ Options:
   -V, --version                Print version
 ```
 
-## Screenshots
+## Screenshots!
 
 ![AccessPoints Page](screenshots/angry_oxide_demo.png)
 ![Handshakes Page](screenshots/handshakes.png)
