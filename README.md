@@ -2,7 +2,7 @@
 
 ![Logo](death.png)
 
-### A 802.11 Attack tool built in Rust 🦀
+### A 802.11 Attack tool built in Rust 🦀 !
 
 [![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Ragnt/AngryOxide) ![Discord](https://img.shields.io/discord/1194365883099922643)
 
