@@ -4,6 +4,8 @@
 
 ### A 802.11 Attack tool built in Rust 🦀
 
+[![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?event=release)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![Discord](https://img.shields.io/discord/1194365883099922643)
+
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
 The overall goal of this tool is to provide a single-interface survey capability with advanced automated attacks that result in valid hashlines you can crack with [Hashcat](https://hashcat.net/hashcat/).
