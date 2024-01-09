@@ -43,33 +43,27 @@ jobs:
             bin: angry_oxide
             name: angry_oxide-linux-armv7hf-musl.tar.gz
 
-          - os_name: Android-aarch64
-            os: ubuntu-20.04
-            target: aarch64-linux-android
-            bin: angry_oxide
-            name: angry_oxide-android-aarch64.tar.gz
-
           - os_name: Linux-mips
             os: ubuntu-20.04
-            target: mips-unknown-linux-musl
+            target: mips-unknown-linux-gnu
             bin: angry_oxide
             name: angry_oxide-mips.tar.gz
 
           - os_name: Linux-mips64
             os: ubuntu-20.04
-            target: mips64-unknown-linux-muslabi64
+            target: mips64-unknown-linux-gnu
             bin: angry_oxide
             name: angry_oxide-mips64.tar.gz
 
           - os_name: Linux-mipsel
             os: ubuntu-20.04
-            target: mipsel-unknown-linux-musl
+            target: mipsel-unknown-linux-gnu
             bin: angry_oxide
             name: angry_oxide-mipsel.tar.gz
 
           - os_name: Linux-mips64el
             os: ubuntu-20.04
-            target: mips64el-unknown-linux-muslabi64
+            target: mips64el-unknown-linux-gnu
             bin: angry_oxide
             name: angry_oxide-mips64el.tar.gz
 
