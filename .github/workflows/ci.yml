@@ -23,6 +23,12 @@ jobs:
         platform:
           - os_name: Linux-x86_64
             os: ubuntu-20.04
+            target: x86_64-unknown-linux-gnu
+            bin: angry_oxide
+            name: angry_oxide-linux-x86_64.tar.gz
+
+          - os_name: Linux-x86_64_musl
+            os: ubuntu-20.04
             target: x86_64-unknown-linux-musl
             bin: angry_oxide
             name: angry_oxide-linux-x86_64-musl.tar.gz
