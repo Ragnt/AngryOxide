@@ -97,9 +97,12 @@ struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
     interface: String,
-    #[arg(short, long, default_values_t = [1, 6, 11]) ]
-    /// Optional list of channels to scan.
+    #[arg(short, long)]
+    /// Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded.
     channels: Vec<u8>,
+    #[arg(short, long)]
+    /// Optional band to scan - Will include all channels interface can support.
+    band: Vec<u8>,
     #[arg(short, long)]
     /// Optional list of targets to attack - will attack everything if excluded.
     targets: Option<Vec<String>>,
@@ -399,6 +402,7 @@ pub struct OxideRuntime {
     gps_source: GPSDSource,
     status_log: status::MessageLog,
     current_channel: WiFiChannel,
+    hop_channels: Vec<u8>,
 }
 
 impl OxideRuntime {
@@ -410,6 +414,8 @@ impl OxideRuntime {
         deauth: bool,
         filename: String,
         cli_gpsd: String,
+        cli_band: Vec<u8>,
+        cli_channels: Vec<u8>,
     ) -> Self {
         println!("Starting AngryOxide... 😈");
 
@@ -439,6 +445,63 @@ impl OxideRuntime {
         let interface_uuid = Uuid::new_v4();
         println!("Interface Summary:");
         println!("{}", iface.pretty_print());
+
+        // Setup Channels //
+        let iface_bands: HashMap<u8, Vec<u8>> = iface.get_frequency_list_simple().unwrap();
+        let mut hop_channels: Vec<u8> = Vec::new();
+        let mut channels = cli_channels;
+        let bands = cli_band;
+        let mut default_chans = false;
+
+        if bands.is_empty() && channels.is_empty() {
+            channels.extend(vec![1, 6, 11]);
+            default_chans = true;
+        }
+
+        // Add all channels from bands
+        for band in &bands {
+            let band_chans = if let Some(chans) = iface_bands.get(&band) {
+                chans.clone()
+            } else {
+                println!(
+                    "WARNING: Band {} not available for interface {}... ignoring",
+                    band,
+                    iface.name_as_string()
+                );
+                vec![]
+            };
+            hop_channels.extend(band_chans);
+        }
+
+        // Add all individual channels (if valid)
+
+        for channel in &channels {
+            if !hop_channels.contains(&channel) {
+                if iface_bands.values().any(|bands| bands.contains(&channel)) {
+                    hop_channels.push(*channel);
+                } else {
+                    println!(
+                        "WARNING: Channel {} not available for interface {}... ignoring.",
+                        channel,
+                        iface.name_as_string()
+                    );
+                }
+            }
+        }
+
+        // Exit if we tried to provide channels but nothing made it to the hopper.
+        if !default_chans && hop_channels.is_empty() {
+            println!(
+                "{}",
+                get_art(&format!(
+                    "No channels provided are supported by {}",
+                    iface.name_as_string()
+                ))
+            );
+            exit(EXIT_FAILURE);
+        }
+
+        println!("Channels: {:?}", hop_channels);
 
         // Setup targets
         let target_vec: Vec<MacAddress> = if let Some(vec_targets) = targets {
@@ -586,7 +649,11 @@ impl OxideRuntime {
         let mut gpsd = GPSDSource::new(host, port);
         gpsd.start();
 
+        // Setup Rogue_ESSID's tracker
         let rogue_essids: HashMap<MacAddress, String> = HashMap::new();
+
+        println!("Cranking up the 4D3D3D3... 🎩");
+        thread::sleep(Duration::from_secs(2));
 
         OxideRuntime {
             rx_socket,
@@ -613,6 +680,7 @@ impl OxideRuntime {
             gps_source: gpsd,
             status_log: status::MessageLog::new(),
             current_channel: WiFiChannel::Channel2GHz(1),
+            hop_channels,
         }
     }
 
@@ -1914,21 +1982,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.deauth,
         filename.clone(),
         cli.gpsd,
+        cli.band,
+        cli.channels,
     );
+
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
         "Starting...".to_string(),
     ));
+
     let iface = oxide.interface.clone();
     let idx = iface.index.unwrap();
-    let interface_name =
-        String::from_utf8(iface.name.unwrap()).expect("cannot get interface name from bytes.");
+    let interface_name = String::from_utf8(iface.clone().name.unwrap())
+        .expect("cannot get interface name from bytes.");
 
     let duration = Duration::from_secs(1);
     thread::sleep(duration);
 
     let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
 
     let mut seconds_timer = Instant::now();
     let seconds_interval = Duration::from_secs(1);
@@ -1941,11 +2012,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_interactions_clear = Instant::now();
     let interactions_interval = Duration::from_secs(120);
 
+    // Setup hop data
     let hop_interval = Duration::from_secs(2);
     let mut last_hop_time = Instant::now();
-    let channels = cli.channels;
-    let mut cycle_iter = channels.iter().cycle();
 
+    // Set starting channel and create the hopper cycle.
+    let channels_binding = oxide.hop_channels.clone();
+    let mut cycle_iter = channels_binding.iter().cycle();
     if let Some(&channel) = cycle_iter.next() {
         if let Err(e) = set_interface_chan(idx, channel) {
             eprintln!("{}", e);
@@ -1954,16 +2027,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
-        format!("Setting channel hopper: {:?}", channels),
+        format!("Setting channel hopper: {:?}", oxide.hop_channels),
     ));
-
-    //we don't really need this. We still process frames plenty fast an d this had the potential of interupting us
-    //in the middle of trying to send out a response.
-    //start_channel_hopping_thread(running.clone(), hop_interval, idx, channels);
-
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
 
     let start_time = Instant::now();
     let mut terminal =
@@ -2059,6 +2124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 running.store(false, Ordering::SeqCst);
             }
         };
+        thread::sleep(Duration::from_millis(1));
     }
 
     // Execute cleanup
