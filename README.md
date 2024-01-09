@@ -55,7 +55,7 @@ Options:
   -t, --targets <TARGETS>      Optional list of targets to attack - will attack everything if excluded
   -o, --output <OUTPUT>        Optional output filename
   -r, --rogue <ROGUE>          Optional tx mac for rogue-based attacks - will randomize if excluded
-      --gpsd <GPSD>            Optional HOST:Port for GPSD connection. Default: 127.0.0.1:2947 [default: 127.0.0.1:2947]
+      --gpsd <GPSD>            Optionally alter HOST:Port for GPSD connection. [default: 127.0.0.1:2947]
       --notransmit             Optional do not transmit, passive only
       --deauth                 Optional send deauths
   -h, --help                   Print help
