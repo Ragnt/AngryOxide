@@ -1908,6 +1908,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
             let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+            //println!("Frame Rate: {}", frame_rate);
         }
 
         // Clear the interactions counts for all AP's.
