@@ -10,6 +10,9 @@ env:
   GITHUB_TOKEN: ${{ github.token }}
   RUST_BACKTRACE: 1
 
+permissions:
+  contents: write
+
 jobs:
   test:
     name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
