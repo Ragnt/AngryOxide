@@ -1910,10 +1910,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
         }
 
-        if last_interactions_clear.elapsed() >= interactions_interval {
+        // Clear the interactions counts for all AP's.
+        // This is deprecated as we are no longer capping interactions based on this.
+        /* if last_interactions_clear.elapsed() >= interactions_interval {
             last_interactions_clear = Instant::now();
             oxide.access_points.clear_all_interactions();
-        }
+        } */
 
         // Read Packet
         match read_packet(&mut oxide) {
@@ -1927,7 +1929,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 running.store(false, Ordering::SeqCst);
             }
         };
-        thread::sleep(Duration::from_millis(1));
+        //thread::sleep(Duration::from_millis(1));
     }
 
     // Execute cleanup
