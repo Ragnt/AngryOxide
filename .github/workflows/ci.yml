@@ -68,7 +68,6 @@ jobs:
         run: |
           cd target/${{ matrix.platform.target }}/release
           tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          fi
           cd -
         if: |
           matrix.toolchain == 'stable' &&
