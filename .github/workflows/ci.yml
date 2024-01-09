@@ -70,26 +70,10 @@ jobs:
           tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
           cd -
         if: |
-          matrix.toolchain == 'stable' &&
-          ( startsWith( github.ref, 'refs/tags/v' ) ||
-            github.ref == 'refs/tags/test-release' )
-      - name: Publish release artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: angry_oxide-${{ matrix.platform.os_name }}
-          path: "angry_oxide-*"
-        if: matrix.toolchain == 'stable' && github.ref == 'refs/tags/test-release'
-      - name: Generate SHA-256
-        run: shasum -a 256 ${{ matrix.platform.name }}
-        if: |
-          matrix.toolchain == 'stable' &&
-          matrix.platform.os == 'macOS-latest' &&
-          ( startsWith( github.ref, 'refs/tags/v' ) ||
-            github.ref == 'refs/tags/test-release' )
+          startsWith( github.ref, 'refs/tags/v' )
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
           files: "angry_oxide-*"
-          body_path: Changes.md
-        if: matrix.toolchain == 'stable' && startsWith( github.ref, 'refs/tags/v' )
+        if: startsWith( github.ref, 'refs/tags/v' )
