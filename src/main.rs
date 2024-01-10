@@ -56,7 +56,7 @@ use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
 use ratatui::Terminal;
 use rawsocks::{open_socket_rx, open_socket_tx};
-use tar::Builder;
+use tar::{Builder, Header};
 use tx::{
     build_association_response, build_authentication_response, build_cts,
     build_disassocation_from_client, build_eapol_m1, build_probe_request_undirected,
@@ -127,6 +127,9 @@ struct Arguments {
     #[arg(long)]
     /// Optional do not transmit, passive only
     notransmit: bool,
+    #[arg(long)]
+    /// Optional tar output files.
+    tar: bool,
     #[arg(long)]
     /// Optional send deauths.
     deauth: bool,
@@ -1629,7 +1632,7 @@ fn handle_data_frame(
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Info,
                 format!(
-                    "*** RogueM2 Collected: {dest} => {source} ({})",
+                    "*** RogueM2 Collected!: {dest} => {source} ({})",
                     essid.unwrap()
                 ),
             ));
@@ -2093,6 +2096,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Stopping Threads");
     oxide.pcap_file.stop();
     oxide.gps_source.stop();
+    oxide.database.stop();
 
     println!();
 
@@ -2118,8 +2122,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_handshake_summary(&handshakes_map);
     output_files.extend(hashfiles);
 
-    println!("📦 Creating Output Tarball ({}.tar.gz)...", filename);
-    let _ = tar_and_compress_files(output_files, &filename);
+    thread::sleep(Duration::from_secs(3));
+
+    if cli.tar {
+        println!("📦 Creating Output Tarball ({}.tar.gz)...", filename);
+        let _ = tar_and_compress_files(output_files, &filename);
+    }
 
     Ok(())
 }
@@ -2169,8 +2177,8 @@ fn print_handshake_summary(handshakes_map: &HashMap<String, Vec<String>>) {
 }
 
 fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Result<()> {
-    let file = File::create(format!("{}.tar.gz", filename))?;
-    let enc = GzEncoder::new(file, Compression::default());
+    let tgz = File::create(format!("{}.tar.gz", filename))?;
+    let enc = GzEncoder::new(tgz, Compression::default());
     let mut tar = Builder::new(enc);
 
     for path in &output_files {
@@ -2178,7 +2186,7 @@ fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Resu
         tar.append_file(path, &mut file)?;
     }
 
-    tar.into_inner()?.finish()?;
+    tar.into_inner()?;
 
     // Delete original files after they are successfully added to the tarball
     /* for path in &output_files {
