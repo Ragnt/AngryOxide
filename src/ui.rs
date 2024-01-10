@@ -373,7 +373,13 @@ fn create_status_bar(
         false => Span::from("Running"),
     };
 
-    let dataflow = Line::from(vec![Span::from("Data: "), flow]);
+    let dataflow = Line::from(vec![
+        Span::from(format!(
+            "Empty Reads: {} | UI: ",
+            oxide.counters.empty_reads_rate,
+        )),
+        flow,
+    ]);
 
     let status_text = vec![time_str, frame_count, dataflow];
 

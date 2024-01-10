@@ -3,6 +3,7 @@ mod attack;
 mod auth;
 mod database;
 mod devices;
+mod eventhandler;
 mod gps;
 mod pcapng;
 mod rawsocks;
@@ -66,6 +67,7 @@ use uuid::Uuid;
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
+use crate::eventhandler::{EventHandler, EventType};
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
@@ -133,6 +135,8 @@ struct Arguments {
 #[derive(Default)]
 pub struct Counters {
     pub packet_id: u64,
+    pub empty_reads: u64,
+    pub empty_reads_rate: u64,
     pub seq1: u16,
     pub seq2: u16,
     pub seq3: u16,
@@ -218,6 +222,7 @@ pub struct OxideRuntime {
     status_log: status::MessageLog,
     current_channel: WiFiChannel,
     hop_channels: Vec<u8>,
+    eventhandler: EventHandler,
 }
 
 impl OxideRuntime {
@@ -478,6 +483,11 @@ impl OxideRuntime {
         // Setup Rogue_ESSID's tracker
         let rogue_essids: HashMap<MacAddress, String> = HashMap::new();
 
+        let mut eventhandler = EventHandler::new();
+        if !cli_headless {
+            eventhandler.start();
+        }
+
         println!("Cranking up the 4D3D3D3... 🎩");
         thread::sleep(Duration::from_secs(2));
 
@@ -508,6 +518,7 @@ impl OxideRuntime {
             status_log: log,
             current_channel: WiFiChannel::Channel2GHz(1),
             hop_channels,
+            eventhandler,
         }
     }
 
@@ -1777,6 +1788,7 @@ fn read_packet(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
     if packet_len < 0 {
         let error_code = io::Error::last_os_error();
         if error_code.kind() == io::ErrorKind::WouldBlock {
+            oxide.counters.empty_reads += 1;
             return Ok(Vec::new());
         } else {
             // An actual error occurred
@@ -1928,39 +1940,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let table_len = oxide.get_current_menu_len();
 
         // This should ONLY apply to normal UI mode.
-        if !cli.headless && poll(Duration::from_millis(0))? {
-            let event = crossterm::event::read()?;
-            if let Event::Key(key) = event {
-                if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('d') => oxide.ui_state.menu_next(),
-                        KeyCode::Char('a') => oxide.ui_state.menu_back(),
-                        KeyCode::Char('w') | KeyCode::Char('W') => {
-                            if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                                oxide.ui_state.table_previous_item_big();
-                            } else {
-                                oxide.ui_state.table_previous_item();
+        if !cli.headless {
+            if let Some(ev) = oxide.eventhandler.get() {
+                match ev {
+                    EventType::Key(event) => {
+                        if let Event::Key(key) = event {
+                            if key.kind == KeyEventKind::Press {
+                                match key.code {
+                                    KeyCode::Char('d') => oxide.ui_state.menu_next(),
+                                    KeyCode::Char('a') => oxide.ui_state.menu_back(),
+                                    KeyCode::Char('w') | KeyCode::Char('W') => {
+                                        if key.modifiers.intersects(KeyModifiers::SHIFT) {
+                                            oxide.ui_state.table_previous_item_big();
+                                        } else {
+                                            oxide.ui_state.table_previous_item();
+                                        }
+                                    }
+                                    KeyCode::Char('s') | KeyCode::Char('S') => {
+                                        if key.modifiers.intersects(KeyModifiers::SHIFT) {
+                                            oxide.ui_state.table_next_item_big(table_len);
+                                        } else {
+                                            oxide.ui_state.table_next_item(table_len);
+                                        }
+                                    }
+                                    KeyCode::Char('q') => running.store(false, Ordering::SeqCst),
+                                    KeyCode::Char(' ') => oxide.ui_state.toggle_pause(),
+                                    KeyCode::Char('e') => oxide.ui_state.sort_next(),
+                                    KeyCode::Char('r') => oxide.ui_state.toggle_reverse(),
+                                    _ => {}
+                                }
+                            }
+                        } else if let Event::Mouse(event) = event {
+                            match event.kind {
+                                MouseEventKind::ScrollDown => {
+                                    oxide.ui_state.table_next_item(table_len)
+                                }
+                                MouseEventKind::ScrollUp => oxide.ui_state.table_previous_item(),
+                                _ => {}
                             }
                         }
-                        KeyCode::Char('s') | KeyCode::Char('S') => {
-                            if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                                oxide.ui_state.table_next_item_big(table_len);
-                            } else {
-                                oxide.ui_state.table_next_item(table_len);
-                            }
-                        }
-                        KeyCode::Char('q') => running.store(false, Ordering::SeqCst),
-                        KeyCode::Char(' ') => oxide.ui_state.toggle_pause(),
-                        KeyCode::Char('e') => oxide.ui_state.sort_next(),
-                        KeyCode::Char('r') => oxide.ui_state.toggle_reverse(),
-                        _ => {}
                     }
-                }
-            } else if let Event::Mouse(event) = event {
-                match event.kind {
-                    MouseEventKind::ScrollDown => oxide.ui_state.table_next_item(table_len),
-                    MouseEventKind::ScrollUp => oxide.ui_state.table_previous_item(),
-                    _ => {}
+                    EventType::Tick => {
+                        print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+                    }
                 }
             }
         }
@@ -1969,9 +1991,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
-            if !cli.headless {
-                let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
-            } else {
+            if cli.headless {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
@@ -1993,6 +2013,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match read_packet(&mut oxide) {
             Ok(packet) => {
                 if !packet.is_empty() {
+                    oxide.counters.empty_reads = 0;
                     let _ = handle_frame(&mut oxide, &packet);
                 }
             }
@@ -2008,7 +2029,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             exit_on_succ = true;
         }
 
-        //thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_micros(1));
     }
 
     // Execute cleanup
