@@ -50,7 +50,7 @@ All of these attacks are rate-controlled both to prevent erroneous EAPOL timer r
 ❯ sudo AngryOxide --help
 Does awesome things... with wifi.
 
-Usage: AngryOxide [OPTIONS] --interface <INTERFACE>
+Usage: angry_oxide [OPTIONS] --interface <INTERFACE>
 
 Options:
   -i, --interface <INTERFACE>  Interface to use
@@ -59,7 +59,9 @@ Options:
   -t, --targets <TARGETS>      Optional list of targets to attack - will attack everything if excluded
   -o, --output <OUTPUT>        Optional output filename
   -r, --rogue <ROGUE>          Optional TX MAC for rogue-based attacks - will randomize if excluded
-      --gpsd <GPSD>            Optionally alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
+      --gpsd <GPSD>            Optional alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
+      --headless               Optional set the tool to headless mode without a UI
+      --autoexit               Optional tool will auto-exit when all targets have a valid hashline
       --notransmit             Optional do not transmit, passive only
       --deauth                 Optional send deauths
   -h, --help                   Print help
