@@ -1927,7 +1927,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let table_len = oxide.get_current_menu_len();
 
-        if poll(Duration::from_millis(0))? {
+        // This should ONLY apply to normal UI mode.
+        if !cli.headless && poll(Duration::from_millis(0))? {
             let event = crossterm::event::read()?;
             if let Event::Key(key) = event {
                 if key.kind == KeyEventKind::Press {
@@ -1974,7 +1975,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
-                        "Frames: {} | Rate: {} | Channel: {}",
+                        "Status: Frames: {} | Rate: {} | Channel: {}",
                         oxide.frame_count, frame_rate, oxide.current_channel
                     ),
                 ));
