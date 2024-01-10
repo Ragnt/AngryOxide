@@ -89,13 +89,14 @@ impl FourWayHandshake {
     }
 
     pub fn complete(&self) -> bool {
-        self.eapol_client.is_some()
+        (self.eapol_client.is_some()
             && self.mic.is_some()
             && self.anonce.is_some()
             && self.snonce.is_some()
             && self.mac_ap.is_some()
             && self.mac_client.is_some()
-            && self.essid.is_some()
+            && self.essid.is_some())
+            || self.has_pmkid()
     }
 
     pub fn has_m1(&self) -> bool {

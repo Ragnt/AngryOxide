@@ -120,6 +120,9 @@ struct Arguments {
     /// Optional set the tool to headless mode without a UI.
     headless: bool,
     #[arg(long)]
+    /// Optional tool will auto-exit when all targets have a valid hashline.
+    autoexit: bool,
+    #[arg(long)]
     /// Optional do not transmit, passive only
     notransmit: bool,
     #[arg(long)]
@@ -512,6 +515,19 @@ impl OxideRuntime {
             MenuType::Messages => self.status_log.size(),
         }
     }
+
+    fn get_target_success(&self) -> bool {
+        let mut complete = true;
+        if self.targets.is_empty() {
+            return false;
+        }
+        for target in &self.targets {
+            if !self.handshake_storage.has_complete_handshake_for_ap(target) {
+                complete = false;
+            }
+        }
+        complete
+    }
 }
 
 fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
@@ -542,7 +558,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     let source: MacAddress;
     let destination: MacAddress;
 
-    // Send a probe request out there every 100 beacons.
+    // Send a probe request out there every 200 beacons.
     if oxide.counters.beacons % 200 == 0 && !oxide.notx {
         let frx = build_probe_request_undirected(&oxide.rogue_client, oxide.counters.sequence2());
         let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
@@ -1862,6 +1878,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
 
     let mut err = false;
+    let mut exit_on_succ = false;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
 
@@ -1971,6 +1988,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 running.store(false, Ordering::SeqCst);
             }
         };
+
+        // Exit on targets success
+        if oxide.get_target_success() {
+            running.store(false, Ordering::SeqCst);
+            exit_on_succ = true;
+        }
+
         //thread::sleep(Duration::from_millis(50));
     }
 
@@ -1978,6 +2002,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !cli.headless {
         reset_terminal();
     }
+
+    if exit_on_succ {
+        println!("Auto Exit Initiated");
+    }
+
     println!("Cleaning up...");
     if err {
         println!("{}", get_art("A serious packet read error occured."))
