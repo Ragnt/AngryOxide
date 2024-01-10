@@ -2122,8 +2122,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_handshake_summary(&handshakes_map);
     output_files.extend(hashfiles);
 
-    thread::sleep(Duration::from_secs(3));
-
     if cli.tar {
         println!("📦 Creating Output Tarball ({}.tar.gz)...", filename);
         let _ = tar_and_compress_files(output_files, &filename);
@@ -2189,11 +2187,11 @@ fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Resu
     tar.into_inner()?;
 
     // Delete original files after they are successfully added to the tarball
-    /* for path in &output_files {
+    for path in &output_files {
         if let Err(e) = fs::remove_file(path) {
             eprintln!("Failed to delete file {}: {}", path, e);
         }
-    } */
+    } 
 
     Ok(())
 }
