@@ -4,7 +4,7 @@ members = ["libs/libwifi", "libs/libwifi_macros", "libs/pcap-file"]
 [workspace.package]
 version = "0.5.14"
 authors = ["Ryan Butler"]
-description = "80211 Attack Platfrom"
+description = "80211 Attack Platform"
 license = "MIT"
 edition = "2021"
 rust-version = "1.62"
