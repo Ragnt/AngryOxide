@@ -1916,6 +1916,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         format!("Error: {e:?}"),
                     ));
                 }
+                oxide.current_channel = WiFiChannel::new(channel).unwrap();
                 last_hop_time = Instant::now();
             }
         }
@@ -1967,7 +1968,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
-                    format!("Frames: {} | Rate: {}", oxide.frame_count, frame_rate),
+                    format!(
+                        "Frames: {} | Rate: {} | Channel: {}",
+                        oxide.frame_count, frame_rate, oxide.current_channel
+                    ),
                 ));
             }
         }
@@ -1993,7 +1997,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         // Exit on targets success
-        if oxide.get_target_success() {
+        if cli.autoexit && oxide.get_target_success() {
             running.store(false, Ordering::SeqCst);
             exit_on_succ = true;
         }
