@@ -1965,7 +1965,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !cli.headless {
                 let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
             } else {
-                println!("Frame Rate: {}", frame_rate);
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Info,
+                    format!("Frames: {} | Rate: {}", oxide.frame_count, frame_rate),
+                ));
             }
         }
 
