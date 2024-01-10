@@ -10,6 +10,7 @@ use nix::{
     fcntl::{fcntl, FcntlArg, OFlag},
     sys::socket::{socket, AddressFamily, SockFlag, SockProtocol, SockType},
 };
+use procfs::KernelVersion;
 
 pub fn open_socket_tx(ifindex: i32) -> Result<OwnedFd, String> {
     let mut saddr: sockaddr_ll = unsafe { mem::zeroed() };
@@ -133,8 +134,9 @@ pub fn open_socket_rx(ifindex: i32) -> Result<OwnedFd, String> {
     };
 
     // New: Ignoring outgoing packets (Linux 4.20 and later)
-    #[cfg(target_os = "linux")]
-    {
+    let minimum = KernelVersion::new(4, 20, 0);
+    let kernel = KernelVersion::current().unwrap();
+    if kernel > minimum {
         let enable = 1;
         let ret = unsafe {
             libc::setsockopt(

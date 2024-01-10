@@ -114,8 +114,11 @@ struct Arguments {
     /// Optional TX MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(long, default_value = "127.0.0.1:2947")]
-    /// Optionally alter default HOST:Port for GPSD connection.
+    /// Optional alter default HOST:Port for GPSD connection.
     gpsd: String,
+    #[arg(long)]
+    /// Optional set the tool to headless mode without a UI.
+    headless: bool,
     #[arg(long)]
     /// Optional do not transmit, passive only
     notransmit: bool,
@@ -180,10 +183,16 @@ impl Counters {
     }
 }
 
+enum UIMode {
+    Headless,
+    Normal,
+}
+
 pub struct OxideRuntime {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
     netlink: Nl80211,
+    ui_mode: UIMode,
     ui_state: UiState,
     notx: bool,
     deauth: bool,
@@ -219,6 +228,7 @@ impl OxideRuntime {
         cli_gpsd: String,
         cli_band: Vec<u8>,
         cli_channels: Vec<u8>,
+        cli_headless: bool,
     ) -> Self {
         println!("Starting AngryOxide... 😈");
 
@@ -226,7 +236,7 @@ impl OxideRuntime {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
-        let mut log = status::MessageLog::new();
+        let mut log = status::MessageLog::new(cli_headless);
 
         // Get + Setup Interface
 
@@ -404,6 +414,12 @@ impl OxideRuntime {
         };
 
         // Setup initial UI State
+        let ui_mode = if cli_headless {
+            UIMode::Headless
+        } else {
+            UIMode::Normal
+        };
+
         let state = UiState {
             current_menu: MenuType::AccessPoints,
             paused: false,
@@ -462,6 +478,7 @@ impl OxideRuntime {
             rx_socket,
             tx_socket,
             netlink,
+            ui_mode,
             ui_state: state,
             notx,
             deauth,
@@ -481,7 +498,7 @@ impl OxideRuntime {
             pcap_file,
             database,
             gps_source: gpsd,
-            status_log: status::MessageLog::new(),
+            status_log: log,
             current_channel: WiFiChannel::Channel2GHz(1),
             hop_channels,
         }
@@ -1787,6 +1804,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.gpsd,
         cli.band,
         cli.channels,
+        cli.headless,
     );
 
     oxide.status_log.add_message(StatusMessage::new(
@@ -1803,6 +1821,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread::sleep(duration);
 
     let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
 
     let mut seconds_timer = Instant::now();
     let seconds_interval = Duration::from_secs(1);
@@ -1810,10 +1829,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut frame_rate = 0u64;
 
     let mut last_status_time = Instant::now();
-    let status_interval = Duration::from_millis(50);
 
+    let status_interval = if cli.headless {
+        Duration::from_secs(1)
+    } else {
+        Duration::from_millis(50)
+    };
+
+    /*
     let mut last_interactions_clear = Instant::now();
     let interactions_interval = Duration::from_secs(120);
+    */
 
     // Setup hop data
     let hop_interval = Duration::from_secs(2);
@@ -1834,14 +1860,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     let start_time = Instant::now();
+
+    let mut err = false;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
-    execute!(stdout(), Hide)?;
-    execute!(stdout(), EnterAlternateScreen)?;
-    execute!(stdout(), EnableMouseCapture)?;
-    enable_raw_mode()?;
-    let mut err = false;
-    initialize_panic_handler();
+
+    if !cli.headless {
+        // UI is in normal mode
+        execute!(stdout(), Hide)?;
+        execute!(stdout(), EnterAlternateScreen)?;
+        execute!(stdout(), EnableMouseCapture)?;
+        enable_raw_mode()?;
+        initialize_panic_handler();
+    } else {
+        // UI is in headless mode
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl-C handler");
+    }
 
     while running.load(Ordering::SeqCst) {
         // Calculate last packet rate
@@ -1905,10 +1942,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Start UI Messages
+
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
-            let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
-            //println!("Frame Rate: {}", frame_rate);
+            if !cli.headless {
+                let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+            } else {
+                println!("Frame Rate: {}", frame_rate);
+            }
         }
 
         // Clear the interactions counts for all AP's.
@@ -1930,11 +1971,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 running.store(false, Ordering::SeqCst);
             }
         };
-        thread::sleep(Duration::from_micros(100));
+        //thread::sleep(Duration::from_millis(50));
     }
 
     // Execute cleanup
-    reset_terminal();
+    if !cli.headless {
+        reset_terminal();
+    }
     println!("Cleaning up...");
     if err {
         println!("{}", get_art("A serious packet read error occured."))

@@ -64,6 +64,8 @@ pub fn parse_frame(input: &[u8], fcs_included: bool) -> Result<Frame, Error> {
         FrameSubType::ProbeResponse => parse_probe_response(frame_control, input),
         FrameSubType::AssociationRequest => parse_association_request(frame_control, input),
         FrameSubType::AssociationResponse => parse_association_response(frame_control, input),
+        FrameSubType::ReassociationRequest => parse_reassociation_request(frame_control, input),
+        FrameSubType::ReassociationResponse => parse_reassociation_response(frame_control, input),
         FrameSubType::Authentication => parse_authentication_frame(frame_control, input),
         FrameSubType::Deauthentication => parse_deauthentication_frame(frame_control, input),
         FrameSubType::Action => parse_action(frame_control, input),
