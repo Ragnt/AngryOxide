@@ -1624,6 +1624,16 @@ fn handle_data_frame(
                 station.has_rogue_m2 = true;
             }
 
+            // Print a status so we have it for headless
+
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Info,
+                format!(
+                    "*** RogueM2 Collected: {dest} => {source} ({})",
+                    essid.unwrap()
+                ),
+            ));
+
             // Don't need to go any further, because we know this wasn't a valid handshake otherwise.
             return Ok(());
         }
@@ -1668,11 +1678,27 @@ fn handle_data_frame(
                 if handshake.complete() {
                     if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
                         ap.has_hs = true;
+
+                        oxide.status_log.add_message(StatusMessage::new(
+                            MessageType::Info,
+                            format!(
+                                "*** 4wHS Complete: {dest} => {source} ({}) ***",
+                                ap.ssid.clone().unwrap_or("".to_string())
+                            ),
+                        ));
                     }
                 }
                 if handshake.has_pmkid() {
                     if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
                         ap.has_pmkid = true;
+
+                        oxide.status_log.add_message(StatusMessage::new(
+                            MessageType::Info,
+                            format!(
+                                "*** PMKID Caught: {dest} => {source} ({}) ***",
+                                ap.ssid.clone().unwrap_or("".to_string())
+                            ),
+                        ));
                     }
                 }
             }
@@ -2155,11 +2181,11 @@ fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Resu
     tar.into_inner()?.finish()?;
 
     // Delete original files after they are successfully added to the tarball
-    for path in &output_files {
+    /* for path in &output_files {
         if let Err(e) = fs::remove_file(path) {
             eprintln!("Failed to delete file {}: {}", path, e);
         }
-    }
+    } */
 
     Ok(())
 }
