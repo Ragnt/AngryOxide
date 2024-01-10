@@ -548,7 +548,7 @@ pub fn build_probe_response(
             supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
             extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
             ssid: Some(ssid.to_string()),
-            ds_parameter_set: Some(channel),
+            ds_parameter_set: Some(channel.try_into().unwrap()),
             tim: None,
             country_info: None,
             power_constraint: None,

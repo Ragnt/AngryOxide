@@ -175,11 +175,10 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
         return Ok(());
     }
 
-    let mut interacted: bool = false;
     let beacon_count = ap_data.beacon_count;
     let mut deauth_client = MacAddress([255, 255, 255, 255, 255, 255]);
 
-    if (beacon_count % 32) == 0
+    if (beacon_count % 8) == 0
         && !ap_data.information.ap_mfp.is_some_and(|mfp| mfp)
         && ap_data.information.akm_mask()
     {
@@ -208,7 +207,11 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
             );
             let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-            interacted = true;
+            ap_data.interactions += 1;
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Info,
+                format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
+            ));
         } else {
             // There is no client
             let frx = build_deauthentication_fm_ap(
@@ -219,21 +222,14 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
             );
             let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-            interacted = true;
-        }
-    }
-
-    // Increment interactions
-    if let Some(ap) = oxide.access_points.get_device(ap_mac) {
-        // This is here because I couldn't decide if I wanted interacations to match beacons or not...
-        if interacted {
-            ap.interactions += 1;
+            ap_data.interactions += 1;
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Info,
-                format!("Deauthing: {} => {}", ap_mac, deauth_client),
+                format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
             ));
         }
     }
+
     Ok(())
 }
 

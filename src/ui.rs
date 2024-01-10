@@ -4,13 +4,16 @@ use libwifi::frame::components::MacAddress;
 use std::{io::Result, time::Instant};
 
 use crate::{
+    auth::HandshakeStorage,
+    devices::{AccessPoint, Station, WiFiDeviceList},
     snowstorm::Snowstorm,
+    status::StatusMessage,
     tabbedblock::{
         tab::{Position, Tab},
         tabbedblock::TabbedBlock,
         tabbedblock::{BorderType, TabType},
     },
-    MenuType, OxideRuntime,
+    OxideRuntime,
 };
 
 use nl80211_ng::get_interface_info_idx;
@@ -25,10 +28,208 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{
         Block, Borders, Cell, Clear, HighlightSpacing, Padding, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Table, Widget, Wrap,
+        ScrollbarOrientation, ScrollbarState, Table, TableState, Widget, Wrap,
     },
     Frame,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MenuType {
+    AccessPoints,
+    Clients,
+    Handshakes,
+    Messages,
+}
+
+impl MenuType {
+    pub fn index(&self) -> usize {
+        *self as usize
+    }
+
+    pub fn get(usize: usize) -> MenuType {
+        match usize {
+            0 => MenuType::AccessPoints,
+            1 => MenuType::Clients,
+            2 => MenuType::Handshakes,
+            3 => MenuType::Messages,
+            _ => MenuType::AccessPoints,
+        }
+    }
+
+    pub fn next(&self) -> MenuType {
+        let mut idx = *self as usize;
+        idx += 1;
+        if idx > 3 {
+            idx = 3
+        }
+        MenuType::get(idx)
+    }
+
+    pub fn previous(&self) -> MenuType {
+        let mut idx = *self as usize;
+        idx = idx.saturating_sub(1);
+        MenuType::get(idx)
+    }
+}
+
+pub struct UiState {
+    pub current_menu: MenuType,
+    pub paused: bool,
+    // AP Menu Options
+    pub ap_sort: u8,
+    pub ap_state: TableState,
+    pub ap_table_data: WiFiDeviceList<AccessPoint>,
+    pub ap_sort_reverse: bool,
+
+    // Client Menu Options
+    pub cl_sort: u8,
+    pub cl_state: TableState,
+    pub cl_table_data: WiFiDeviceList<Station>,
+    pub cl_sort_reverse: bool,
+
+    // Handshake Menu Options
+    pub hs_sort: u8,
+    pub hs_state: TableState,
+    pub hs_table_data: HandshakeStorage,
+    pub hs_sort_reverse: bool,
+
+    pub messages_sort: u8,
+    pub messages_state: TableState,
+    pub messages_table_data: Vec<StatusMessage>,
+    pub messages_sort_reverse: bool,
+
+    pub snowstorm: Snowstorm,
+}
+
+impl UiState {
+    pub fn menu_next(&mut self) {
+        self.current_menu = self.current_menu.next();
+    }
+
+    pub fn menu_back(&mut self) {
+        self.current_menu = self.current_menu.previous();
+    }
+
+    pub fn sort_next(&mut self) {
+        match self.current_menu {
+            MenuType::AccessPoints => self.ap_sort_next(),
+            MenuType::Clients => self.cl_sort_next(),
+            MenuType::Handshakes => self.hs_sort_next(),
+            MenuType::Messages => (),
+        };
+    }
+
+    fn ap_sort_next(&mut self) {
+        self.ap_sort += 1;
+        if self.ap_sort == 7 {
+            self.ap_sort = 0;
+        }
+    }
+
+    fn cl_sort_next(&mut self) {
+        self.cl_sort += 1;
+        if self.cl_sort == 5 {
+            self.cl_sort = 0;
+        }
+    }
+
+    fn hs_sort_next(&mut self) {
+        self.hs_sort += 1;
+        if self.hs_sort == 4 {
+            self.hs_sort = 0;
+        }
+    }
+
+    fn messages_sort_next(&mut self) {
+        self.messages_sort += 1;
+        if self.messages_sort == 2 {
+            self.messages_sort = 0;
+        }
+    }
+
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused
+    }
+
+    pub fn toggle_reverse(&mut self) {
+        let sort = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_sort_reverse,
+            MenuType::Clients => &mut self.cl_sort_reverse,
+            MenuType::Handshakes => &mut self.hs_sort_reverse,
+            MenuType::Messages => &mut self.messages_sort_reverse,
+        };
+        *sort = !*sort;
+    }
+
+    pub fn table_next_item(&mut self, table_size: usize) {
+        let state = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(i) => {
+                if i >= table_size - 1 {
+                    table_size - 1
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+
+    pub fn table_next_item_big(&mut self, table_size: usize) {
+        let state = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(mut i) => {
+                i += 10;
+                if i >= table_size - 1 {
+                    table_size - 1
+                } else {
+                    i
+                }
+            }
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+
+    pub fn table_previous_item(&mut self) {
+        let state: &mut TableState = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(i) => i.saturating_sub(1),
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+
+    pub fn table_previous_item_big(&mut self) {
+        let state: &mut TableState = match self.current_menu {
+            MenuType::AccessPoints => &mut self.ap_state,
+            MenuType::Clients => &mut self.cl_state,
+            MenuType::Handshakes => &mut self.hs_state,
+            MenuType::Messages => &mut self.messages_state,
+        };
+        let i = match state.selected() {
+            Some(i) => i.saturating_sub(10),
+            None => 0,
+        };
+        state.select(Some(i));
+    }
+}
 
 pub fn print_ui(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,

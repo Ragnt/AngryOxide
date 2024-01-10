@@ -40,17 +40,27 @@ impl StatusMessage {
 
 pub struct MessageLog {
     messages: Vec<StatusMessage>,
+    headless: bool,
 }
 
 impl MessageLog {
-    pub fn new() -> Self {
+    pub fn new(headless: bool) -> Self {
         MessageLog {
             messages: Vec::new(), // No capacity needed
+            headless,
         }
     }
 
     pub fn add_message(&mut self, message: StatusMessage) {
-        self.messages.push(message);
+        self.messages.push(message.clone());
+        if self.headless {
+            println!(
+                "{} {} :: {}",
+                message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+                message.message_type,
+                message.content
+            )
+        }
     }
 
     pub fn get_all_messages(&self) -> Vec<StatusMessage> {

@@ -2,7 +2,9 @@
 
 ![Logo](death.png)
 
-### A 802.11 Attack tool built in Rust 🦀
+### A 802.11 Attack tool built in Rust 🦀 !
+
+[![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Ragnt/AngryOxide) ![[Discord](https://img.shields.io/discord/1194365883099922643)](https://img.shields.io/discord/1194365883099922643)
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
@@ -40,29 +42,32 @@ Will by default attack ALL access points in range, unless atleast one target is 
 - Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
 - Will send controlled deauthentication frames if told to do so (--deauth)
 
-All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC. 
+All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC.
 
 ## Help
 
 ```bash
+❯ sudo AngryOxide --help
 Does awesome things... with wifi.
 
 Usage: angry_oxide [OPTIONS] --interface <INTERFACE>
 
 Options:
   -i, --interface <INTERFACE>  Interface to use
-  -c, --channels <CHANNELS>    Optional list of channels to scan [default: 1 6 11]
+  -c, --channels <CHANNELS>    Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded
+  -b, --band <BAND>            Optional band to scan - Will include all channels interface can support
   -t, --targets <TARGETS>      Optional list of targets to attack - will attack everything if excluded
   -o, --output <OUTPUT>        Optional output filename
-  -r, --rogue <ROGUE>          Optional tx mac for rogue-based attacks - will randomize if excluded
-      --gpsd <GPSD>            Optional HOST:Port for GPSD connection. Default: 127.0.0.1:2947 [default: 127.0.0.1:2947]
+  -r, --rogue <ROGUE>          Optional TX MAC for rogue-based attacks - will randomize if excluded
+      --gpsd <GPSD>            Optional alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
+      --headless               Optional set the tool to headless mode without a UI
+      --autoexit               Optional tool will auto-exit when all targets have a valid hashline
       --notransmit             Optional do not transmit, passive only
       --deauth                 Optional send deauths
   -h, --help                   Print help
-  -V, --version                Print version
 ```
 
-## Screenshots
+## Screenshots!
 
 ![AccessPoints Page](screenshots/angry_oxide_demo.png)
 ![Handshakes Page](screenshots/handshakes.png)

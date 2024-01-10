@@ -1,5 +1,4 @@
 use libwifi_macros::AddressHeader;
-use nom::Err;
 
 use crate::frame::components::*;
 

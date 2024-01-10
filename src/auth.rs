@@ -89,13 +89,14 @@ impl FourWayHandshake {
     }
 
     pub fn complete(&self) -> bool {
-        self.eapol_client.is_some()
+        (self.eapol_client.is_some()
             && self.mic.is_some()
             && self.anonce.is_some()
             && self.snonce.is_some()
             && self.mac_ap.is_some()
             && self.mac_client.is_some()
-            && self.essid.is_some()
+            && self.essid.is_some())
+            || self.has_pmkid()
     }
 
     pub fn has_m1(&self) -> bool {
@@ -170,7 +171,11 @@ impl FourWayHandshake {
                 "\u{2705}".to_string()
             }
         } else {
-            "--".to_string()
+            if self.apless {
+                "RG".to_string()
+            } else {
+                "--".to_string()
+            }
         };
         tuple
     }
@@ -220,7 +225,7 @@ impl FourWayHandshake {
                 new_key
                     .timestamp
                     .duration_since(msg.timestamp)
-                    .unwrap()
+                    .unwrap_or(Duration::from_secs(1))
                     .as_millis()
                     > 200
             }) {
@@ -575,6 +580,16 @@ impl HandshakeStorage {
             .filter(|(key, _)| &key.ap_mac == ap_mac)
             .map(|(key, handshakes)| (key.client_mac, handshakes.clone()))
             .collect()
+    }
+
+    pub fn set_apless_for_ap(&mut self, ap_mac: &MacAddress) {
+        for (key, handshakes) in self.handshakes.iter_mut() {
+            if &key.ap_mac == ap_mac {
+                for handshake in handshakes {
+                    handshake.apless = true;
+                }
+            }
+        }
     }
 
     pub fn has_complete_handshake_for_ap(&self, ap_mac: &MacAddress) -> bool {

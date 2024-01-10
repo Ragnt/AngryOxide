@@ -5,6 +5,7 @@ use itertools::Itertools;
 use std::io::{self, BufReader, BufWriter};
 use std::net::TcpStream;
 use std::os::unix::thread::JoinHandleExt;
+
 use std::time::{Duration, UNIX_EPOCH};
 use std::{
     net::IpAddr,
@@ -217,7 +218,7 @@ impl GPSDSource {
                         continue;
                     };
                     stream
-                        .set_read_timeout(Some(Duration::from_secs(1)))
+                        .set_read_timeout(Some(Duration::from_secs(2)))
                         .expect("set_read_timeout call failed");
 
                     let mut r = io::BufReader::new(&stream);
@@ -231,7 +232,7 @@ impl GPSDSource {
                     break 'setup;
                 }
 
-                'runtime: while let Ok(msg) = get_data(&mut reader) {
+                while let Ok(msg) = get_data(&mut reader) {
                     if !alive.load(Ordering::SeqCst) {
                         break 'th;
                     }

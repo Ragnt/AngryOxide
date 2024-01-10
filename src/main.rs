@@ -40,7 +40,7 @@ use nix::unistd::geteuid;
 use nl80211_ng::channels::WiFiChannel;
 use nl80211_ng::{
     get_interface_info_name, set_interface_chan, set_interface_down, set_interface_mac,
-    set_interface_monitor, set_interface_station, set_interface_up, Interface,
+    set_interface_monitor, set_interface_station, set_interface_up, Interface, Nl80211,
 };
 
 use flate2::write::GzEncoder;
@@ -60,6 +60,7 @@ use tx::{
     build_association_response, build_authentication_response, build_cts,
     build_disassocation_from_client, build_eapol_m1, build_probe_request_undirected,
 };
+use ui::UiState;
 use uuid::Uuid;
 
 use crate::ascii::get_art;
@@ -67,7 +68,7 @@ use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
-use crate::ui::print_ui;
+use crate::ui::{print_ui, MenuType};
 use crate::util::parse_ip_address_port;
 
 use libwifi::{Addresses, Frame};
@@ -92,15 +93,17 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
 #[command(author = "Ryan Butler (Ragnt)")]
-#[command(version = "0.5.2")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
     interface: String,
-    #[arg(short, long, default_values_t = [1, 6, 11]) ]
-    /// Optional list of channels to scan.
+    #[arg(short, long)]
+    /// Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded.
     channels: Vec<u8>,
+    #[arg(short, long)]
+    /// Optional band to scan - Will include all channels interface can support.
+    band: Vec<u8>,
     #[arg(short, long)]
     /// Optional list of targets to attack - will attack everything if excluded.
     targets: Option<Vec<String>>,
@@ -108,215 +111,23 @@ struct Arguments {
     /// Optional output filename.
     output: Option<String>,
     #[arg(short, long)]
-    /// Optional tx mac for rogue-based attacks - will randomize if excluded.
+    /// Optional TX MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(long, default_value = "127.0.0.1:2947")]
-    /// Optional HOST:Port for GPSD connection.
+    /// Optional alter default HOST:Port for GPSD connection.
     gpsd: String,
+    #[arg(long)]
+    /// Optional set the tool to headless mode without a UI.
+    headless: bool,
+    #[arg(long)]
+    /// Optional tool will auto-exit when all targets have a valid hashline.
+    autoexit: bool,
     #[arg(long)]
     /// Optional do not transmit, passive only
     notransmit: bool,
     #[arg(long)]
     /// Optional send deauths.
     deauth: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum MenuType {
-    AccessPoints,
-    Clients,
-    Handshakes,
-    Messages,
-}
-
-impl MenuType {
-    pub fn index(&self) -> usize {
-        *self as usize
-    }
-
-    pub fn get(usize: usize) -> MenuType {
-        match usize {
-            0 => MenuType::AccessPoints,
-            1 => MenuType::Clients,
-            2 => MenuType::Handshakes,
-            3 => MenuType::Messages,
-            _ => MenuType::AccessPoints,
-        }
-    }
-
-    pub fn next(&self) -> MenuType {
-        let mut idx = *self as usize;
-        idx += 1;
-        if idx > 3 {
-            idx = 3
-        }
-        MenuType::get(idx)
-    }
-
-    pub fn previous(&self) -> MenuType {
-        let mut idx = *self as usize;
-        idx = idx.saturating_sub(1);
-        MenuType::get(idx)
-    }
-}
-
-pub struct UiState {
-    current_menu: MenuType,
-    paused: bool,
-    // AP Menu Options
-    ap_sort: u8,
-    ap_state: TableState,
-    ap_table_data: WiFiDeviceList<AccessPoint>,
-    ap_sort_reverse: bool,
-
-    // Client Menu Options
-    cl_sort: u8,
-    cl_state: TableState,
-    cl_table_data: WiFiDeviceList<Station>,
-    cl_sort_reverse: bool,
-
-    // Handshake Menu Options
-    hs_sort: u8,
-    hs_state: TableState,
-    hs_table_data: HandshakeStorage,
-    hs_sort_reverse: bool,
-
-    messages_sort: u8,
-    messages_state: TableState,
-    messages_table_data: Vec<StatusMessage>,
-    messages_sort_reverse: bool,
-
-    snowstorm: Snowstorm,
-}
-
-impl UiState {
-    pub fn menu_next(&mut self) {
-        self.current_menu = self.current_menu.next();
-    }
-
-    pub fn menu_back(&mut self) {
-        self.current_menu = self.current_menu.previous();
-    }
-
-    pub fn sort_next(&mut self) {
-        match self.current_menu {
-            MenuType::AccessPoints => self.ap_sort_next(),
-            MenuType::Clients => self.cl_sort_next(),
-            MenuType::Handshakes => self.hs_sort_next(),
-            MenuType::Messages => (),
-        };
-    }
-
-    fn ap_sort_next(&mut self) {
-        self.ap_sort += 1;
-        if self.ap_sort == 7 {
-            self.ap_sort = 0;
-        }
-    }
-
-    fn cl_sort_next(&mut self) {
-        self.cl_sort += 1;
-        if self.cl_sort == 5 {
-            self.cl_sort = 0;
-        }
-    }
-
-    fn hs_sort_next(&mut self) {
-        self.hs_sort += 1;
-        if self.hs_sort == 4 {
-            self.hs_sort = 0;
-        }
-    }
-
-    fn messages_sort_next(&mut self) {
-        self.messages_sort += 1;
-        if self.messages_sort == 2 {
-            self.messages_sort = 0;
-        }
-    }
-
-    pub fn toggle_pause(&mut self) {
-        self.paused = !self.paused
-    }
-
-    pub fn toggle_reverse(&mut self) {
-        let sort = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_sort_reverse,
-            MenuType::Clients => &mut self.cl_sort_reverse,
-            MenuType::Handshakes => &mut self.hs_sort_reverse,
-            MenuType::Messages => &mut self.messages_sort_reverse,
-        };
-        *sort = !*sort;
-    }
-
-    pub fn table_next_item(&mut self, table_size: usize) {
-        let state = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => {
-                if i >= table_size - 1 {
-                    table_size - 1
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        state.select(Some(i));
-    }
-
-    pub fn table_next_item_big(&mut self, table_size: usize) {
-        let state = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(mut i) => {
-                i += 10;
-                if i >= table_size - 1 {
-                    table_size - 1
-                } else {
-                    i
-                }
-            }
-            None => 0,
-        };
-        state.select(Some(i));
-    }
-
-    pub fn table_previous_item(&mut self) {
-        let state: &mut TableState = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => i.saturating_sub(1),
-            None => 0,
-        };
-        state.select(Some(i));
-    }
-
-    pub fn table_previous_item_big(&mut self) {
-        let state: &mut TableState = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => i.saturating_sub(10),
-            None => 0,
-        };
-        state.select(Some(i));
-    }
 }
 
 #[derive(Default)]
@@ -375,9 +186,16 @@ impl Counters {
     }
 }
 
+enum UIMode {
+    Headless,
+    Normal,
+}
+
 pub struct OxideRuntime {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
+    netlink: Nl80211,
+    ui_mode: UIMode,
     ui_state: UiState,
     notx: bool,
     deauth: bool,
@@ -399,6 +217,7 @@ pub struct OxideRuntime {
     gps_source: GPSDSource,
     status_log: status::MessageLog,
     current_channel: WiFiChannel,
+    hop_channels: Vec<u8>,
 }
 
 impl OxideRuntime {
@@ -410,36 +229,96 @@ impl OxideRuntime {
         deauth: bool,
         filename: String,
         cli_gpsd: String,
+        cli_band: Vec<u8>,
+        cli_channels: Vec<u8>,
+        cli_headless: bool,
+        cli_autoexit: bool,
     ) -> Self {
-        /* println!(
-                "
-         █████  ███    ██  ██████  ██████  ██    ██      ██████  ██   ██ ██ ██████  ███████
-        ██   ██ ████   ██ ██       ██   ██  ██  ██      ██    ██  ██ ██  ██ ██   ██ ██
-        ███████ ██ ██  ██ ██   ███ ██████    ████       ██    ██   ███   ██ ██   ██ █████
-        ██   ██ ██  ██ ██ ██    ██ ██   ██    ██        ██    ██  ██ ██  ██ ██   ██ ██
-        ██   ██ ██   ████  ██████  ██   ██    ██         ██████  ██   ██ ██ ██████  ███████"
-            ); */
         println!("Starting AngryOxide... 😈");
 
         // Setup initial lists / logs
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
-        let mut log = status::MessageLog::new();
+        let mut log = status::MessageLog::new(cli_headless);
 
         // Get + Setup Interface
-        let iface = match get_interface_info_name(&interface_name) {
-            Ok(inf) => inf,
-            Err(e) => {
-                println!("{}", get_art(&e));
-                exit(EXIT_FAILURE);
-            }
+
+        let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
+
+        let iface = if let Some(interface) = netlink
+            .get_interfaces()
+            .iter()
+            .find(|&(_, iface)| iface.name_as_string() == interface_name)
+            .map(|(_, iface)| iface.clone())
+        {
+            interface
+        } else {
+            println!("{}", get_art("Interface not found"));
+            exit(EXIT_FAILURE);
         };
 
         let idx = iface.index.unwrap();
         let interface_uuid = Uuid::new_v4();
         println!("Interface Summary:");
         println!("{}", iface.pretty_print());
+
+        // Setup Channels //
+        let iface_bands: HashMap<u8, Vec<u8>> = iface.get_frequency_list_simple().unwrap();
+        let mut hop_channels: Vec<u8> = Vec::new();
+        let mut channels = cli_channels;
+        let bands = cli_band;
+        let mut default_chans = false;
+
+        if bands.is_empty() && channels.is_empty() {
+            channels.extend(vec![1, 6, 11]);
+            default_chans = true;
+        }
+
+        // Add all channels from bands
+        for band in &bands {
+            let band_chans = if let Some(chans) = iface_bands.get(&band) {
+                chans.clone()
+            } else {
+                println!(
+                    "WARNING: Band {} not available for interface {}... ignoring",
+                    band,
+                    iface.name_as_string()
+                );
+                vec![]
+            };
+            hop_channels.extend(band_chans);
+        }
+
+        // Add all individual channels (if valid)
+
+        for channel in &channels {
+            if !hop_channels.contains(&channel) {
+                if iface_bands.values().any(|bands| bands.contains(&channel)) {
+                    hop_channels.push(*channel);
+                } else {
+                    println!(
+                        "WARNING: Channel {} not available for interface {}... ignoring.",
+                        channel,
+                        iface.name_as_string()
+                    );
+                }
+            }
+        }
+
+        // Exit if we tried to provide channels but nothing made it to the hopper.
+        if !default_chans && hop_channels.is_empty() {
+            println!(
+                "{}",
+                get_art(&format!(
+                    "No channels provided are supported by {}",
+                    iface.name_as_string()
+                ))
+            );
+            exit(EXIT_FAILURE);
+        }
+
+        println!("Channels: {:?}", hop_channels);
 
         // Setup targets
         let target_vec: Vec<MacAddress> = if let Some(vec_targets) = targets {
@@ -455,6 +334,9 @@ impl OxideRuntime {
             let formatted: Vec<String> = target_vec.iter().map(|mac| mac.to_string()).collect();
             let result = formatted.join(", ");
             println!("Target List: {}", result);
+            if cli_autoexit {
+                println!("Auto-Exit Set - will shutdown when hashline collected for targets.");
+            }
         } else {
             println!("No target list provided... everything is a target 😏");
         }
@@ -462,12 +344,11 @@ impl OxideRuntime {
         // Put interface into the right mode
         thread::sleep(Duration::from_secs(1));
         println!("Setting {} down.", interface_name);
-        set_interface_down(idx).ok();
+        netlink.set_interface_down(idx).ok();
         thread::sleep(Duration::from_millis(500));
 
         // Setup Rogue Mac's
         let mut rogue_client = MacAddress::random();
-        let rogue_ap = MacAddress::random();
 
         if let Some(rogue) = rogue {
             if let Ok(mac) = MacAddress::from_str(&rogue) {
@@ -482,7 +363,7 @@ impl OxideRuntime {
         } else {
             println!("Randomizing {} mac to {}", interface_name, rogue_client);
         }
-        set_interface_mac(idx, &rogue_client.0).ok();
+        netlink.set_interface_mac(idx, &rogue_client.0).ok();
 
         // Put into monitor mode
         thread::sleep(Duration::from_millis(500));
@@ -491,16 +372,17 @@ impl OxideRuntime {
             interface_name,
             iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x)
         );
-        set_interface_monitor(
-            idx,
-            iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x),
-        )
-        .ok();
+        netlink
+            .set_interface_monitor(
+                iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x),
+                idx,
+            )
+            .ok();
 
         // Set interface up
         thread::sleep(Duration::from_millis(500));
         println!("Setting {} up.", interface_name);
-        set_interface_up(idx).ok();
+        netlink.set_interface_up(idx).ok();
 
         // Open sockets
         let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
@@ -539,6 +421,12 @@ impl OxideRuntime {
         };
 
         // Setup initial UI State
+        let ui_mode = if cli_headless {
+            UIMode::Headless
+        } else {
+            UIMode::Normal
+        };
+
         let state = UiState {
             current_menu: MenuType::AccessPoints,
             paused: false,
@@ -587,11 +475,17 @@ impl OxideRuntime {
         let mut gpsd = GPSDSource::new(host, port);
         gpsd.start();
 
+        // Setup Rogue_ESSID's tracker
         let rogue_essids: HashMap<MacAddress, String> = HashMap::new();
+
+        println!("Cranking up the 4D3D3D3... 🎩");
+        thread::sleep(Duration::from_secs(2));
 
         OxideRuntime {
             rx_socket,
             tx_socket,
+            netlink,
+            ui_mode,
             ui_state: state,
             notx,
             deauth,
@@ -611,8 +505,9 @@ impl OxideRuntime {
             pcap_file,
             database,
             gps_source: gpsd,
-            status_log: status::MessageLog::new(),
+            status_log: log,
             current_channel: WiFiChannel::Channel2GHz(1),
+            hop_channels,
         }
     }
 
@@ -623,6 +518,19 @@ impl OxideRuntime {
             MenuType::Handshakes => self.handshake_storage.count(),
             MenuType::Messages => self.status_log.size(),
         }
+    }
+
+    fn get_target_success(&self) -> bool {
+        let mut complete = true;
+        if self.targets.is_empty() {
+            return false;
+        }
+        for target in &self.targets {
+            if !self.handshake_storage.has_complete_handshake_for_ap(target) {
+                complete = false;
+            }
+        }
+        complete
     }
 }
 
@@ -654,7 +562,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     let source: MacAddress;
     let destination: MacAddress;
 
-    // Send a probe request out there every 100 beacons.
+    // Send a probe request out there every 200 beacons.
     if oxide.counters.beacons % 200 == 0 && !oxide.notx {
         let frx = build_probe_request_undirected(&oxide.rogue_client, oxide.counters.sequence2());
         let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
@@ -1675,12 +1583,17 @@ fn handle_data_frame(
             && (eapol.determine_key_type() == libwifi::frame::MessageType::Message2)
         {
             let essid = oxide.rogue_essids.get(&station_addr);
+            let mut rogue_eapol = oxide.rogue_m1.clone();
+            rogue_eapol.timestamp = eapol
+                .timestamp
+                .checked_sub(Duration::from_millis(10))
+                .unwrap_or(eapol.timestamp);
 
             // Add our rogue M1
             let _ = oxide.handshake_storage.add_or_update_handshake(
                 &ap_addr,
                 &station_addr,
-                oxide.rogue_m1.clone(),
+                rogue_eapol,
                 essid.cloned(),
             );
 
@@ -1692,22 +1605,8 @@ fn handle_data_frame(
                 essid.cloned(),
             );
 
-            // Make sure it added and set the handshake to AP-Less
-            match result {
-                Ok(mut handshake) => {
-                    oxide.status_log.add_message(StatusMessage::new(
-                        MessageType::Info,
-                        format!("New Rogue M2: {dest} ({})", essid.unwrap()),
-                    ));
-                    handshake.apless = true;
-                }
-                Err(e) => {
-                    oxide.status_log.add_message(StatusMessage::new(
-                        MessageType::Info,
-                        format!("Eapol Failed to Add Rogue M2 | {e}"),
-                    ));
-                }
-            }
+            // Set to apless
+            oxide.handshake_storage.set_apless_for_ap(&ap_addr);
 
             // Set the Station that we collected a RogueM2
             if let Some(station) = oxide.unassoc_clients.get_device(&station_addr) {
@@ -1923,15 +1822,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.deauth,
         filename.clone(),
         cli.gpsd,
+        cli.band,
+        cli.channels,
+        cli.headless,
+        cli.autoexit,
     );
+
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
         "Starting...".to_string(),
     ));
+
     let iface = oxide.interface.clone();
     let idx = iface.index.unwrap();
-    let interface_name =
-        String::from_utf8(iface.name.unwrap()).expect("cannot get interface name from bytes.");
+    let interface_name = String::from_utf8(iface.clone().name.unwrap())
+        .expect("cannot get interface name from bytes.");
 
     let duration = Duration::from_secs(1);
     thread::sleep(duration);
@@ -1945,16 +1850,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut frame_rate = 0u64;
 
     let mut last_status_time = Instant::now();
-    let status_interval = Duration::from_millis(50);
 
+    let status_interval = if cli.headless {
+        Duration::from_secs(1)
+    } else {
+        Duration::from_millis(50)
+    };
+
+    /*
     let mut last_interactions_clear = Instant::now();
     let interactions_interval = Duration::from_secs(120);
+    */
 
+    // Setup hop data
     let hop_interval = Duration::from_secs(2);
     let mut last_hop_time = Instant::now();
-    let channels = cli.channels;
-    let mut cycle_iter = channels.iter().cycle();
 
+    // Set starting channel and create the hopper cycle.
+    let channels_binding = oxide.hop_channels.clone();
+    let mut cycle_iter = channels_binding.iter().cycle();
     if let Some(&channel) = cycle_iter.next() {
         if let Err(e) = set_interface_chan(idx, channel) {
             eprintln!("{}", e);
@@ -1963,26 +1877,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
-        format!("Setting channel hopper: {:?}", channels),
+        format!("Setting channel hopper: {:?}", oxide.hop_channels),
     ));
 
-    //we don't really need this. We still process frames plenty fast an d this had the potential of interupting us
-    //in the middle of trying to send out a response.
-    //start_channel_hopping_thread(running.clone(), hop_interval, idx, channels);
-
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
-
     let start_time = Instant::now();
+
+    let mut err = false;
+    let mut exit_on_succ = false;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
-    execute!(stdout(), Hide)?;
-    execute!(stdout(), EnterAlternateScreen)?;
-    execute!(stdout(), EnableMouseCapture)?;
-    enable_raw_mode()?;
-    let mut err = false;
-    initialize_panic_handler();
+
+    if !cli.headless {
+        // UI is in normal mode
+        execute!(stdout(), Hide)?;
+        execute!(stdout(), EnterAlternateScreen)?;
+        execute!(stdout(), EnableMouseCapture)?;
+        enable_raw_mode()?;
+        initialize_panic_handler();
+    } else {
+        // UI is in headless mode
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl-C handler");
+    }
 
     while running.load(Ordering::SeqCst) {
         // Calculate last packet rate
@@ -1997,12 +1915,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if last_hop_time.elapsed() >= hop_interval {
             if let Some(&channel) = cycle_iter.next() {
-                if let Err(e) = set_interface_chan(idx, channel) {
+                if let Err(e) = oxide.netlink.set_interface_chan(idx, channel) {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Error: {e:?}"),
                     ));
                 }
+                oxide.current_channel = WiFiChannel::new(channel).unwrap();
                 last_hop_time = Instant::now();
             }
         }
@@ -2046,15 +1965,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Start UI Messages
+
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
-            let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+            if !cli.headless {
+                let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+            } else {
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Info,
+                    format!(
+                        "Frames: {} | Rate: {} | Channel: {}",
+                        oxide.frame_count, frame_rate, oxide.current_channel
+                    ),
+                ));
+            }
         }
 
-        if last_interactions_clear.elapsed() >= interactions_interval {
+        // Clear the interactions counts for all AP's.
+        // This is deprecated as we are no longer capping interactions based on this.
+        /* if last_interactions_clear.elapsed() >= interactions_interval {
             last_interactions_clear = Instant::now();
             oxide.access_points.clear_all_interactions();
-        }
+        } */
 
         // Read Packet
         match read_packet(&mut oxide) {
@@ -2068,23 +2000,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 running.store(false, Ordering::SeqCst);
             }
         };
+
+        // Exit on targets success
+        if cli.autoexit && oxide.get_target_success() {
+            running.store(false, Ordering::SeqCst);
+            exit_on_succ = true;
+        }
+
+        //thread::sleep(Duration::from_millis(50));
     }
 
     // Execute cleanup
-    reset_terminal();
+    if !cli.headless {
+        reset_terminal();
+    }
+
+    if exit_on_succ {
+        println!("Auto Exit Initiated");
+    }
+
     println!("Cleaning up...");
     if err {
         println!("{}", get_art("A serious packet read error occured."))
     }
 
     println!("Setting {} down.", interface_name);
-    match set_interface_down(idx) {
+    match oxide.netlink.set_interface_down(idx) {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }
 
     println!("Setting {} to station mode.", interface_name);
-    match set_interface_station(idx) {
+    match oxide.netlink.set_interface_station(idx) {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }
@@ -2144,14 +2091,14 @@ fn print_handshake_summary(handshakes_map: &HashMap<String, Vec<String>>) {
             let (handshake_count, pmkid_count) =
                 values
                     .iter()
-                    .fold((0, 0), |(handshake_acc, pmkid_acc), value| {
-                        if value.starts_with("WPA*02") {
-                            (handshake_acc + 1, pmkid_acc)
-                        } else if value.starts_with("WPA*01") {
-                            (handshake_acc, pmkid_acc + 1)
-                        } else {
-                            (handshake_acc, pmkid_acc)
+                    .fold((0, 0), |(mut handshake_acc, mut pmkid_acc), value| {
+                        if value.contains("WPA*02*") {
+                            handshake_acc += 1;
                         }
+                        if value.contains("WPA*01") {
+                            pmkid_acc += 1;
+                        }
+                        (handshake_acc, pmkid_acc)
                     });
 
             println!(
@@ -2202,33 +2149,4 @@ fn reset_terminal() {
     execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
     execute!(stdout(), DisableMouseCapture).expect("Could not disable mouse capture.");
     disable_raw_mode().expect("Could not disable raw mode.");
-}
-
-#[allow(dead_code)]
-fn start_channel_hopping_thread(
-    running: Arc<AtomicBool>,
-    hop_interval: Duration,
-    idx: i32,
-    channels: Vec<u8>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let mut cycle_iter = channels.iter().cycle();
-        let mut last_hop_time = Instant::now();
-        if let Some(&channel) = cycle_iter.next() {
-            if let Err(e) = set_interface_chan(idx, channel) {
-                eprintln!("{}", e);
-            }
-        }
-        while running.load(Ordering::SeqCst) {
-            if last_hop_time.elapsed() >= hop_interval {
-                if let Some(&channel) = cycle_iter.next() {
-                    if let Err(e) = set_interface_chan(idx, channel) {
-                        eprintln!("{}", e);
-                    }
-                    last_hop_time = Instant::now();
-                }
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-    })
 }
