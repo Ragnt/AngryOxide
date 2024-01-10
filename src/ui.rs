@@ -375,7 +375,7 @@ fn create_status_bar(
 
     let dataflow = Line::from(vec![
         Span::from(format!(
-            "Empty Reads: {} | UI: ",
+            "Empty Reads: {}/s | UI: ",
             oxide.counters.empty_reads_rate,
         )),
         flow,

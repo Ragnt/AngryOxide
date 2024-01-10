@@ -1861,6 +1861,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut frame_count_old = 0u64;
     let mut frame_rate = 0u64;
 
+    let mut empty_reads_old = 0u64;
+
     let mut last_status_time = Instant::now();
 
     let status_interval = if cli.headless {
@@ -1923,6 +1925,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let frames_processed = oxide.frame_count - frame_count_old;
             frame_count_old = oxide.frame_count;
             frame_rate = frames_processed;
+
+            // Calculate the Empty Read Rate:
+            let reads = oxide.counters.empty_reads;
+            oxide.counters.empty_reads_rate = reads - empty_reads_old;
+            empty_reads_old = reads;
         }
 
         if last_hop_time.elapsed() >= hop_interval {
@@ -2013,7 +2020,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match read_packet(&mut oxide) {
             Ok(packet) => {
                 if !packet.is_empty() {
-                    oxide.counters.empty_reads = 0;
                     let _ = handle_frame(&mut oxide, &packet);
                 }
             }
