@@ -129,7 +129,7 @@ struct Arguments {
     notransmit: bool,
     #[arg(long)]
     /// Optional tar output files.
-    tar: bool,
+    notar: bool,
     #[arg(long)]
     /// Optional send deauths.
     deauth: bool,
@@ -2122,7 +2122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_handshake_summary(&handshakes_map);
     output_files.extend(hashfiles);
 
-    if cli.tar {
+    if !cli.notar {
         println!("📦 Creating Output Tarball ({}.tar.gz)...", filename);
         let _ = tar_and_compress_files(output_files, &filename);
     }
