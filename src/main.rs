@@ -232,6 +232,7 @@ impl OxideRuntime {
         cli_band: Vec<u8>,
         cli_channels: Vec<u8>,
         cli_headless: bool,
+        cli_autoexit: bool,
     ) -> Self {
         println!("Starting AngryOxide... 😈");
 
@@ -333,6 +334,9 @@ impl OxideRuntime {
             let formatted: Vec<String> = target_vec.iter().map(|mac| mac.to_string()).collect();
             let result = formatted.join(", ");
             println!("Target List: {}", result);
+            if cli_autoexit {
+                println!("Auto-Exit Set - will shutdown when hashline collected for targets.");
+            }
         } else {
             println!("No target list provided... everything is a target 😏");
         }
@@ -1821,6 +1825,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.band,
         cli.channels,
         cli.headless,
+        cli.autoexit,
     );
 
     oxide.status_log.add_message(StatusMessage::new(
