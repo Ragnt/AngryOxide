@@ -88,9 +88,12 @@ sudo make install
 
 This will build from source, install into /usr/bin/angryoxide, and install the bash completions for you.
 
-#### Completions in ZSH:
+### Bash completion script:
+
+You can use `pkg-config --variable=completionsdir bash-completion` to determine where the completions script should be installed.
 
 I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-completions-fallback) to enable the bash autocompletion file zsh.
+
 
 
 ## Screenshots!
