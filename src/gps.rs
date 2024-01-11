@@ -69,7 +69,7 @@ impl GpsData {
         if self.lat.is_some() && self.lon.is_some() && self.timestamp.is_some() {
             return true;
         }
-        return false;
+        false
     }
 
     pub fn create_option_block(&self) -> Vec<u8> {
@@ -141,8 +141,8 @@ impl GpsData {
         }
         // Timestamp High//Low
         if let Some(timestamp) = &self.timestamp {
-            let high = Timestamp::from_iso8601(timestamp).unwrap().high;
-            let low = Timestamp::from_iso8601(timestamp).unwrap().low;
+            let high = Timestamp::from_iso8601(timestamp).unwrap_or_default().high;
+            let low = Timestamp::from_iso8601(timestamp).unwrap_or_default().low;
             data.extend_from_slice(&high.to_ne_bytes());
             data.extend_from_slice(&low.to_ne_bytes());
         }
@@ -328,7 +328,6 @@ impl Timestamp {
         ((self.high as u64) << 32) | self.low as u64
     }
 
-    // Example method to convert to SystemTime
     pub fn to_system_time(&self) -> SystemTime {
         UNIX_EPOCH + Duration::from_secs(self.to_u64())
     }
