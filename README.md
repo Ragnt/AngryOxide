@@ -30,7 +30,7 @@ More architectures will be added as I confirm there is no endianess-related issu
 - Provides pcapng files with embedded GPS using the [Kismet Format](https://www.kismetwireless.net/docs/dev/pcapng_gps/).
 - Provides a kismetdb file with all frames (with GPS) for post-processing.
 - Wraps all output files in a gzipped tarball.
-- Bash autocompletions for easy interface selection provided (manual install).
+- Bash autocompletions for easy interface selection provided.
 
 ## Attacks
 
@@ -68,6 +68,30 @@ Options:
       --deauth                 Optional send deauths
   -h, --help                   Print help
 ```
+
+## Building from source
+
+If you want to build from source instead of using precompiled binaries, these are the basic instructions:
+
+```
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Clone this repo
+git clone https://github.com/Ragnt/AngryOxide.git
+
+# Build/Install
+cd AngryOxide
+make
+sudo make install
+```
+
+This will build from source, install into /usr/bin/angryoxide, and install the bash completions for you.
+
+#### Completions in ZSH:
+
+I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-completions-fallback) to enable the bash autocompletion file zsh.
+
 
 ## Screenshots!
 
