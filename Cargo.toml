@@ -59,6 +59,3 @@ flate2 = { version = "1.0.28", features = ["zlib"] }
 tar = "0.4.40"
 nl80211-ng = "0.1.5"
 procfs = "0.16.0"
-[target.mips-unknown-linux-musl]
-linker = "mips-linux-musl-gcc"
-rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=-s"]

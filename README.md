@@ -88,6 +88,14 @@ sudo make install
 
 This will build from source, install into /usr/bin/angryoxide, and install the bash completions for you.
 
+### Cross compiling:
+
+I use [cross](https://github.com/cross-rs/cross) to cross compile to embedded architectures.
+
+Here is MIPS as an example, which builds by also building the standard library.
+
+```cross build +nightly --target mips-unknown-linux-musl --release -Zbuild-std```
+
 ### Bash completion script:
 
 You can use `pkg-config --variable=completionsdir bash-completion` to determine where the completions script should be installed.

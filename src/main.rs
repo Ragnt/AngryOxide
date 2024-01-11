@@ -1956,6 +1956,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             frame_rate = frames_processed;
 
             // Calculate the Empty Read Rate:
+            if oxide.counters.empty_reads >= 18446744073709541615 {
+                oxide.counters.empty_reads = 0;
+                empty_reads_old = 0;
+            }
             let reads = oxide.counters.empty_reads;
             oxide.counters.empty_reads_rate = reads - empty_reads_old;
             empty_reads_old = reads;
