@@ -59,7 +59,8 @@ use rawsocks::{open_socket_rx, open_socket_tx};
 use tar::{Builder, Header};
 use tx::{
     build_association_response, build_authentication_response, build_cts,
-    build_disassocation_from_client, build_eapol_m1, build_probe_request_undirected,
+    build_disassocation_from_client, build_eapol_m1, build_probe_request_directed,
+    build_probe_request_target, build_probe_request_undirected,
 };
 use ui::UiState;
 use uuid::Uuid;
@@ -609,7 +610,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                 &AccessPoint::new(
                                     bssid,
                                     signal_strength,
-                                    ssid,
+                                    ssid.clone(),
                                     station_info.ds_parameter_set,
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
@@ -649,8 +650,24 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                     oxide.rogue_client,
                                 ),
                             );
+                        if !oxide.notx {
+                            if ap.beacon_count % 200 == 0
+                                && !ap.ssid.clone().is_some_and(|ssid| ssid != "")
+                            {
+                                let frx = build_probe_request_target(
+                                    &oxide.rogue_client,
+                                    &bssid,
+                                    oxide.counters.sequence2(),
+                                );
+                                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                                oxide.status_log.add_message(StatusMessage::new(
+                                    MessageType::Info,
+                                    format!("Probing Unknown SSID: {}", bssid),
+                                ));
+                            }
+                        }
                         ap.beacon_count += 1;
-                    };
+                    }
                     let _ = m1_retrieval_attack(oxide, &bssid);
                     if oxide.deauth {
                         let _ = deauth_attack(oxide, &bssid);

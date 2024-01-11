@@ -464,6 +464,54 @@ pub fn build_probe_request_undirected(addr_rogue: &MacAddress, sequence: u16) ->
     rth
 }
 
+pub fn build_probe_request_target(
+    addr_rogue: &MacAddress,
+    ap_addr: &MacAddress,
+    sequence: u16,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::ProbeRequest,
+        flags: 0u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: [0x3a, 0x01],
+        address_1: *ap_addr,
+        address_2: *addr_rogue,
+        address_3: *ap_addr,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: sequence,
+        },
+    };
+
+    let frx = ProbeRequest {
+        header,
+        station_info: StationInfo {
+            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
+            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            ssid: None,
+            ds_parameter_set: None,
+            tim: None,
+            country_info: None,
+            power_constraint: None,
+            ht_capabilities: None,
+            vht_capabilities: None,
+            rsn_information: None,
+            wpa_info: None,
+            vendor_specific: Vec::new(),
+            data: Vec::new(),
+        },
+    };
+    rth.extend(frx.encode());
+    rth
+}
+
 #[allow(dead_code)]
 pub fn build_probe_request_directed(
     addr_rogue: &MacAddress,

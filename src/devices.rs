@@ -494,14 +494,12 @@ impl WiFiDeviceList<AccessPoint> {
 
             if let Some(nssid) = &new_ap.ssid {
                 let new_ssid = nssid.replace('\0', "");
-                // Update other fields
-                if ap.ssid.is_none() {
-                    ap.ssid = Some(new_ssid);
-                } else if ap.ssid.clone().unwrap() == "" {
-                    let _ = "";
+                // Update SSID
+                if ap.ssid.is_none() || ap.ssid.as_mut().is_some_and(|ssid| ssid == "") {
                     ap.ssid = Some(new_ssid);
                 }
             }
+            // Update information
             ap.information.update_with(&new_ap.information);
             return ap;
         }

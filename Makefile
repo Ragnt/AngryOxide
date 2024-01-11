@@ -22,7 +22,7 @@ build:
 	cargo build $(release)
 
 install:
-	cp target/$(target)/$(prog) /usr/bin/$(prog)-$(extension)
+	cp target/$(target)/$(prog) /usr/bin/$(prog)
 	cp completions/$(prog) $(shell pkg-config --variable=completionsdir bash-completion)/
 
 all: build install

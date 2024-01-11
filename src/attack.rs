@@ -41,6 +41,10 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     };
 
+    if ap_data.ssid.is_none() {
+        return Ok(());
+    }
+
     // If the interaction cooldown isn't timed out (aka timer1).
     if !ap_data.auth_sequence.is_t1_timeout() {
         return Ok(());
