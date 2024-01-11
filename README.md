@@ -30,6 +30,7 @@ More architectures will be added as I confirm there is no endianess-related issu
 - Provides pcapng files with embedded GPS using the [Kismet Format](https://www.kismetwireless.net/docs/dev/pcapng_gps/).
 - Provides a kismetdb file with all frames (with GPS) for post-processing.
 - Wraps all output files in a gzipped tarball.
+- Bash autocompletions for easy interface selection provided (manual install).
 
 ## Attacks
 
@@ -50,7 +51,7 @@ All of these attacks are rate-controlled both to prevent erroneous EAPOL timer r
 ❯ sudo AngryOxide --help
 Does awesome things... with wifi.
 
-Usage: angry_oxide [OPTIONS] --interface <INTERFACE>
+Usage: angryoxide [OPTIONS] --interface <INTERFACE>
 
 Options:
   -i, --interface <INTERFACE>  Interface to use
@@ -63,6 +64,7 @@ Options:
       --headless               Optional set the tool to headless mode without a UI
       --autoexit               Optional tool will auto-exit when all targets have a valid hashline
       --notransmit             Optional do not transmit, passive only
+      --notar                  Optional tar output files
       --deauth                 Optional send deauths
   -h, --help                   Print help
 ```

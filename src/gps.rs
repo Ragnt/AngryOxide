@@ -66,7 +66,14 @@ impl GpsData {
     }
 
     pub fn has_fix(&self) -> bool {
-        if self.lat.is_some() && self.lon.is_some() && self.timestamp.is_some() {
+        if self.fix.is_some_and(|f| f > 0) {
+            return true;
+        }
+        false
+    }
+
+    pub fn has_gpsd(&self) -> bool {
+        if self.fix.is_some() {
             return true;
         }
         false

@@ -691,7 +691,7 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
     */
 
     let gpsdata = oxide.gps_source.get_gps();
-    if gpsdata.has_fix() {
+    if gpsdata.has_gpsd() {
         let top_right_block = Block::default()
             .borders(Borders::ALL)
             .title(" GPS Data ")

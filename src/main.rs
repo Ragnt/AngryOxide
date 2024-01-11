@@ -102,13 +102,13 @@ struct Arguments {
     interface: String,
     #[arg(short, long)]
     /// Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded.
-    channels: Vec<u8>,
+    channel: Vec<u8>,
     #[arg(short, long)]
     /// Optional band to scan - Will include all channels interface can support.
     band: Vec<u8>,
     #[arg(short, long)]
     /// Optional list of targets to attack - will attack everything if excluded.
-    targets: Option<Vec<String>>,
+    target: Option<Vec<String>>,
     #[arg(short, long)]
     /// Optional output filename.
     output: Option<String>,
@@ -1859,12 +1859,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.interface,
         cli.notransmit,
         cli.rogue,
-        cli.targets,
+        cli.target,
         cli.deauth,
         filename.clone(),
         cli.gpsd,
         cli.band,
-        cli.channels,
+        cli.channel,
         cli.headless,
         cli.autoexit,
     );
@@ -2191,7 +2191,7 @@ fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Resu
         if let Err(e) = fs::remove_file(path) {
             eprintln!("Failed to delete file {}: {}", path, e);
         }
-    } 
+    }
 
     Ok(())
 }

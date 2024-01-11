@@ -1,0 +1,26 @@
+# angryoxide completion                                      -*- shell-script -*-
+
+_angryoxide()
+{
+    	local cur prev words cword
+    	_init_completion || return
+
+    	case $prev in
+        	-i|-I|--interfaces)
+            		_available_interfaces -w
+	    	return 0
+            	;;
+    	esac
+
+	if [[ $cword -eq 1 ]]; then
+		if [[ $cur == --* ]]; then
+        		COMPREPLY=( $( compgen -W '--interface --channels --band --target --output --rogue --gpsd --headless --autoexit --notransmit --notar --deauth' -- "$cur" ) )
+		elif [[ $cur == -* ]]; then
+        		COMPREPLY=( $( compgen -W '-i -c -b -t -o -r -h' -- "$cur" ) )
+		fi
+	fi
+
+} &&
+complete -F _angryoxide angryoxide
+
+# ex: ts=4 sw=4 et filetype=sh
