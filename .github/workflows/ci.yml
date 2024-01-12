@@ -51,6 +51,12 @@ jobs:
             bin: angryoxide
             name: angryoxide-linux-armv7hf-musl.tar.gz
 
+          - os_name: Linux-mips-musl
+            os: ubuntu-20.04
+            target: mips-unknown-linux-musl
+            bin: angryoxide
+            name: angryoxide-linux-mips-musl.tar.gz
+
         toolchain:
           - stable
     steps:
@@ -64,6 +70,18 @@ jobs:
       - name: Install musl-tools on Linux
         run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
         if: contains(matrix.platform.name, 'musl')
+      
+      - name: Install cross
+        id: cross-nix
+        shell: bash
+        run: |
+          set -e
+          export TARGET="$HOME/bin"
+          mkdir -p "$TARGET"
+          ./bootstrap/bootstrap-ubi.sh
+          "$HOME/bin/ubi" --project cross-rs/cross --matching musl --in .          
+        if: matrix.platform.cross
+
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v0
         with:
@@ -72,6 +90,18 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           args: "--locked --release"
           strip: true
+        if: ${{ !contains(matrix.platform.target, 'mips') }}
+
+      - name: Build binary (MIPS)
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: "build"
+          target: ${{ matrix.platform.target }}
+          toolchain: nightly
+          args: "--locked --release -Zbuild-std"
+          strip: true
+        if: contains(matrix.platform.target, 'mips')
+  
       - name: Package as archive
         shell: bash
         run: |

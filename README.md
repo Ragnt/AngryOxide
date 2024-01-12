@@ -92,11 +92,20 @@ This will build from source, install into /usr/bin/angryoxide, and install the b
 
 ### Cross compiling:
 
+WARNING: this software wasn't written with many architectures in mind. I cannot gurantee anything will work (am fairly confident it won't) on LE systems.
+
 I use [cross](https://github.com/cross-rs/cross) to cross compile to embedded architectures.
 
-Here is MIPS as an example, which builds by also building the standard library.
+Here is MIPS (mips-unknown-linux-musl) as an example.
 
-```cross build +nightly --target mips-unknown-linux-musl --release -Zbuild-std```
+```
+# make sure you have the nightly installed
+rustup install nightly
+
+# dynamically linked & soft-float
+cross build +nightly --target mips-unknown-linux-musl --release -Zbuild-std
+```
+
 
 ### Bash completion script:
 
