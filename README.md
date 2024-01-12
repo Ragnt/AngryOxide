@@ -55,17 +55,17 @@ Usage: angryoxide [OPTIONS] --interface <INTERFACE>
 
 Options:
   -i, --interface <INTERFACE>  Interface to use
-  -c, --channel <CHANNEL>      Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded
-  -b, --band <BAND>            Optional band to scan - Will include all channels interface can support
-  -t, --target <TARGET>        Optional target (MAC or SSID) to attack - will attack everything if excluded
-  -o, --output <OUTPUT>        Optional output filename
-  -r, --rogue <ROGUE>          Optional TX MAC for rogue-based attacks - will randomize if excluded
-      --gpsd <GPSD>            Optional alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
-      --headless               Optional set the tool to headless mode without a UI
-      --autoexit               Optional tool will auto-exit when all targets have a valid hashline
-      --notransmit             Optional do not transmit, passive only
-      --notar                  Optional tar output files
-      --nodeauth               Optional do NOT send deauths (will try other attacks only)
+  -c, --channel <CHANNEL>      Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified
+  -b, --band <BAND>            Optional - Entire band to scan - will include all channels interface can support
+  -t, --target <TARGET>        Optional - Target (MAC or SSID) to attack - will attack everything if none specified
+  -o, --output <OUTPUT>        Optional - Output filename
+  -r, --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
+      --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
+      --headless               Optional - Set the tool to headless mode without a UI. (useful with --headless)
+      --autoexit               Optional - AO will auto-exit when all targets have a valid hashline
+      --notransmit             Optional - Do not transmit - passive only
+      --nodeauth               Optional - Do NOT send deauths (will try other attacks only)
+      --notar                  Optional - Do not tar output files
   -h, --help                   Print help
 ```
 
