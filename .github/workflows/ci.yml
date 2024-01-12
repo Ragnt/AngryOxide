@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.platform.toolchain }}
+    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
     runs-on: ${{ matrix.platform.os }}
     strategy:
       fail-fast: false
@@ -26,54 +26,49 @@ jobs:
             target: x86_64-unknown-linux-gnu
             bin: angryoxide
             name: angryoxide-linux-x86_64.tar.gz
-            toolchain: stable
 
           - os_name: Linux-x86_64_musl
             os: ubuntu-20.04
             target: x86_64-unknown-linux-musl
             bin: angryoxide
             name: angryoxide-linux-x86_64-musl.tar.gz
-            toolchain: stable
 
           - os_name: Linux-aarch64
             os: ubuntu-20.04
             target: aarch64-unknown-linux-musl
             bin: angryoxide
             name: angryoxide-linux-aarch64-musl.tar.gz
-            toolchain: stable
 
           - os_name: Linux-arm
             os: ubuntu-20.04
             target: arm-unknown-linux-musleabi
             bin: angryoxide
             name: angryoxide-linux-arm-musl.tar.gz
-            toolchain: stable
 
           - os_name: Linux-armv7hf
             os: ubuntu-20.04
             target: armv7-unknown-linux-musleabihf
             bin: angryoxide
             name: angryoxide-linux-armv7hf-musl.tar.gz
-            toolchain: stable
 
           - os_name: Linux-mips-musl
             os: ubuntu-20.04
             target: mips-unknown-linux-musl
             bin: angryoxide
             name: angryoxide-linux-mips-musl.tar.gz
-            toolchain: nightly
 
+        toolchain:
+          - stable
+          - nightly 
+          
     steps:
       - uses: actions/checkout@v3
-      
       - name: Cache cargo & target directories
         uses: Swatinem/rust-cache@v2
-
       - name: Configure Git
         run: |
           git config --global user.email "jdoe@example.com"
           git config --global user.name "J. Doe"
-
       - name: Install musl-tools on Linux
         run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
         if: contains(matrix.platform.name, 'musl')
@@ -94,7 +89,7 @@ jobs:
         with:
           command: "build"
           target: ${{ matrix.platform.target }}
-          toolchain: ${{ matrix.platform.toolchain }}
+          toolchain: ${{ matrix.toolchain }}
           args: "--locked --release"
           strip: true
         if: ${{ !contains(matrix.platform.target, 'mips') }}
@@ -104,7 +99,7 @@ jobs:
         with:
           command: "build"
           target: ${{ matrix.platform.target }}
-          toolchain: ${{ matrix.platform.toolchain }}
+          toolchain: nightly
           args: "--locked --release -Zbuild-std"
           strip: true
         if: contains(matrix.platform.target, 'mips')
