@@ -21,7 +21,7 @@ More architectures will be added as I confirm there is no endianess-related issu
 ## Features
 
 - Active state-based attack engine used to retrieve relevent EAPOL messages from Access Points and clients.
-- Target List option to limit attack scope.
+- Target option that accepts MAC (aabbcc..., aa:bb:cc...) and SSID "Test_SSID" to limit attack scope.
 - A Terminal-UI that presents all relevent data while still living in the terminal for easy usage over SSH.
 - Limits DEAUTHENTICATION frames that can cause more damage than good to the authentication sequence.
 - EAPOL 4-Way-Handshake validation using Nonce Correction, Replay Counter validation, and Temporal validation.

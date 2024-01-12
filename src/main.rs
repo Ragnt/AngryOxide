@@ -111,7 +111,7 @@ struct Arguments {
     /// Optional band to scan - Will include all channels interface can support.
     band: Vec<u8>,
     #[arg(short, long)]
-    /// Optional list of targets to attack - will attack everything if excluded.
+    /// Optional target (MAC or SSID) to attack - will attack everything if excluded.
     target: Option<Vec<String>>,
     #[arg(short, long)]
     /// Optional output filename.
