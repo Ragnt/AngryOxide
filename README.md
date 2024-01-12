@@ -23,7 +23,7 @@ More architectures will be added as I confirm there is no endianess-related issu
 - Active state-based attack engine used to retrieve relevent EAPOL messages from Access Points and clients.
 - Target List option to limit attack scope.
 - A Terminal-UI that presents all relevent data while still living in the terminal for easy usage over SSH.
-- Avoids DEAUTHENTICATION frames that cause more damage than good to the authentication sequence.
+- Limits DEAUTHENTICATION frames that can cause more damage than good to the authentication sequence.
 - EAPOL 4-Way-Handshake validation using Nonce Correction, Replay Counter validation, and Temporal validation.
 - Automatically elicits PMKID from access points where available.
 - Utilizes GPSD with ability to set remote GPSD service address.
@@ -41,23 +41,23 @@ Will by default attack ALL access points in range, unless atleast one target is 
 - Utilized Anonymous Reassociation to force Access Points to deauthenticate their own clients (MFP Bypass)
 - Attempts to downgrade RSN modes to WPA2-CCMP (Probe Response Injection)
 - Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
-- Will send controlled deauthentication frames if told to do so (--deauth)
+- Will send controlled deauthentication frames unless told not to (--nodeauth)
 
 All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC.
 
 ## Help
 
 ```bash
-❯ sudo AngryOxide --help
+❯ sudo angryoxide --help
 Does awesome things... with wifi.
 
 Usage: angryoxide [OPTIONS] --interface <INTERFACE>
 
 Options:
   -i, --interface <INTERFACE>  Interface to use
-  -c, --channels <CHANNELS>    Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded
+  -c, --channel <CHANNEL>      Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded
   -b, --band <BAND>            Optional band to scan - Will include all channels interface can support
-  -t, --targets <TARGETS>      Optional list of targets to attack - will attack everything if excluded
+  -t, --target <TARGET>        Optional list of targets to attack - will attack everything if excluded
   -o, --output <OUTPUT>        Optional output filename
   -r, --rogue <ROGUE>          Optional TX MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD>            Optional alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
@@ -65,7 +65,7 @@ Options:
       --autoexit               Optional tool will auto-exit when all targets have a valid hashline
       --notransmit             Optional do not transmit, passive only
       --notar                  Optional tar output files
-      --deauth                 Optional send deauths
+      --nodeauth               Optional do NOT send deauths (will try other attacks only)
   -h, --help                   Print help
 ```
 
