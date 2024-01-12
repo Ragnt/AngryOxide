@@ -8,6 +8,8 @@
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
+NOTE: This project is under HEAVY development and you can expect a very fast release cycle.
+
 The overall goal of this tool is to provide a single-interface survey capability with advanced automated attacks that result in valid hashlines you can crack with [Hashcat](https://hashcat.net/hashcat/).
 
 This tool is heavily inspired by [hcxdumptool](https://github.com/ZerBea/hcxdumptool) and development wouldn't have been possible without help from ZerBea.
