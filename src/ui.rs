@@ -1,11 +1,13 @@
 use derive_setters::Setters;
 use gpsd_proto::Mode;
 use libwifi::frame::components::MacAddress;
+use rand::Rng;
 use std::{io::Result, time::Instant};
 
 use crate::{
     auth::HandshakeStorage,
     devices::{AccessPoint, Station, WiFiDeviceList},
+    matrix::MatrixSnowstorm,
     snowstorm::Snowstorm,
     status::StatusMessage,
     tabbedblock::{
@@ -99,6 +101,7 @@ pub struct UiState {
     pub messages_sort_reverse: bool,
 
     pub snowstorm: Snowstorm,
+    pub matrix_snowstorm: MatrixSnowstorm,
 }
 
 impl UiState {
@@ -771,17 +774,32 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
         frame.render_widget(para_one, top_right_layout[0]);
         frame.render_widget(para_two, top_right_layout[1]);
     } else {
+        let title = if oxide.ui_snowstorm {
+            "Snowfall for geeks (No GPS)"
+        } else {
+            "Matrix for geeks (No GPS)"
+        };
+    
         let top_right_block = Block::default()
             .borders(Borders::ALL)
-            .title(" Snowfall for geeks (No GPS) ");
-
-        let snowstorm = Snowstorm::frame(
-            oxide.ui_state.snowstorm.clone(),
-            top_right_block.inner(top_layout[1]),
-        );
-        oxide.ui_state.snowstorm = snowstorm.clone();
-
-        frame.render_widget(snowstorm, top_right_block.inner(top_layout[1]));
+            .title(title);
+    
+        if oxide.ui_snowstorm {
+            let snowstorm = Snowstorm::frame(
+                oxide.ui_state.snowstorm.clone(),
+                top_right_block.inner(top_layout[1]),
+            );
+            oxide.ui_state.snowstorm = snowstorm.clone();
+            frame.render_widget(snowstorm, top_right_block.inner(top_layout[1]));
+        } else {
+            let matrix_snowstorm = MatrixSnowstorm::frame(
+                oxide.ui_state.matrix_snowstorm.clone(),
+                top_right_block.inner(top_layout[1]),
+            );
+            oxide.ui_state.matrix_snowstorm = matrix_snowstorm.clone();
+            frame.render_widget(matrix_snowstorm, top_right_block.inner(top_layout[1]));
+        }
+    
         frame.render_widget(top_right_block, top_layout[1]);
     }
 
