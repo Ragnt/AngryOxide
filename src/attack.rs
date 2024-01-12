@@ -25,19 +25,6 @@ use crate::{
 /// Authentication
 /// Used to (attempt) to retrieve a PMKID.
 pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
-    // If there are targets, make sure this AP is a target before continuing.
-    if !oxide.targets.is_empty() && !oxide.targets.contains(ap_mac) {
-        return Ok(());
-    }
-
-    // If we already have a 4whs, don't continue.
-    if oxide
-        .handshake_storage
-        .has_complete_handshake_for_ap(ap_mac)
-    {
-        return Ok(());
-    }
-
     // get AP object, if there isn't one, return (this shouldn't happen).
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
@@ -45,9 +32,34 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     };
 
-    if !oxide.stargets.is_empty()
-        && ap_data.ssid.is_some()
-        && !oxide.stargets.contains(&ap_data.ssid.clone().unwrap())
+    ////// Target Validation ////////
+    let mut target = true;
+
+    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+        target = false;
+    }
+
+    if !target && oxide.targets.contains(ap_mac) {
+        target = true;
+    }
+
+    if !target
+        && !oxide.stargets.is_empty()
+        && (ap_data.ssid.is_none()
+            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
+    {
+        target = true
+    }
+
+    if !target {
+        return Ok(());
+    }
+    /////////////////////////////
+
+    // If we already have a 4whs, don't continue.
+    if oxide
+        .handshake_storage
+        .has_complete_handshake_for_ap(ap_mac)
     {
         return Ok(());
     }
@@ -101,11 +113,6 @@ pub fn m1_retrieval_attack_phase_2(
     client_mac: &MacAddress,
     oxide: &mut OxideRuntime,
 ) -> Result<(), String> {
-    // If there are targets and one of them is our AP, continue
-    if !oxide.targets.is_empty() && !oxide.targets.contains(ap_mac) {
-        return Ok(());
-    }
-
     // Get our AP
     let ap_data = if let Some(ap) = oxide.access_points.get_device(ap_mac) {
         ap
@@ -113,12 +120,29 @@ pub fn m1_retrieval_attack_phase_2(
         return Ok(());
     };
 
-    if !oxide.stargets.is_empty()
-        && ap_data.ssid.is_some()
-        && !oxide.stargets.contains(&ap_data.ssid.clone().unwrap())
+    ////// Target Validation ////////
+    let mut target = true;
+
+    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+        target = false;
+    }
+
+    if !target && oxide.targets.contains(ap_mac) {
+        target = true;
+    }
+
+    if !target
+        && !oxide.stargets.is_empty()
+        && (ap_data.ssid.is_none()
+            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
     {
+        target = true
+    }
+
+    if !target {
         return Ok(());
     }
+    /////////////////////////////
 
     // Is our sequence state 1?
     if ap_data.auth_sequence.state != 1 {
@@ -176,26 +200,37 @@ pub fn m1_retrieval_attack_phase_2(
 }
 
 pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
-    if !oxide.targets.is_empty() && !oxide.targets.contains(ap_mac) {
-        return Ok(());
-    }
-
-    if oxide
-        .handshake_storage
-        .has_complete_handshake_for_ap(ap_mac)
-    {
-        return Ok(());
-    }
-
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
     } else {
         return Ok(());
     };
 
-    if !oxide.stargets.is_empty()
-        && ap_data.ssid.is_some()
-        && !oxide.stargets.contains(&ap_data.ssid.clone().unwrap())
+    let mut target = true;
+
+    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+        target = false;
+    }
+
+    if !target && oxide.targets.contains(ap_mac) {
+        target = true;
+    }
+
+    if !target
+        && !oxide.stargets.is_empty()
+        && (ap_data.ssid.is_none()
+            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
+    {
+        target = true
+    }
+
+    if !target {
+        return Ok(());
+    }
+
+    if oxide
+        .handshake_storage
+        .has_complete_handshake_for_ap(ap_mac)
     {
         return Ok(());
     }
@@ -282,10 +317,9 @@ pub fn anon_reassociation_attack(
     oxide: &mut OxideRuntime,
     ap_mac: &MacAddress,
 ) -> Result<(), String> {
-    if (!oxide.targets.is_empty() && !oxide.targets.contains(ap_mac))
-        || oxide
-            .handshake_storage
-            .has_complete_handshake_for_ap(ap_mac)
+    if oxide
+        .handshake_storage
+        .has_complete_handshake_for_ap(ap_mac)
         || oxide.notx
     {
         return Ok(());
@@ -297,12 +331,29 @@ pub fn anon_reassociation_attack(
         return Ok(());
     };
 
-    if !oxide.stargets.is_empty()
-        && ap.ssid.is_some()
-        && !oxide.stargets.contains(&ap.ssid.clone().unwrap())
+    ////// Target Validation ////////
+    let mut target = true;
+
+    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+        target = false;
+    }
+
+    if !target && oxide.targets.contains(ap_mac) {
+        target = true;
+    }
+
+    if !target
+        && !oxide.stargets.is_empty()
+        && (ap.ssid.is_none()
+            || (ap.ssid.is_some() && oxide.stargets.contains(&ap.ssid.clone().unwrap())))
     {
+        target = true
+    }
+
+    if !target {
         return Ok(());
     }
+    /////////////////////////////
 
     let pcs = if ap.information.cs_ccmp.is_some_and(|x| x) {
         RsnCipherSuite::CCMP
@@ -362,23 +413,43 @@ pub fn rogue_m2_attack_directed(
         return Ok(());
     }
 
-    // Make sure we have an SSID to send
-    if probe.station_info.ssid.is_none() {
-        return Ok(());
-    }
-    let ssid = probe.station_info.ssid.unwrap();
-
-    // Check SSID against SSID targets
-    if !oxide.stargets.is_empty() && !oxide.stargets.contains(&ssid) {
-        return Ok(());
-    }
-
     // Grab the station from our unnasoc. clients list.
     let station = if let Some(dev) = oxide.unassoc_clients.get_device(&probe.header.address_2) {
         dev
     } else {
         return Ok(());
     };
+
+    // Make sure we have an SSID to send
+    if probe.station_info.ssid.is_none() {
+        return Ok(());
+    }
+    let ssid = probe.station_info.ssid.unwrap();
+
+    let ap = oxide.access_points.get_device_by_ssid(&ssid);
+
+    ////// Target Validation ////////
+    let mut target = true;
+
+    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+        target = false;
+    }
+
+    if !target
+        && !oxide.targets.is_empty()
+        && ap.is_some_and(|ap| oxide.targets.contains(&ap.mac_address))
+    {
+        target = true;
+    }
+
+    if !target && !oxide.stargets.is_empty() && (oxide.stargets.contains(&ssid)) {
+        target = true
+    }
+
+    if !target {
+        return Ok(());
+    }
+    /////////////////////////////
 
     if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
         return Ok(());
@@ -441,29 +512,29 @@ pub fn rogue_m2_attack_undirected(
 
     if let Some(ssid) = probe.station_info.ssid {
         // Target validation stuff
-        let mut target_checks = false;
-        let mut is_target = false;
+        let mut is_target = true;
 
         if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-            target_checks = true;
+            is_target = false;
         }
 
         // Is the AP the SSID belongs to (based on our survey) in our MAC Targets?
-        if oxide
-            .access_points
-            .get_device_by_ssid(&ssid)
-            .is_some_and(|ap| oxide.targets.contains(&ap.mac_address))
+        if !is_target
+            && oxide
+                .access_points
+                .get_device_by_ssid(&ssid)
+                .is_some_and(|ap| oxide.targets.contains(&ap.mac_address))
         {
             is_target = true;
         }
 
         // Is the SSID in our stargets?
-        if oxide.stargets.contains(&ssid) {
+        if !is_target && oxide.stargets.contains(&ssid) {
             is_target = true;
         }
 
         // Both checks fail, we shouldn't persue this.
-        if target_checks && !is_target {
+        if !is_target {
             return Ok(());
         }
 

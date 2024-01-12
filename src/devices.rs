@@ -822,7 +822,7 @@ impl WiFiDeviceList<Station> {
         &mut self,
         mac_address: MacAddress,
         new_station: &Station,
-    ) -> &Station {
+    ) -> &mut Station {
         let exists = self.devices.contains_key(&mac_address);
         if exists {
             let station = self.devices.get_mut(&mac_address).unwrap();

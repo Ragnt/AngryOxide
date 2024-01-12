@@ -775,15 +775,13 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
         frame.render_widget(para_two, top_right_layout[1]);
     } else {
         let title = if oxide.ui_snowstorm {
-            "Snowfall for geeks (No GPS)"
+            " Snowfall for geeks (No GPS) "
         } else {
-            "Matrix for geeks (No GPS)"
+            " Matrix for geeks (No GPS) "
         };
-    
-        let top_right_block = Block::default()
-            .borders(Borders::ALL)
-            .title(title);
-    
+
+        let top_right_block = Block::default().borders(Borders::ALL).title(title);
+
         if oxide.ui_snowstorm {
             let snowstorm = Snowstorm::frame(
                 oxide.ui_state.snowstorm.clone(),
@@ -799,7 +797,7 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
             oxide.ui_state.matrix_snowstorm = matrix_snowstorm.clone();
             frame.render_widget(matrix_snowstorm, top_right_block.inner(top_layout[1]));
         }
-    
+
         frame.render_widget(top_right_block, top_layout[1]);
     }
 

