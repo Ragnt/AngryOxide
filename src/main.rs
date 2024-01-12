@@ -33,6 +33,7 @@ use crossterm::terminal::{
 };
 use database::DatabaseWriter;
 use gps::GPSDSource;
+use itertools::{Either, Itertools};
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
 use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
@@ -208,6 +209,7 @@ pub struct OxideRuntime {
     notx: bool,
     deauth: bool,
     targets: Vec<MacAddress>,
+    stargets: Vec<String>,
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
     rogue_client: MacAddress,
@@ -330,14 +332,17 @@ impl OxideRuntime {
         println!("Channels: {:?}", hop_channels);
 
         // Setup targets
-        let target_vec: Vec<MacAddress> = if let Some(vec_targets) = targets {
-            vec_targets
-                .into_iter()
-                .map(|f| MacAddress::from_str(&f).unwrap())
-                .collect()
-        } else {
-            vec![]
-        };
+        let (target_vec, starget_vec): (Vec<MacAddress>, Vec<String>) =
+            if let Some(vec_targets) = targets {
+                vec_targets
+                    .into_iter()
+                    .partition_map(|f| match MacAddress::from_str(&f) {
+                        Ok(mac) => Either::Left(mac),
+                        Err(_) => Either::Right(f),
+                    })
+            } else {
+                (vec![], vec![])
+            };
 
         if !target_vec.is_empty() {
             let formatted: Vec<String> = target_vec.iter().map(|mac| mac.to_string()).collect();
@@ -504,6 +509,7 @@ impl OxideRuntime {
             notx,
             deauth,
             targets: target_vec,
+            stargets: starget_vec,
             frame_count: 0,
             eapol_count: 0,
             error_count: 0,
@@ -1637,11 +1643,20 @@ fn handle_data_frame(
             );
 
             // Set to apless
-            oxide.handshake_storage.set_apless_for_ap(&ap_addr);
+            if let Ok(handshake) = result {
+                handshake.apless = true;
+            }
+
+            // Set to apless
+            //oxide.handshake_storage.set_apless_for_ap(&ap_addr);
 
             // Set the Station that we collected a RogueM2
             if let Some(station) = oxide.unassoc_clients.get_device(&station_addr) {
                 station.has_rogue_m2 = true;
+                station
+                    .rogue_actions
+                    .entry(essid.unwrap().to_string())
+                    .or_insert(true);
             }
 
             // Print a status so we have it for headless
@@ -1649,7 +1664,7 @@ fn handle_data_frame(
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Info,
                 format!(
-                    "*** RogueM2 Collected!: {dest} => {source} ({})",
+                    "\x1b[31m*** RogueM2 Collected!: {dest} => {source} ({})\x1b[0m",
                     essid.unwrap()
                 ),
             ));
@@ -1702,7 +1717,7 @@ fn handle_data_frame(
                         oxide.status_log.add_message(StatusMessage::new(
                             MessageType::Info,
                             format!(
-                                "*** 4wHS Complete: {dest} => {source} ({}) ***",
+                                "\x1b[31m*** 4wHS Complete: {dest} => {source} ({}) ***\x1b[0m",
                                 ap.ssid.clone().unwrap_or("".to_string())
                             ),
                         ));
@@ -1715,7 +1730,7 @@ fn handle_data_frame(
                         oxide.status_log.add_message(StatusMessage::new(
                             MessageType::Info,
                             format!(
-                                "*** PMKID Caught: {dest} => {source} ({}) ***",
+                                "\x1b[31m*** PMKID Caught: {dest} => {source} ({}) ***\x1b[0m",
                                 ap.ssid.clone().unwrap_or("".to_string())
                             ),
                         ));
