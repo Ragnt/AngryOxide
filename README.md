@@ -61,7 +61,7 @@ Options:
   -o, --output <OUTPUT>        Optional - Output filename
   -r, --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
-      --headless               Optional - Set the tool to headless mode without a UI. (useful with --headless)
+      --headless               Optional - Set AO to headless mode without a UI. (useful with --autoexit)
       --autoexit               Optional - AO will auto-exit when all targets have a valid hashline
       --notransmit             Optional - Do not transmit - passive only
       --nodeauth               Optional - Do NOT send deauths (will try other attacks only)
