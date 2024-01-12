@@ -866,6 +866,9 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
             crate::status::MessageType::Warning => {
                 Cell::from(status.message_type.to_string()).style(Style::new().fg(Color::Yellow))
             }
+            crate::status::MessageType::Priority => {
+                Cell::from(status.message_type.to_string()).style(Style::new().fg(Color::Green))
+            }
             crate::status::MessageType::Info => Cell::from(status.message_type.to_string()),
         };
 

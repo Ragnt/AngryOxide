@@ -8,6 +8,7 @@ pub enum MessageType {
     Error,
     Warning,
     Info,
+    Priority,
 }
 
 impl fmt::Display for MessageType {
@@ -16,6 +17,7 @@ impl fmt::Display for MessageType {
             MessageType::Error => "Error",
             MessageType::Warning => "Warning",
             MessageType::Info => "Info",
+            MessageType::Priority => "Priority",
         };
         write!(f, "{}", message_type_str)
     }
@@ -54,11 +56,20 @@ impl MessageLog {
     pub fn add_message(&mut self, message: StatusMessage) {
         self.messages.push(message.clone());
         if self.headless {
+            let color = match message.message_type {
+                MessageType::Error => "\x1b[31m",
+                MessageType::Warning => "\x1b[33m",
+                MessageType::Info => "",
+                MessageType::Priority => "\x1b[32m",
+            };
+            let white = "\x1b[0m";
             println!(
-                "{} {} :: {}",
+                "{} {}{} :: {}{}",
                 message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+                color,
                 message.message_type,
-                message.content
+                message.content,
+                white,
             )
         }
     }

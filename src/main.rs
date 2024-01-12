@@ -668,7 +668,7 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                 let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
                                 oxide.status_log.add_message(StatusMessage::new(
                                     MessageType::Info,
-                                    format!("Probing Unknown SSID: {}", bssid),
+                                    format!("Attempting Hidden SSID Collect: {}", bssid),
                                 ));
                             }
                         }
@@ -1662,9 +1662,9 @@ fn handle_data_frame(
             // Print a status so we have it for headless
 
             oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Info,
+                MessageType::Priority,
                 format!(
-                    "\x1b[31m*** RogueM2 Collected!: {dest} => {source} ({})\x1b[0m",
+                    "RogueM2 Collected!: {dest} => {source} ({})",
                     essid.unwrap()
                 ),
             ));
@@ -1715,9 +1715,9 @@ fn handle_data_frame(
                         ap.has_hs = true;
 
                         oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Info,
+                            MessageType::Priority,
                             format!(
-                                "\x1b[31m*** 4wHS Complete: {dest} => {source} ({}) ***\x1b[0m",
+                                "4wHS Complete: {dest} => {source} ({})",
                                 ap.ssid.clone().unwrap_or("".to_string())
                             ),
                         ));
@@ -1728,9 +1728,9 @@ fn handle_data_frame(
                         ap.has_pmkid = true;
 
                         oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Info,
+                            MessageType::Priority,
                             format!(
-                                "\x1b[31m*** PMKID Caught: {dest} => {source} ({}) ***\x1b[0m",
+                                "PMKID Caught: {dest} => {source} ({})",
                                 ap.ssid.clone().unwrap_or("".to_string())
                             ),
                         ));
@@ -1739,7 +1739,7 @@ fn handle_data_frame(
             }
             Err(e) => {
                 oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Info,
+                    MessageType::Warning,
                     format!(
                         "Eapol Failed to Add: {dest} => {source} ({}) | {e}",
                         eapol.determine_key_type(),
