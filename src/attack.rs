@@ -186,7 +186,7 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     let beacon_count = ap_data.beacon_count;
     let mut deauth_client = MacAddress([255, 255, 255, 255, 255, 255]);
 
-    if (beacon_count % 8) == 0
+    if (beacon_count % 32) == 0
         && !ap_data.information.ap_mfp.is_some_and(|mfp| mfp)
         && ap_data.information.akm_mask()
     {
