@@ -105,38 +105,38 @@ struct Arguments {
     /// Interface to use.
     interface: String,
     #[arg(short, long)]
-    /// Optional channel to scan. Will use "-c 1 -c 6 -c 11" if excluded.
+    /// Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified.
     channel: Vec<u8>,
     #[arg(short, long)]
-    /// Optional band to scan - Will include all channels interface can support.
+    /// Optional - Entire band to scan - will include all channels interface can support.
     band: Vec<u8>,
     #[arg(short, long)]
-    /// Optional target (MAC or SSID) to attack - will attack everything if excluded.
+    /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
     target: Option<Vec<String>>,
     #[arg(short, long)]
-    /// Optional output filename.
+    /// Optional - Output filename.
     output: Option<String>,
     #[arg(short, long)]
-    /// Optional TX MAC for rogue-based attacks - will randomize if excluded.
+    /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(long, default_value = "127.0.0.1:2947")]
-    /// Optional alter default HOST:Port for GPSD connection.
+    /// Optional - Alter default HOST:Port for GPSD connection.
     gpsd: String,
     #[arg(long)]
-    /// Optional set the tool to headless mode without a UI.
+    /// Optional - Set the tool to headless mode without a UI. (useful with --headless)
     headless: bool,
     #[arg(long)]
-    /// Optional tool will auto-exit when all targets have a valid hashline.
+    /// Optional - AO will auto-exit when all targets have a valid hashline.
     autoexit: bool,
     #[arg(long)]
-    /// Optional do not transmit, passive only
+    /// Optional - Do not transmit - passive only.
     notransmit: bool,
     #[arg(long)]
-    /// Optional tar output files.
-    notar: bool,
-    #[arg(long)]
-    /// Optional do NOT send deauths (will try other attacks only).
+    /// Optional - Do NOT send deauths (will try other attacks only).
     nodeauth: bool,
+    #[arg(long)]
+    /// Optional - Do not tar output files.
+    notar: bool,
 }
 
 #[derive(Default)]
