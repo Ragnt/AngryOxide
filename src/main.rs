@@ -8,11 +8,13 @@ mod gps;
 mod pcapng;
 mod rawsocks;
 mod snowstorm;
+mod matrix;
 mod status;
 mod tabbedblock;
 mod tx;
 mod ui;
 mod util;
+
 
 extern crate libc;
 extern crate nix;
@@ -71,6 +73,7 @@ use crate::auth::HandshakeStorage;
 use crate::devices::{APFlags, AccessPoint, Station, WiFiDeviceList};
 use crate::eventhandler::{EventHandler, EventType};
 use crate::snowstorm::Snowstorm;
+use crate::matrix::MatrixSnowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
 use crate::util::parse_ip_address_port;
@@ -206,6 +209,7 @@ pub struct OxideRuntime {
     netlink: Nl80211,
     ui_mode: UIMode,
     ui_state: UiState,
+    ui_snowstorm: bool,
     notx: bool,
     deauth: bool,
     targets: Vec<MacAddress>,
@@ -461,7 +465,13 @@ impl OxideRuntime {
             messages_table_data: log.get_all_messages(),
             messages_sort_reverse: false,
             snowstorm: Snowstorm::new_rainbow(Rect::new(1, 2, 3, 4)),
+            matrix_snowstorm: MatrixSnowstorm::new(Rect::new(1, 2, 3, 4)),
         };
+
+        // Decide whether to use matrix or snowfall for UI state
+        let mut rng = rand::thread_rng();
+        // 50/50 change of getting snowflakes or the matrix
+        let use_snowstorm = rng.gen_bool(0.5); 
 
         // Setup Filename writing
 
@@ -506,6 +516,7 @@ impl OxideRuntime {
             netlink,
             ui_mode,
             ui_state: state,
+            ui_snowstorm: use_snowstorm,
             notx,
             deauth,
             targets: target_vec,
