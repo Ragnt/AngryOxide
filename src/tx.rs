@@ -5,9 +5,9 @@ use libwifi::frame::{
         DataHeader, FrameControl, MacAddress, ManagementHeader, RsnAkmSuite, RsnCipherSuite,
         RsnInformation, SequenceControl, StationInfo,
     },
-    Ack, AssociationRequest, AssociationResponse, Authentication, Cts, Data, Deauthentication,
-    DeauthenticationReason, Disassociation, EapolKey, ProbeRequest, ProbeResponse,
-    ReassociationRequest,
+    Ack, AssociationRequest, AssociationResponse, Authentication, Beacon, Cts, Data,
+    Deauthentication, DeauthenticationReason, Disassociation, EapolKey, ProbeRequest,
+    ProbeResponse, ReassociationRequest,
 };
 
 const RTH: [u8; 10] = [
@@ -626,6 +626,18 @@ pub fn build_probe_response(
         beacon_interval: 1024,
         capability_info: 0x431,
     };
+    rth.extend(frx.encode());
+    rth
+}
+
+pub fn build_csa_beacon(beacon: Beacon, new_channel: u8) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let mut frx = beacon.clone();
+    frx.station_info
+        .data
+        .push((37u8, vec![0u8, new_channel, 3u8]));
+
     rth.extend(frx.encode());
     rth
 }

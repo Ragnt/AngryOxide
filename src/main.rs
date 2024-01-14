@@ -20,8 +20,8 @@ extern crate nix;
 
 use anyhow::Result;
 use attack::{
-    anon_reassociation_attack, deauth_attack, m1_retrieval_attack, m1_retrieval_attack_phase_2,
-    rogue_m2_attack_directed, rogue_m2_attack_undirected,
+    anon_reassociation_attack, csa_attack, deauth_attack, m1_retrieval_attack,
+    m1_retrieval_attack_phase_2, rogue_m2_attack_directed, rogue_m2_attack_undirected,
 };
 
 use chrono::Local;
@@ -40,6 +40,7 @@ use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkm
 use libwifi::frame::{Beacon, DataFrame, EapolKey, NullDataFrame};
 use nix::unistd::geteuid;
 
+use nl80211_ng::attr::Nl80211Iftype;
 use nl80211_ng::channels::WiFiChannel;
 use nl80211_ng::{
     get_interface_info_name, set_interface_chan, set_interface_down, set_interface_mac,
@@ -100,6 +101,7 @@ use clap::Parser;
 #[command(name = "AngryOxide")]
 #[command(author = "Ryan Butler (Ragnt)")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
+#[command(version)]
 struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
@@ -215,6 +217,7 @@ pub struct OxideRuntime {
     stargets: Vec<String>,
     access_points: WiFiDeviceList<AccessPoint>,
     unassoc_clients: WiFiDeviceList<Station>,
+    original_address: MacAddress,
     rogue_client: MacAddress,
     rogue_m1: EapolKey,
     rogue_essids: HashMap<MacAddress, String>,
@@ -271,6 +274,8 @@ impl OxideRuntime {
             println!("{}", get_art("Interface not found"));
             exit(EXIT_FAILURE);
         };
+
+        let original_address = MacAddress::from_vec(iface.clone().mac.unwrap()).unwrap();
 
         let idx = iface.index.unwrap();
         let interface_uuid = Uuid::new_v4();
@@ -370,6 +375,18 @@ impl OxideRuntime {
             println!("No target list provided... everything is a target 😏");
         }
 
+        if let Some(ref phy) = iface.phy {
+            if !phy.iftypes.clone().is_some_and(|types| {
+                types.contains(&nl80211_ng::attr::Nl80211Iftype::IftypeMonitor)
+            }) {
+                println!(
+                    "{}",
+                    get_art("Monitor Mode not available for this interface.")
+                );
+                exit(EXIT_FAILURE);
+            }
+        }
+
         // Put interface into the right mode
         thread::sleep(Duration::from_secs(1));
         println!("Setting {} down.", interface_name);
@@ -407,6 +424,15 @@ impl OxideRuntime {
                 idx,
             )
             .ok();
+
+        if let Some(ref phy) = iface.phy {
+            if phy.current_iftype.clone().is_some()
+                && phy.current_iftype.unwrap() != Nl80211Iftype::IftypeMonitor
+            {
+                println!("{}", get_art("Interface did not go into Monitor mode"));
+                exit(EXIT_FAILURE);
+            }
+        }
 
         // Set interface up
         thread::sleep(Duration::from_millis(500));
@@ -538,6 +564,7 @@ impl OxideRuntime {
             handshake_storage,
             access_points,
             unassoc_clients,
+            original_address,
             rogue_client,
             rogue_m1,
             rogue_essids,
@@ -560,6 +587,46 @@ impl OxideRuntime {
             MenuType::Clients => self.unassoc_clients.size(),
             MenuType::Handshakes => self.handshake_storage.count(),
             MenuType::Messages => self.status_log.size(),
+        }
+    }
+
+    pub fn get_adjacent_channel(&self) -> Option<u8> {
+        let band_channels = self.interface.get_frequency_list_simple().unwrap();
+        let current_channel = self.current_channel.get_channel_number();
+        let mut band: u8 = 0;
+
+        // Get our band
+        for (hashband, channels) in band_channels.clone() {
+            if channels.contains(&current_channel) {
+                band = hashband;
+            }
+        }
+
+        if band == 0 {
+            return None;
+        }
+
+        // Get the adjacent channel
+        if let Some(channels) = band_channels.get(&band) {
+            let mut closest_distance = u8::MAX;
+            let mut closest_channel = None;
+
+            for &channel in channels {
+                let distance = if channel > current_channel {
+                    channel - current_channel
+                } else {
+                    current_channel - channel
+                };
+
+                if distance < closest_distance && distance != 0 {
+                    closest_distance = distance;
+                    closest_channel = Some(channel);
+                }
+            }
+
+            closest_channel
+        } else {
+            None
         }
     }
 
@@ -590,7 +657,7 @@ impl OxideRuntime {
     }
 }
 
-fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
+fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     let radiotap = match Radiotap::from_bytes(packet) {
         Ok(radiotap) => radiotap,
         Err(error) => {
@@ -692,32 +759,44 @@ fn handle_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
                                     oxide.rogue_client,
                                 ),
                             );
-                        if !oxide.notx {
-                            if ap.beacon_count % 200 == 0
-                                && !ap.ssid.clone().is_some_and(|ssid| ssid != "")
-                            {
-                                let frx = build_probe_request_target(
-                                    &oxide.rogue_client,
-                                    &bssid,
-                                    oxide.counters.sequence2(),
-                                );
-                                ap.interactions += 1;
-                                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-                                oxide.status_log.add_message(StatusMessage::new(
-                                    MessageType::Info,
-                                    format!("Attempting Hidden SSID Collect: {}", bssid),
-                                ));
-                            }
+                        if !oxide.notx
+                            && ap.beacon_count % 200 == 0
+                            && !ap.ssid.clone().is_some_and(|ssid| ssid != "")
+                        {
+                            let frx = build_probe_request_target(
+                                &oxide.rogue_client,
+                                &bssid,
+                                oxide.counters.sequence2(),
+                            );
+                            ap.interactions += 1;
+                            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                            oxide.status_log.add_message(StatusMessage::new(
+                                MessageType::Info,
+                                format!("Attempting Hidden SSID Collect: {}", bssid),
+                            ));
                         }
+
                         beacon_count = ap.beacon_count;
-                        ap.beacon_count += 1;
                     }
+
+                    // Always try M1 Retrieval
+                    // it is running it's own internal rate limiting.
                     let _ = m1_retrieval_attack(oxide, &bssid);
+
+                    // Conduct Death on 0 (and 128)
                     if (beacon_count % 32) == 0 {
-                        let _ = anon_reassociation_attack(oxide, &bssid)?;
+                        deauth_attack(oxide, &bssid)?;
+                    // Conduct Anon. Reassoc. 32+8
+                    } else if (beacon_count % 32) == 8 {
+                        anon_reassociation_attack(oxide, &bssid)?;
+                    // Conduct CSA 32+16
+                    } else if (beacon_count % 32) == 16 {
+                        csa_attack(oxide, beacon_frame)?;
                     }
-                    if oxide.deauth {
-                        let _ = deauth_attack(oxide, &bssid);
+
+                    // Increase beacon
+                    if let Some(ap) = oxide.access_points.get_device(&bssid) {
+                        ap.beacon_count += 1;
                     }
                 }
                 Frame::ProbeRequest(probe_request_frame) => {
@@ -1866,7 +1945,7 @@ fn write_packet(fd: i32, packet: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-fn read_packet(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
+fn read_frame(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
     let mut buffer = vec![0u8; 6000];
     let packet_len = unsafe {
         libc::read(
@@ -1898,12 +1977,12 @@ fn read_packet(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Arguments::parse();
+
     if !geteuid().is_root() {
         println!("{}", get_art("You need to run as root!"));
         exit(EXIT_FAILURE);
     }
-
-    let cli = Arguments::parse();
 
     let filename = if let Some(fname) = cli.output {
         format!("{}", fname)
@@ -1952,8 +2031,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let seconds_interval = Duration::from_secs(1);
     let mut frame_count_old = 0u64;
     let mut frame_rate = 0u64;
-
-    let mut empty_reads_old = 0u64;
 
     let mut last_status_time = Instant::now();
 
@@ -2009,7 +2086,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     while running.load(Ordering::SeqCst) {
-        // Calculate last packet rate
+        // Calculate status rates
         if seconds_timer.elapsed() >= seconds_interval {
             seconds_timer = Instant::now();
 
@@ -2018,16 +2095,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             frame_count_old = oxide.frame_count;
             frame_rate = frames_processed;
 
-            // Calculate the Empty Read Rate:
-            if oxide.counters.empty_reads >= 18446744073709541615 {
-                oxide.counters.empty_reads = 0;
-                empty_reads_old = 0;
-            }
-            let reads = oxide.counters.empty_reads;
-            oxide.counters.empty_reads_rate = reads - empty_reads_old;
-            empty_reads_old = reads;
+            // Update the empty reads rate
+            oxide.counters.empty_reads_rate = oxide.counters.empty_reads;
+            oxide.counters.empty_reads = 0;
         }
 
+        // Channel hopping. This can still interrupt multi-step attacks but isn't likely to do so.
         if last_hop_time.elapsed() >= hop_interval {
             if let Some(&channel) = cycle_iter.next() {
                 if let Err(e) = oxide.netlink.set_interface_chan(idx, channel) {
@@ -2084,42 +2157,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     EventType::Tick => {
-                        print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+                        let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
                     }
                 }
             }
         }
 
-        // Start UI Messages
-
+        // Headless UI status messages
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
             if cli.headless {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
-                        "Status: Frames: {} | Rate: {} | Channel: {}",
-                        oxide.frame_count, frame_rate, oxide.current_channel
+                        "Status: Frames: {} | Rate: {} Empty Reads: {} | Channel: {}",
+                        oxide.frame_count,
+                        frame_rate,
+                        oxide.counters.empty_reads_rate,
+                        oxide.current_channel
                     ),
                 ));
             }
         }
 
-        // Clear the interactions counts for all AP's.
-        // This is deprecated as we are no longer capping interactions based on this.
-        /* if last_interactions_clear.elapsed() >= interactions_interval {
-            last_interactions_clear = Instant::now();
-            oxide.access_points.clear_all_interactions();
-        } */
-
-        // Read Packet
-        match read_packet(&mut oxide) {
+        // Read Frame
+        match read_frame(&mut oxide) {
             Ok(packet) => {
                 if !packet.is_empty() {
-                    let _ = handle_frame(&mut oxide, &packet);
+                    let _ = process_frame(&mut oxide, &packet);
                 }
             }
             Err(_) => {
+                // This will result in "a serious packet read error" message.
                 err = true;
                 running.store(false, Ordering::SeqCst);
             }
@@ -2130,7 +2199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             running.store(false, Ordering::SeqCst);
             exit_on_succ = true;
         }
-
+        // Save those precious CPU cycles when we can. Any more of a wait and we can't process fast enough.
         thread::sleep(Duration::from_micros(1));
     }
 
@@ -2153,6 +2222,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }
+
+    println!(
+        "Resetting {} back to {}.",
+        interface_name, oxide.original_address
+    );
+    oxide
+        .netlink
+        .set_interface_mac(idx, &oxide.original_address.0)
+        .ok();
 
     println!("Setting {} to station mode.", interface_name);
     match oxide.netlink.set_interface_station(idx) {

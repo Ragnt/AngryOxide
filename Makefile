@@ -2,12 +2,6 @@ prog :=angryoxide
 
 debug ?=
 
-
-EXECUTABLES = rustc cargo
-K := $(foreach exec,$(EXECUTABLES),\
-        $(if $(shell which $(exec)),some string,$(error "No $(exec) in PATH")))
-
-
 ifdef debug
   release :=
   target :=debug
