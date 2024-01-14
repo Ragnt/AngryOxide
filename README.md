@@ -20,6 +20,8 @@ You can download pre-compiled binaries of AngryOxide in the [releases](https://g
 
 More architectures will be added as I confirm there is no endianess-related issues associated with them.
 
+You can get information about howw to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+
 ## Features
 
 - Active state-based attack engine used to retrieve relevent EAPOL messages from Access Points and clients.
