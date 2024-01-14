@@ -94,8 +94,6 @@ This will build from source, install into /usr/bin/angryoxide, and install the b
 
 ### Cross compiling:
 
-WARNING: this software wasn't written with many architectures in mind. I cannot gurantee anything will work (am fairly confident it won't) on LE systems.
-
 I use [cross](https://github.com/cross-rs/cross) to cross compile to embedded architectures.
 
 Here is MIPS (mips-unknown-linux-musl) as an example.
