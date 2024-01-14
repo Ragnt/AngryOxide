@@ -1,4 +1,6 @@
 use radiotap::field::ext::TimeUnit;
+use std::fs::File;
+use std::io;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -64,4 +66,9 @@ pub fn parse_ip_address_port(input: &str) -> Result<(IpAddr, u16), &'static str>
     };
 
     Ok((ip, port))
+}
+
+pub fn is_file_less_than_100mb(file: &File) -> io::Result<bool> {
+    let metadata = file.metadata()?;
+    Ok(metadata.len() < 100 * 1024 * 1024)
 }

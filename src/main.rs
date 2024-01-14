@@ -199,16 +199,10 @@ impl Counters {
     }
 }
 
-enum UIMode {
-    Headless,
-    Normal,
-}
-
 pub struct OxideRuntime {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
     netlink: Nl80211,
-    ui_mode: UIMode,
     ui_state: UiState,
     ui_snowstorm: bool,
     notx: bool,
@@ -475,13 +469,6 @@ impl OxideRuntime {
             key_data: Vec::new(),
         };
 
-        // Setup initial UI State
-        let ui_mode = if cli_headless {
-            UIMode::Headless
-        } else {
-            UIMode::Normal
-        };
-
         let state = UiState {
             current_menu: MenuType::AccessPoints,
             paused: false,
@@ -551,7 +538,6 @@ impl OxideRuntime {
             rx_socket,
             tx_socket,
             netlink,
-            ui_mode,
             ui_state: state,
             ui_snowstorm: use_snowstorm,
             notx,
