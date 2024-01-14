@@ -84,9 +84,9 @@ use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io;
 use std::io::stdout;
 use std::io::Write;
+use std::io::{self, ErrorKind};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::process::exit;
 use std::str::FromStr;
@@ -2065,7 +2065,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start_time = Instant::now();
 
-    let mut err = false;
+    let mut err: Option<ErrorKind> = None;
     let mut exit_on_succ = false;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
@@ -2187,9 +2187,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let _ = process_frame(&mut oxide, &packet);
                 }
             }
-            Err(_) => {
+            Err(code) => {
                 // This will result in "a serious packet read error" message.
-                err = true;
+                err = Some(code.kind());
                 running.store(false, Ordering::SeqCst);
             }
         };
@@ -2213,8 +2213,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Cleaning up...");
-    if err {
-        println!("{}", get_art("A serious packet read error occured."))
+    if let Some(err) = err {
+        println!("{}", get_art(&format!("Error: {}", err)))
     }
 
     println!("Setting {} down.", interface_name);
