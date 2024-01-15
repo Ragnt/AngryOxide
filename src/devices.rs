@@ -493,6 +493,11 @@ impl WiFiDeviceList<AccessPoint> {
                 ap.last_signal_strength = new_ap.last_signal_strength;
             }
 
+            // Update the channel
+            if new_ap.channel.is_some() {
+                ap.channel = new_ap.channel.clone();
+            }
+
             // Update clients
             for (mac, client) in &new_ap.client_list.devices {
                 ap.client_list.add_or_update_device(*mac, client);

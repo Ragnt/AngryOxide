@@ -585,7 +585,7 @@ impl OxideRuntime {
             current_menu: MenuType::AccessPoints,
             paused: false,
             ui_snowstorm: use_snowstorm,
-            ap_sort: 3,
+            ap_sort: 0,
             ap_state: TableState::new(),
             ap_table_data: access_points.clone(),
             ap_sort_reverse: false,
@@ -916,25 +916,31 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 ),
                             );
 
-                        // Proliferate the SSID / MAC to targets (if this is a target...)
-                        // This is important because some AP's will use the same MAC with multiple SSID's, and we want ALL those SSIDs
-                        // in our target deck if the user added the MAC (or vise versa, multiple AP's using the same SSID).
-                        // get_target will (should) proliferate while returning a mutable reference to the target.
-                        // we then check if wwe are auto-hunting and if so, update the channel for that target.
+                        // Proliferate the SSID / MAC to targets (if this is a target)
+                        // Also handle adding the target channel to autohunt params.
                         if let Ok(target) = oxide.target_data.targets.get_target(ap) {
-                            if oxide.config.autohunt {
-                                if let Some(vec) = oxide.if_hardware.target_chans.get_mut(&target) {
-                                    if !vec.contains(&(band.to_u8(), channel_u8)) {
-                                        vec.push((band.to_u8(), channel_u8));
+                            if let Some(channel) = station_info.ds_parameter_set {
+                                if oxide.config.autohunt
+                                    && oxide
+                                        .if_hardware
+                                        .hop_channels
+                                        .contains(&(band.to_u8(), channel))
+                                {
+                                    if let Some(vec) =
+                                        oxide.if_hardware.target_chans.get_mut(&target)
+                                    {
+                                        if !vec.contains(&(band.to_u8(), channel)) {
+                                            vec.push((band.to_u8(), channel));
+                                        }
+                                    } else {
+                                        oxide.status_log.add_message(StatusMessage::new(
+                                            MessageType::Warning,
+                                            format!(
+                                                "Target not found in target_chans: {}",
+                                                target.get_string()
+                                            ),
+                                        ));
                                     }
-                                } else {
-                                    oxide.status_log.add_message(StatusMessage::new(
-                                        MessageType::Warning,
-                                        format!(
-                                            "Target not found in target_chans: {}",
-                                            target.get_string()
-                                        ),
-                                    ));
                                 }
                             }
                         };
@@ -2275,7 +2281,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             oxide.if_hardware.hop_channels = new_hops;
-            oxide.if_hardware.hop_interval = Duration::from_secs(2);
+            oxide.if_hardware.hop_interval = Duration::from_secs(5);
             channels_binding = oxide.if_hardware.hop_channels.clone();
             cycle_iter = channels_binding.iter().cycle();
             first_channel = *cycle_iter.next().unwrap();

@@ -20,12 +20,13 @@ You can download pre-compiled binaries of AngryOxide in the [releases](https://g
 
 More architectures will be added as I confirm there is no endianess-related issues associated with them.
 
-You can get information about howw to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+You can get information about how to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
 
 ## Features
 
 - Active state-based attack engine used to retrieve relevent EAPOL messages from Access Points and clients.
 - Target option that accepts MAC (aabbcc..., aa:bb:cc...) and SSID "Test_SSID" to limit attack scope.
+- Auto Hunt capability to find all target channels and hop between them.
 - A Terminal-UI that presents all relevent data while still living in the terminal for easy usage over SSH.
 - Limits DEAUTHENTICATION frames that can cause more damage than good to the authentication sequence.
 - EAPOL 4-Way-Handshake validation using Nonce Correction, Replay Counter validation, and Temporal validation.
@@ -42,7 +43,8 @@ Will by default attack ALL access points in range, unless atleast one target is 
 
 - Attempts authentication/association sequence to produce EAPOL Message 1 (PMKID Collection)
 - Attempts to retrieve hidden SSID's with undirected probe requests.
-- Utilized Anonymous Reassociation to force Access Points to deauthenticate their own clients (MFP Bypass)
+- Utilizes Anonymous Reassociation to force Access Points to deauthenticate their own clients (MFP Bypass)
+- Will attempt to send Channel Switch Announcement to send clients to adjacent channels.
 - Attempts to downgrade RSN modes to WPA2-CCMP (Probe Response Injection)
 - Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
 - Will send controlled deauthentication frames unless told not to (--nodeauth)
@@ -65,12 +67,14 @@ Options:
   -o, --output <OUTPUT>        Optional - Output filename
   -r, --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
-      --headless               Optional - Set AO to headless mode without a UI. (useful with --autoexit)
+      --autohunt               Optional - AO will auto-hunt all channels then lock in on the ones targets are on
+      --headless               Optional - Set the tool to headless mode without a UI. (useful with --headless)
       --autoexit               Optional - AO will auto-exit when all targets have a valid hashline
       --notransmit             Optional - Do not transmit - passive only
       --nodeauth               Optional - Do NOT send deauths (will try other attacks only)
       --notar                  Optional - Do not tar output files
   -h, --help                   Print help
+  -V, --version                Print version
 ```
 
 ## Building from source

