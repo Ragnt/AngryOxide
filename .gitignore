@@ -1,2 +1,6 @@
 /target
 .vscode/*
+*.tar.gz
+*.pcapng
+*.kismet
+*.hc22000

@@ -77,6 +77,8 @@ impl MenuType {
 pub struct UiState {
     pub current_menu: MenuType,
     pub paused: bool,
+    pub ui_snowstorm: bool,
+
     // AP Menu Options
     pub ap_sort: u8,
     pub ap_state: TableState,
@@ -124,7 +126,7 @@ impl UiState {
 
     fn ap_sort_next(&mut self) {
         self.ap_sort += 1;
-        if self.ap_sort == 7 {
+        if self.ap_sort == 8 {
             self.ap_sort = 0;
         }
     }
@@ -324,7 +326,9 @@ fn create_status_bar(
     start_time: Instant,
     framerate: u64,
 ) {
-    oxide.interface = get_interface_info_idx(oxide.interface.index.unwrap()).unwrap();
+    oxide.if_hardware.interface =
+        get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()).unwrap();
+
     // Top Bar Layout
     let top_layout: std::rc::Rc<[Rect]> = Layout::default()
         .direction(Direction::Horizontal)
@@ -368,7 +372,7 @@ fn create_status_bar(
     ));
     let frame_count = Line::from(format!(
         "Frames #: {} | Rate: {}/s",
-        oxide.frame_count, framerate
+        oxide.counters.frame_count, framerate
     ));
 
     let flow = match oxide.ui_state.paused {
@@ -393,14 +397,21 @@ fn create_status_bar(
 
     let interface_name = String::from_utf8(
         oxide
+            .if_hardware
             .interface
             .name
             .clone()
             .expect("Cannot get interface name"),
     );
 
-    let mac_addr =
-        MacAddress::from_vec(oxide.interface.mac.clone().expect("Cannot get mac address"));
+    let mac_addr = MacAddress::from_vec(
+        oxide
+            .if_hardware
+            .interface
+            .mac
+            .clone()
+            .expect("Cannot get mac address"),
+    );
 
     // Top Left
     let interface = format!(
@@ -411,6 +422,7 @@ fn create_status_bar(
     let channel = format!(
         "Frequency: {}",
         oxide
+            .if_hardware
             .interface
             .frequency
             .clone()
@@ -455,13 +467,14 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         "▼"
     };
     match oxide.ui_state.ap_sort {
-        0 => headers[3] = format!("{} {}", headers[3], sort_icon),
+        0 => headers[0] = format!("{} {}", headers[0], sort_icon),
         1 => headers[2] = format!("{} {}", headers[2], sort_icon),
-        2 => headers[1] = format!("{} {}", headers[1], sort_icon),
-        3 => headers[5] = format!("{} {}", headers[5], sort_icon),
+        2 => headers[3] = format!("{} {}", headers[3], sort_icon),
+        3 => headers[4] = format!("{} {}", headers[4], sort_icon),
         4 => headers[6] = format!("{} {}", headers[6], sort_icon),
-        5 => headers[8] = format!("{} {}", headers[8], sort_icon),
-        6 => headers[9] = format!("{} {}", headers[9], sort_icon),
+        5 => headers[7] = format!("{} {}", headers[7], sort_icon),
+        6 => headers[8] = format!("{} {}", headers[8], sort_icon),
+        7 => headers[9] = format!("{} {}", headers[9], sort_icon),
         _ => headers[3] = format!("{} {}", headers[3], sort_icon),
     };
 
@@ -470,6 +483,7 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
     let table: Table<'_> = Table::new(
         rows_vec.clone(),
         vec![
+            Constraint::Length(5), // TGT
             Constraint::Min(16),   // Mac
             Constraint::Min(4),    // CH
             Constraint::Min(6),    // RSSI
@@ -477,7 +491,6 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
             Constraint::Min(25),   // SSID
             Constraint::Min(9),    // Clients
             Constraint::Length(5), // Tx
-            Constraint::Length(5), // MFP
             Constraint::Min(6),    // 4wHS
             Constraint::Min(7),    // PMKID
         ],
@@ -693,7 +706,7 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
     self.timestamp = new_data.timestamp.or(self.timestamp.clone());
     */
 
-    let gpsdata = oxide.gps_source.get_gps();
+    let gpsdata = oxide.file_data.gps_source.get_gps();
     if gpsdata.has_gpsd() {
         let top_right_block = Block::default()
             .borders(Borders::ALL)
@@ -774,7 +787,7 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
         frame.render_widget(para_one, top_right_layout[0]);
         frame.render_widget(para_two, top_right_layout[1]);
     } else {
-        let title = if oxide.ui_snowstorm {
+        let title = if oxide.ui_state.ui_snowstorm {
             " Snowfall for geeks (No GPS) "
         } else {
             " Matrix for geeks (No GPS) "
@@ -782,7 +795,7 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
 
         let top_right_block = Block::default().borders(Borders::ALL).title(title);
 
-        if oxide.ui_snowstorm {
+        if oxide.ui_state.ui_snowstorm {
             let snowstorm = Snowstorm::frame(
                 oxide.ui_state.snowstorm.clone(),
                 top_right_block.inner(top_layout[1]),

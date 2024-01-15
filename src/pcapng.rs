@@ -7,8 +7,9 @@ use pcap_file::pcapng::blocks::interface_description::{
     InterfaceDescriptionBlock, InterfaceDescriptionOption,
 };
 use pcap_file::pcapng::blocks::opt_common::CustomBinaryOption;
+use pcap_file::pcapng::blocks::section_header::{SectionHeaderBlock, SectionHeaderOption};
 use pcap_file::pcapng::{PcapNgBlock, PcapNgWriter};
-use pcap_file::DataLink;
+use pcap_file::{DataLink, Endianness};
 use std::borrow::Cow;
 use std::fs::File;
 use std::time::{Duration, UNIX_EPOCH};
@@ -22,9 +23,11 @@ use std::{
     thread,
     time::SystemTime,
 };
+use uname::uname;
 use uuid::Uuid;
 
 use crate::gps::{self, GpsData};
+use crate::status::{self, MessageType, StatusMessage};
 
 #[derive(Clone, Debug)]
 pub struct FrameData {
@@ -94,6 +97,7 @@ pub struct PcapWriter {
     tx: Sender<FrameData>,
     rx: Arc<Mutex<Receiver<FrameData>>>,
     writer: Arc<Mutex<PcapNgWriter<File>>>,
+    filename: String,
 }
 
 impl PcapWriter {
@@ -101,9 +105,32 @@ impl PcapWriter {
         let (tx, rx) = mpsc::channel();
 
         let file = File::create(filename).expect("Error creating file");
-        let mut pcap_writer = PcapNgWriter::new(file).unwrap();
-        let mac = interface.mac.clone().unwrap();
+        let (os, arch) = if let Ok(info) = uname() {
+            (
+                format!("{} {}", info.sysname, info.release),
+                info.machine.to_string(),
+            )
+        } else {
+            ("Unknown".to_string(), "Unknown".to_string())
+        };
 
+        let application = format!("AngryOxide {}", env!("CARGO_PKG_VERSION"));
+
+        let shb = SectionHeaderBlock {
+            endianness: Endianness::native(),
+            major_version: 1,
+            minor_version: 0,
+            section_length: -1,
+            options: vec![
+                SectionHeaderOption::UserApplication(Cow::from(application)),
+                SectionHeaderOption::OS(Cow::from(os)),
+                SectionHeaderOption::Hardware(Cow::from(arch)),
+            ],
+        };
+
+        let mut pcap_writer = PcapNgWriter::with_section_header(file, shb).unwrap();
+
+        let mac = interface.mac.clone().unwrap();
         let interface = InterfaceDescriptionBlock {
             linktype: DataLink::IEEE802_11_RADIOTAP,
             snaplen: 0x0000,
@@ -122,7 +149,18 @@ impl PcapWriter {
             tx,
             rx: Arc::new(Mutex::new(rx)),
             writer: Arc::new(Mutex::new(pcap_writer)),
+            filename: filename.to_owned(),
         }
+    }
+
+    pub fn check_size(&self) -> u64 {
+        self.writer
+            .lock()
+            .unwrap()
+            .get_ref()
+            .metadata()
+            .unwrap()
+            .len()
     }
 
     pub fn send(&mut self, f: FrameData) {
@@ -175,14 +213,15 @@ impl PcapWriter {
         }));
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(&mut self, split: bool) {
         self.alive.store(false, Ordering::SeqCst);
         self.handle
             .take()
             .expect("Called stop on non-running thread")
             .join()
             .expect("Could not join spawned thread");
-
-        println!("Stopped PCAPNG Thread");
+        if !split {
+            println!("Stopped PCAPNG Thread");
+        }
     }
 }

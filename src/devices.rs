@@ -1,5 +1,6 @@
 use libwifi::frame::components::MacAddress;
-use nl80211_ng::channels::WiFiChannel;
+use libwifi::{Addresses, Frame};
+use nl80211_ng::channels::{WiFiBand, WiFiChannel};
 use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -10,6 +11,7 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::util::epoch_to_string;
+use crate::OxideRuntime;
 
 // Constants for timeouts
 const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change state unless five seconds has passed.
@@ -94,6 +96,7 @@ pub struct AccessPoint {
     pub auth_sequence: AuthSequence,
     pub has_hs: bool,
     pub has_pmkid: bool,
+    pub is_target: bool,
 }
 
 impl WiFiDeviceType for AccessPoint {}
@@ -119,6 +122,7 @@ impl Default for AccessPoint {
             auth_sequence: AuthSequence::new(MacAddress([255, 255, 255, 255, 255, 255])),
             has_hs: false,
             has_pmkid: false,
+            is_target: false,
         }
     }
 }
@@ -128,7 +132,7 @@ impl AccessPoint {
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
         ssid: Option<String>,
-        channel: Option<u8>,
+        channel: Option<(WiFiBand, u8)>,
         information: Option<APFlags>,
         rogue_mac: MacAddress,
     ) -> Self {
@@ -139,7 +143,7 @@ impl AccessPoint {
             .as_secs();
 
         let chan = if let Some(channel) = channel {
-            WiFiChannel::new(channel)
+            WiFiChannel::new(channel.1, channel.0)
         } else {
             None
         };
@@ -161,6 +165,7 @@ impl AccessPoint {
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
             has_pmkid: false,
+            is_target: false,
         }
     }
 
@@ -168,7 +173,7 @@ impl AccessPoint {
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
         ssid: Option<String>,
-        channel: Option<u8>,
+        channel: Option<(WiFiBand, u8)>,
         information: Option<APFlags>,
         client_list: WiFiDeviceList<Station>,
         rogue_mac: MacAddress,
@@ -179,7 +184,7 @@ impl AccessPoint {
             .as_secs();
 
         let chan = if let Some(channel) = channel {
-            WiFiChannel::new(channel)
+            WiFiChannel::new(channel.1, channel.0)
         } else {
             None
         };
@@ -201,6 +206,7 @@ impl AccessPoint {
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
             has_pmkid: false,
+            is_target: false,
         }
     }
 
@@ -229,6 +235,10 @@ impl AccessPoint {
             return true;
         }
         return false;
+    }
+
+    pub fn is_target(&self) -> bool {
+        self.is_target
     }
 }
 
@@ -512,6 +522,7 @@ impl WiFiDeviceList<AccessPoint> {
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         let headers = vec![
+            "TGT".to_string(),
             "MAC Address".to_string(),
             "CH".to_string(),
             "RSSI".to_string(),
@@ -519,7 +530,6 @@ impl WiFiDeviceList<AccessPoint> {
             "SSID".to_string(),
             "Clients".to_string(),
             "Tx".to_string(),
-            "MFP".to_string(),
             "4wHS".to_string(),
             "PMKID".to_string(),
         ];
@@ -530,8 +540,10 @@ impl WiFiDeviceList<AccessPoint> {
             .map(|(_, access_point)| access_point)
             .collect();
         match sort {
-            0 => access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv)),
-            1 => access_points.sort_by(|a, b| {
+            0 => access_points.sort_by_key(|b| std::cmp::Reverse(b.is_target())), // TGT
+            1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)),         // CH
+            2 => access_points.sort_by(|a, b| {
+                // RSSI
                 let a_val = a.last_signal_strength.value;
                 let b_val = b.last_signal_strength.value;
 
@@ -547,11 +559,11 @@ impl WiFiDeviceList<AccessPoint> {
                     _ => b_val.cmp(&a_val),
                 }
             }),
-            2 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)),
-            3 => access_points.sort_by(|a, b| b.client_list.size().cmp(&a.client_list.size())),
-            4 => access_points.sort_by(|a, b| b.interactions.cmp(&a.interactions)),
-            5 => access_points.sort_by(|a, b| b.has_hs.cmp(&a.has_hs)),
-            6 => access_points.sort_by(|a, b| b.has_pmkid.cmp(&a.has_pmkid)),
+            3 => access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv)), // Last
+            4 => access_points.sort_by(|a, b| b.client_list.size().cmp(&a.client_list.size())), // Clients
+            5 => access_points.sort_by(|a, b| b.interactions.cmp(&a.interactions)), // Tx
+            6 => access_points.sort_by(|a, b| b.has_hs.cmp(&a.has_hs)),             // HS
+            7 => access_points.sort_by(|a, b| b.has_pmkid.cmp(&a.has_pmkid)),       // PM
             _ => {
                 access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv));
             }
@@ -564,7 +576,8 @@ impl WiFiDeviceList<AccessPoint> {
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
         for (idx, ap) in access_points.iter().enumerate() {
             let mut ap_row = vec![
-                format!("{}", ap.mac_address), // MAC Address
+                format!("{}", if ap.is_target() { "\u{274E}" } else { "" }), // TGT
+                format!("{}", ap.mac_address),                               // MAC Address
                 ap.channel
                     .as_ref()
                     .map_or("".to_string(), |ch| ch.short_string().to_string()), // CH
@@ -575,18 +588,10 @@ impl WiFiDeviceList<AccessPoint> {
                         _ => ap.last_signal_strength.value.to_string(),
                     }
                 ), // RSSI
-                format!("{}", epoch_to_string(ap.last_recv).to_string()), // Last
-                ap.ssid.as_ref().unwrap_or(&"".to_string()).clone(), // SSID
-                format!("{}", ap.client_list.size()), // Clients
-                format!("{}", ap.interactions), // Tx
-                format!(
-                    "{}",
-                    if ap.information.ap_mfp.unwrap_or(false) {
-                        "Yes"
-                    } else {
-                        "No"
-                    }
-                ), // MFP
+                format!("{}", epoch_to_string(ap.last_recv).to_string()),    // Last
+                ap.ssid.as_ref().unwrap_or(&"".to_string()).clone(),         // SSID
+                format!("{}", ap.client_list.size()),                        // Clients
+                format!("{}", ap.interactions),                              // Tx
                 if ap.has_hs {
                     "\u{2705}".to_string()
                 } else {
@@ -618,36 +623,37 @@ fn add_client_rows(ap_row: Vec<String>, client: &Station, last: bool) -> Vec<Str
     let icon = if last { "└ " } else { "├ " };
 
     let mut merged = Vec::with_capacity(min_length);
-    // Mac Address 0
-    let new_str: String = format!("{}\n  {}{}", ap_row[0], icon, client.mac_address);
+
+    // TGT 8
+    let new_str: String = ap_row[0].to_string();
     merged.push(new_str);
-    // Channel 1
-    let new_str: String = ap_row[1].to_string();
+    // Mac Address 1
+    let new_str: String = format!("{}\n  {}{}", ap_row[1], icon, client.mac_address);
     merged.push(new_str);
-    // RSSI 2
+    // Channel 2
+    let new_str: String = ap_row[2].to_string();
+    merged.push(new_str);
+    // RSSI 3
     let new_str: String = format!(
         "{}\n{}",
-        ap_row[2],
+        ap_row[3],
         match client.last_signal_strength.value {
             0 => "".to_string(),
             _ => client.last_signal_strength.value.to_string(),
         }
     );
     merged.push(new_str);
-    // Last 3
-    let new_str: String = format!("{}\n{}", ap_row[3], epoch_to_string(client.last_recv));
+    // Last 4
+    let new_str: String = format!("{}\n{}", ap_row[4], epoch_to_string(client.last_recv));
     merged.push(new_str);
-    // SSID 4
-    let new_str: String = ap_row[4].to_string();
-    merged.push(new_str);
-    // Clients 5
+    // SSID 5
     let new_str: String = ap_row[5].to_string();
     merged.push(new_str);
-    // TX 6
-    let new_str: String = format!("{}\n{}", ap_row[6], client.interactions);
+    // Clients 6
+    let new_str: String = ap_row[6].to_string();
     merged.push(new_str);
-    // MFP 7
-    let new_str: String = ap_row[7].to_string();
+    // TX 7
+    let new_str: String = format!("{}\n{}", ap_row[7], client.interactions);
     merged.push(new_str);
     // 4wHS 8
     let new_str: String = ap_row[8].to_string();
@@ -659,13 +665,6 @@ fn add_client_rows(ap_row: Vec<String>, client: &Station, last: bool) -> Vec<Str
     merged
 }
 
-///  For now this function just adds the probed SSID's to the station.
-///  eventually I want to list if we got a Rogue M2 for that SSID. Based on:
-///     A) This station initiated the communication by sending the probe req.
-///     B) The SSID is what we responded with
-///     C) We actually got the M2.
-///
-///  Doing this will require refactoring the probe-storage so each Station's "Probe" is actually a struct that also has a RogueM2 bool.
 fn add_probe_rows(
     cl_row: Vec<String>,
     probe: &String,
