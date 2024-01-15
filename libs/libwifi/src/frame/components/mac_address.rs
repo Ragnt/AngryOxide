@@ -58,6 +58,10 @@ impl MacAddress {
         MacAddress([255, 255, 255, 255, 255, 255])
     }
 
+    pub fn zeroed() -> Self {
+        MacAddress([0, 0, 0, 0, 0, 0])
+    }
+
     /// Generate a random MAC address using the same OUI as the given MAC address
     pub fn random_with_oui(other: &MacAddress) -> Self {
         let mut rng = rand::thread_rng();

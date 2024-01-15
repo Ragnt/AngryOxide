@@ -101,6 +101,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tar",
+ "uname",
  "uuid",
 ]
 
@@ -1060,9 +1061,9 @@ dependencies = [
 
 [[package]]
 name = "nl80211-ng"
-version = "0.1.7"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d6acb622c7de7b0d3eb663a2c7ee415c46df1b1c41caedc171c7a190841158"
+checksum = "6a7fc4248dc9d48e8c745f9ce5dc19bd262b09419c23b3f22569d397845f5caa"
 dependencies = [
  "neli",
  "neli-proc-macros",
@@ -1633,6 +1634,15 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "uname"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b72f89f0ca32e4db1c04e2a72f5345d59796d4866a1ee0609084569f73683dc8"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

