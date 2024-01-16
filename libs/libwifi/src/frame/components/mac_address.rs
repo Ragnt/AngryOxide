@@ -160,12 +160,15 @@ impl std::str::FromStr for MacAddress {
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let mut array = [0u8; 6];
 
+        let input_lower = input.to_lowercase();
         // Check if the input contains colons, and split accordingly
-        let bytes: Vec<&str> = if input.contains(':') {
-            input.split(':').collect()
-        } else if input.len() == 12 {
+        let bytes: Vec<&str> = if input_lower.contains(':') {
+            input_lower.split(':').collect()
+        } else if input.contains('-') {
+            input_lower.split('-').collect()
+        } else if input_lower.len() == 12 {
             // If the input doesn't contain colons and is 12 characters long
-            input
+            input_lower
                 .as_bytes()
                 .chunks(2)
                 .map(|chunk| std::str::from_utf8(chunk).unwrap_or(""))
