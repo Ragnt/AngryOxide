@@ -506,7 +506,7 @@ impl WiFiDeviceList<AccessPoint> {
             if let Some(nssid) = &new_ap.ssid {
                 let new_ssid = nssid.replace('\0', "");
                 // Update SSID
-                if ap.ssid.is_none() || ap.ssid.as_mut().is_some_and(|ssid| ssid == "") {
+                if ap.ssid.is_none() || ap.ssid.as_mut().is_some_and(|ssid| ssid.is_empty()) {
                     ap.ssid = Some(new_ssid);
                 }
             }

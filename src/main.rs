@@ -865,7 +865,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         .as_ref()
                         .map(|nssid| nssid.replace('\0', ""));
 
-                    if bssid.is_real_device() {
+                    if bssid.is_real_device() && bssid != oxide.target_data.rogue_client {
                         let ap =
                             oxide.access_points.add_or_update_device(
                                 bssid,
@@ -1057,7 +1057,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     let signal_strength = radiotap.antenna_signal.unwrap_or(
                         AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                     );
-                    if bssid.is_real_device() {
+                    if bssid.is_real_device() && *bssid != oxide.target_data.rogue_client {
                         let station_info = &probe_response_frame.station_info;
                         let ssid = station_info
                             .ssid
@@ -2256,7 +2256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Handle hunting
         let target_chans = oxide.if_hardware.target_chans.clone();
         if oxide.config.autohunt
-            && hop_cycle > 2
+            && hop_cycle >= 3
             && !target_chans.values().any(|value| value.is_empty())
         {
             // We are done auto-hunting.

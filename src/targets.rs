@@ -1,3 +1,4 @@
+use globset::Glob;
 use libwifi::frame::components::MacAddress;
 use rand::seq::SliceRandom;
 
@@ -14,8 +15,14 @@ pub struct TargetSSID {
 
 impl IsTarget for TargetSSID {
     fn target_match(&self, ap: &AccessPoint) -> bool {
-        if ap.ssid.clone().is_some_and(|f| self.ssid == f) {
-            return true;
+        if let Some(ssid) = ap.ssid.clone() {
+            if Glob::new(&self.ssid)
+                .unwrap()
+                .compile_matcher()
+                .is_match(ssid)
+            {
+                return true;
+            }
         }
         false
     }
