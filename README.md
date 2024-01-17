@@ -8,6 +8,8 @@
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
+You can get information about how to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+
 NOTE: This project is under HEAVY development and you can expect a very fast release cycle.
 
 The overall goal of this tool is to provide a single-interface survey capability with advanced automated attacks that result in valid hashlines you can crack with [Hashcat](https://hashcat.net/hashcat/).
@@ -18,14 +20,13 @@ This tool is heavily inspired by [hcxdumptool](https://github.com/ZerBea/hcxdump
 
 You can download pre-compiled binaries of AngryOxide in the [releases](https://github.com/Ragnt/AngryOxide/releases/latest).
 
-More architectures will be added as I confirm there is no endianess-related issues associated with them.
-
 You can get information about how to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
 
 ## Features
 
 - Active state-based attack engine used to retrieve relevent EAPOL messages from Access Points and clients.
 - Target option that accepts MAC (aabbcc..., aa:bb:cc...) and SSID "Test_SSID" to limit attack scope.
+- Whitelist option to protect specific networks from attacks. Useful if not using targets.
 - Auto Hunt capability to find all target channels and hop between them.
 - A Terminal-UI that presents all relevent data while still living in the terminal for easy usage over SSH.
 - Limits DEAUTHENTICATION frames that can cause more damage than good to the authentication sequence.
@@ -54,7 +55,7 @@ All of these attacks are rate-controlled both to prevent erroneous EAPOL timer r
 ## Help
 
 ```bash
-❯ sudo angryoxide --help
+❯ angryoxide --help
 Does awesome things... with wifi.
 
 Usage: angryoxide [OPTIONS] --interface <INTERFACE>
@@ -64,6 +65,7 @@ Options:
   -c, --channel <CHANNEL>      Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified
   -b, --band <BAND>            Optional - Entire band to scan - will include all channels interface can support
   -t, --target <TARGET>        Optional - Target (MAC or SSID) to attack - will attack everything if none specified
+  -w, --whitelist <WHITELIST>  Optional - Whitelist (MAC or SSID) to NOT attack
   -o, --output <OUTPUT>        Optional - Output filename
   -r, --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
