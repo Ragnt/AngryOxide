@@ -4,17 +4,17 @@ use rand::seq::SliceRandom;
 
 use crate::devices::AccessPoint;
 
-trait IsTarget {
-    fn target_match(&self, ap: &AccessPoint) -> bool;
+trait IsWhitelisted {
+    fn whitelist_match(&self, ap: &AccessPoint) -> bool;
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct TargetSSID {
+pub struct WhiteSSID {
     pub ssid: String,
 }
 
-impl IsTarget for TargetSSID {
-    fn target_match(&self, ap: &AccessPoint) -> bool {
+impl IsWhitelisted for WhiteSSID {
+    fn whitelist_match(&self, ap: &AccessPoint) -> bool {
         if let Some(ssid) = ap.ssid.clone() {
             if Glob::new(&self.ssid)
                 .unwrap()
@@ -28,9 +28,9 @@ impl IsTarget for TargetSSID {
     }
 }
 
-impl TargetSSID {
+impl WhiteSSID {
     pub fn new(ssid: &str) -> Self {
-        TargetSSID {
+        WhiteSSID {
             ssid: ssid.to_owned(),
         }
     }
@@ -44,12 +44,12 @@ impl TargetSSID {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct TargetMAC {
+pub struct WhiteMAC {
     pub addr: MacAddress,
 }
 
-impl IsTarget for TargetMAC {
-    fn target_match(&self, ap: &AccessPoint) -> bool {
+impl IsWhitelisted for WhiteMAC {
+    fn whitelist_match(&self, ap: &AccessPoint) -> bool {
         if ap.mac_address == self.addr {
             return true;
         }
@@ -57,81 +57,81 @@ impl IsTarget for TargetMAC {
     }
 }
 
-impl TargetMAC {
+impl WhiteMAC {
     pub fn new(addr: MacAddress) -> Self {
-        TargetMAC { addr }
+        WhiteMAC { addr }
     }
 }
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum Target {
-    MAC(TargetMAC),
-    SSID(TargetSSID),
+pub enum White {
+    MAC(WhiteMAC),
+    SSID(WhiteSSID),
 }
 
-impl Target {
+impl White {
     pub fn get_string(&self) -> String {
         match self {
-            Target::MAC(tgt) => tgt.addr.to_string(),
-            Target::SSID(tgt) => tgt.ssid.clone(),
+            White::MAC(tgt) => tgt.addr.to_string(),
+            White::SSID(tgt) => tgt.ssid.clone(),
         }
     }
 }
 
-pub struct TargetList {
-    targets: Vec<Target>,
+pub struct WhiteList {
+    devices: Vec<White>,
 }
 
-impl TargetList {
+impl WhiteList {
     pub fn new() -> Self {
-        TargetList {
-            targets: Vec::new(),
+        WhiteList {
+            devices: Vec::new(),
         }
     }
 
-    pub fn from_vec(targets: Vec<Target>) -> Self {
-        TargetList { targets }
+    pub fn from_vec(devices: Vec<White>) -> Self {
+        WhiteList { devices }
     }
 
-    pub fn add(&mut self, target: Target) {
-        self.targets.push(target);
+    pub fn add(&mut self, device: White) {
+        self.devices.push(device);
     }
 
     pub fn empty(&self) -> bool {
-        self.targets.is_empty()
+        self.devices.is_empty()
     }
 
     /// Will check if the AP is a target, but will also mark the
-    pub fn is_target(&mut self, ap: &mut AccessPoint) -> bool {
+    pub fn is_whitelisted(&mut self, ap: &mut AccessPoint) -> bool {
         if self.empty() {
-            return true;
+            return false;
         };
 
-        for target in &self.targets {
-            match target {
-                Target::MAC(tgt) => {
-                    if tgt.target_match(ap) {
+        for device in &self.devices {
+            match device {
+                White::MAC(tgt) => {
+                    if tgt.whitelist_match(ap) {
                         if let Some(ssid) = &ap.ssid {
-                            if !self.is_target_ssid(ssid) {
-                                self.add(Target::SSID(TargetSSID {
+                            if !self.is_whitelisted_ssid(ssid) {
+                                self.add(White::SSID(WhiteSSID {
                                     ssid: ssid.to_string(),
                                 }));
                             }
                         }
-                        if !ap.is_whitelisted() {
-                            ap.is_target = true;
+                        if ! ap.is_target() {
+                            ap.is_whitelisted = true;
                         }
                         return true;
                     }
                 }
-                Target::SSID(tgt) => {
-                    if tgt.target_match(ap) {
-                        if !self.is_target_mac(&ap.mac_address) {
-                            self.add(Target::MAC(TargetMAC {
+                White::SSID(tgt) => {
+                    if tgt.whitelist_match(ap) {
+                        if !self.is_whitelisted_mac(&ap.mac_address) {
+                            self.add(White::MAC(WhiteMAC {
                                 addr: ap.mac_address,
                             }))
                         }
-                        if !ap.is_whitelisted() {
-                            ap.is_target = true;
+                        if ! ap.is_target() {
+                            ap.is_whitelisted = true;
                         }
                         return true;
                     }
@@ -141,38 +141,38 @@ impl TargetList {
         false
     }
 
-    pub fn get_targets(&mut self, ap: &mut AccessPoint) -> Vec<Target> {
+    pub fn get_whitelisted(&mut self, ap: &mut AccessPoint) -> Vec<White> {
         if self.empty() {
             return vec![];
         };
-        let mut matches: Vec<Target> = Vec::new();
+        let mut matches: Vec<White> = Vec::new();
 
-        for target in self.targets.clone() {
+        for target in self.devices.clone() {
             match target {
-                Target::MAC(ref tgt) => {
-                    if tgt.target_match(ap) {
+                White::MAC(ref tgt) => {
+                    if tgt.whitelist_match(ap) {
                         if let Some(ssid) = &ap.ssid {
-                            if !self.is_target_ssid(ssid) {
-                                self.add(Target::SSID(TargetSSID {
+                            if !self.is_whitelisted_ssid(ssid) {
+                                self.add(White::SSID(WhiteSSID {
                                     ssid: ssid.to_string(),
                                 }));
                             }
                         }
-                        if !ap.is_whitelisted() {
-                            ap.is_target = true;
+                        if ! ap.is_target() {
+                            ap.is_whitelisted = true;
                         }
                         matches.push(target);
                     }
                 }
-                Target::SSID(ref tgt) => {
-                    if tgt.target_match(ap) {
-                        if !self.is_target_mac(&ap.mac_address) {
-                            self.add(Target::MAC(TargetMAC {
+                White::SSID(ref tgt) => {
+                    if tgt.whitelist_match(ap) {
+                        if !self.is_whitelisted_mac(&ap.mac_address) {
+                            self.add(White::MAC(WhiteMAC {
                                 addr: ap.mac_address,
                             }))
                         }
-                        if !ap.is_whitelisted() {
-                            ap.is_target = true;
+                        if ! ap.is_target() {
+                            ap.is_whitelisted = true;
                         }
                         matches.push(target);
                     }
@@ -182,33 +182,33 @@ impl TargetList {
         return matches;
     }
 
-    pub fn is_target_mac(&self, mac: &MacAddress) -> bool {
+    pub fn is_whitelisted_mac(&self, mac: &MacAddress) -> bool {
         if self.empty() {
             return true;
         };
 
-        for target in &self.targets {
+        for target in &self.devices {
             match target {
-                Target::MAC(tgt) => {
+                White::MAC(tgt) => {
                     if tgt.addr == *mac {
                         return true;
                     }
                 }
-                Target::SSID(_) => {} // do nothing
+                White::SSID(_) => {} // do nothing
             }
         }
         false
     }
 
-    pub fn is_target_ssid(&self, ssid: &str) -> bool {
+    pub fn is_whitelisted_ssid(&self, ssid: &str) -> bool {
         if self.empty() {
             return true;
         };
 
-        for target in &self.targets {
+        for target in &self.devices {
             match target {
-                Target::MAC(_) => {} // do nothing, we don't have anything to compare to here.
-                Target::SSID(tgt) => {
+                White::MAC(_) => {} // do nothing, we don't have anything to compare to here.
+                White::SSID(tgt) => {
                     if tgt.match_ssid(ssid.to_owned()) {
                         return true;
                     }
@@ -219,10 +219,10 @@ impl TargetList {
     }
 
     pub fn has_ssid(&self) -> bool {
-        for target in &self.targets {
-            match target {
-                Target::MAC(_) => continue,
-                Target::SSID(_) => return true,
+        for device in &self.devices {
+            match device {
+                White::MAC(_) => continue,
+                White::SSID(_) => return true,
             }
         }
         false
@@ -236,25 +236,25 @@ impl TargetList {
             return None;
         }
         loop {
-            let tgt = self.targets.choose(&mut rand::thread_rng()).unwrap();
-            if let Target::SSID(tgt) = tgt {
+            let tgt = self.devices.choose(&mut rand::thread_rng()).unwrap();
+            if let White::SSID(tgt) = tgt {
                 return Some(tgt.ssid.clone());
             }
         }
     }
 
     pub fn get_string(&self) -> String {
-        self.targets
+        self.devices
             .iter()
             .map(|target| match target {
-                Target::MAC(mac_target) => format!("MAC: {}", mac_target.addr),
-                Target::SSID(ssid_target) => format!("SSID: {}", ssid_target.ssid),
+                White::MAC(mac_target) => format!("MAC: {}", mac_target.addr),
+                White::SSID(ssid_target) => format!("SSID: {}", ssid_target.ssid),
             })
             .collect::<Vec<String>>()
             .join(", ")
     }
 
-    pub fn get_ref(&self) -> &Vec<Target> {
-        &self.targets
+    pub fn get_ref(&self) -> &Vec<White> {
+        &self.devices
     }
 }

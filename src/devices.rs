@@ -98,6 +98,7 @@ pub struct AccessPoint {
     pub has_hs: bool,
     pub has_pmkid: bool,
     pub is_target: bool,
+    pub is_whitelisted: bool,
 }
 
 impl WiFiDeviceType for AccessPoint {}
@@ -124,6 +125,7 @@ impl Default for AccessPoint {
             has_hs: false,
             has_pmkid: false,
             is_target: false,
+            is_whitelisted: false,
         }
     }
 }
@@ -167,6 +169,7 @@ impl AccessPoint {
             has_hs: false,
             has_pmkid: false,
             is_target: false,
+            is_whitelisted: false,
         }
     }
 
@@ -208,6 +211,7 @@ impl AccessPoint {
             has_hs: false,
             has_pmkid: false,
             is_target: false,
+            is_whitelisted: false,
         }
     }
 
@@ -241,6 +245,11 @@ impl AccessPoint {
     pub fn is_target(&self) -> bool {
         self.is_target
     }
+
+    pub fn is_whitelisted(&self) -> bool {
+        self.is_whitelisted
+    }
+
 }
 
 #[derive(Clone, Debug, Default)]
@@ -566,7 +575,23 @@ impl WiFiDeviceList<AccessPoint> {
             .map(|(_, access_point)| access_point)
             .collect();
         match sort {
-            0 => access_points.sort_by_key(|b| std::cmp::Reverse(b.is_target())), // TGT
+            0 => access_points.sort_by(|a, b| { // TGT
+                match (a.is_target(), a.is_whitelisted(), b.is_target(), b.is_whitelisted()) {
+                    // Highest priority: is_target() = true, is_whitelist() = false
+                    (true, false, _, _) => std::cmp::Ordering::Less,
+                    (_, _, true, false) => std::cmp::Ordering::Greater,
+            
+                    // Middle priority: is_target() = false, is_whitelist() = false
+                    (false, false, false, true) => std::cmp::Ordering::Less,
+                    (false, true, false, false) => std::cmp::Ordering::Greater,
+            
+                    // Lowest priority: is_target() = false, is_whitelist() = true
+                    // This case is covered implicitly by the previous matches
+            
+                    // Fallback for equal cases
+                    _ => std::cmp::Ordering::Equal,
+                }
+            }), 
             1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)),         // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI
@@ -602,7 +627,7 @@ impl WiFiDeviceList<AccessPoint> {
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
         for (idx, ap) in access_points.iter().enumerate() {
             let mut ap_row = vec![
-                format!("{}", if ap.is_target() { "\u{274E}" } else { "" }), // TGT
+                format!("{}", if ap.is_target() { "\u{274E}" } else if ap.is_whitelisted() { "\u{2B1C}" } else { "" }), // TGT
                 format!("{}", ap.mac_address),                               // MAC Address
                 ap.channel
                     .as_ref()

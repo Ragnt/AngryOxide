@@ -244,6 +244,7 @@ pub fn print_ui(
 ) -> Result<()> {
     terminal.hide_cursor()?;
     terminal.draw(|frame| {
+
         if frame.size().width < 105 || frame.size().height < 20 {
             let area = frame.size();
 
@@ -326,8 +327,6 @@ fn create_status_bar(
     start_time: Instant,
     framerate: u64,
 ) {
-    oxide.if_hardware.interface =
-        get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()).unwrap();
 
     // Top Bar Layout
     let top_layout: std::rc::Rc<[Rect]> = Layout::default()

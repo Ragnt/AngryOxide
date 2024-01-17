@@ -12,6 +12,7 @@ mod snowstorm;
 mod status;
 mod tabbedblock;
 mod targets;
+mod whitelist;
 mod tx;
 mod ui;
 mod util;
@@ -42,7 +43,7 @@ use nix::unistd::geteuid;
 
 use nl80211_ng::attr::Nl80211Iftype;
 use nl80211_ng::channels::{map_str_to_band_and_channel, WiFiBand, WiFiChannel};
-use nl80211_ng::{set_interface_chan, Interface, Nl80211};
+use nl80211_ng::{set_interface_chan, Interface, Nl80211, get_interface_info_idx};
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -64,6 +65,7 @@ use tx::{
 };
 use ui::UiState;
 use uuid::Uuid;
+use whitelist::WhiteList;
 
 use crate::ascii::get_art;
 use crate::auth::HandshakeStorage;
@@ -74,6 +76,7 @@ use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
 use crate::util::parse_ip_address_port;
+use crate::whitelist::{White, WhiteMAC, WhiteSSID};
 
 use libwifi::{Addresses, Frame};
 
@@ -112,6 +115,9 @@ struct Arguments {
     #[arg(short, long)]
     /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
     target: Option<Vec<String>>,
+    #[arg(short, long)]
+    /// Optional - Whitelist (MAC or SSID) to NOT attack.
+    whitelist: Option<Vec<String>>,
     #[arg(short, long)]
     /// Optional - Output filename.
     output: Option<String>,
@@ -228,6 +234,7 @@ pub struct IfHardware {
 }
 
 pub struct TargetData {
+    whitelist: WhiteList,
     targets: TargetList,
     rogue_client: MacAddress,
     rogue_m1: EapolKey,
@@ -264,6 +271,7 @@ impl OxideRuntime {
         let rogue = cli_args.rogue.clone();
         let interface_name = cli_args.interface.clone();
         let targets = cli_args.target.clone();
+        let wh_list = cli_args.whitelist.clone();
         let mut notransmit = cli_args.notransmit.clone();
 
         // Setup initial lists / logs
@@ -338,6 +346,61 @@ impl OxideRuntime {
         }
 
         let targ_list = TargetList::from_vec(target_vec.clone());
+
+        // Setup Whitelist
+        let whitelist_vec: Vec<White> = if let Some(vec_whitelist) = wh_list {
+            vec_whitelist
+                .into_iter()
+                .filter_map(|f| {
+                    match MacAddress::from_str(&f) {
+                        Ok(mac) => {
+                            if targ_list.is_target_mac(&mac) {
+                                println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
+                                None
+                            } else {
+                                Some(White::MAC(WhiteMAC::new(mac)))
+                            }
+                        },
+                        Err(_) => {
+                            if targ_list.is_target_ssid(&f) {
+                                println!("Whitelist {} is a target. Cannot add to whitelist.", f);
+                                None
+                            } else {
+                                Some(White::SSID(WhiteSSID::new(&f)))
+                            }
+                        },
+                    }
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        if !whitelist_vec.is_empty() {
+            println!();
+            println!("========= White List =========");
+            for (index, device) in whitelist_vec.iter().enumerate() {
+                let tree = if index == whitelist_vec.len() - 1 {
+                    "└"
+                } else {
+                    "├"
+                };
+                match device {
+                    White::MAC(dev) => {
+                        println!(" {} MAC: {}", tree, dev.addr)
+                    }
+                    White::SSID(dev) => {
+                        println!(" {} SSID: {}", tree, dev.ssid)
+                    }
+                }
+            }
+            println!("========== Total: {:<2} ==========", whitelist_vec.len());
+            println!();
+        } else {
+            println!("💲 No whitelist list provided.");
+        }
+
+        let white_list = WhiteList::from_vec(whitelist_vec.clone());
 
         /////////////////////////////////////////////////////////////////////
 
@@ -698,6 +761,7 @@ impl OxideRuntime {
         };
 
         let target_data: TargetData = TargetData {
+            whitelist: white_list,
             targets: targ_list,
             rogue_client,
             rogue_m1,
@@ -927,20 +991,30 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 ),
                             );
 
+                        // Proliferate whitelist
+                        let _ = oxide.target_data.whitelist.get_whitelisted(ap);
+
                         // Proliferate the SSID / MAC to targets (if this is a target)
                         // Also handle adding the target channel to autohunt params.
-                        if let Ok(targets) = oxide.target_data.targets.get_targets(ap) {
+
+                        let targets = oxide.target_data.targets.get_targets(ap);
+                        if !targets.is_empty() {
+                            // This is a target_data target
                             if let Some(channel) = station_info.ds_parameter_set {
+                                // We have a channel in the broadcast (real channel)
                                 if oxide.config.autohunt
                                     && oxide
                                         .if_hardware
                                         .hop_channels
                                         .contains(&(band.to_u8(), channel))
                                 {
+                                    // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
+                                        // Go through all the target matches we got (which could be a Glob SSID, Match SSID, and MAC!)
                                         if let Some(vec) =
                                             oxide.if_hardware.target_chans.get_mut(&target)
                                         {
+                                            // This target is inside hop_chans
                                             // Update the target with this band/channel (if it isn't already there)
                                             if !vec.contains(&(band.to_u8(), channel)) {
                                                 vec.push((band.to_u8(), channel));
@@ -1121,9 +1195,15 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     oxide.target_data.rogue_client,
                                 ),
                             );
+                        
+                        // Proliferate whitelist
+                        let _ = oxide.target_data.whitelist.get_whitelisted(ap);
+
                         // Proliferate the SSID / MAC to targets (if this is a target)
                         // Also handle adding the target channel to autohunt params.
-                        if let Ok(targets) = oxide.target_data.targets.get_targets(ap) {
+
+                        let targets = oxide.target_data.targets.get_targets(ap);
+                        if !targets.is_empty() {
                             // This is a target_data target
                             if let Some(channel) = station_info.ds_parameter_set {
                                 // We have a channel in the broadcast (real channel)
@@ -2275,7 +2355,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start_time = Instant::now();
 
-    let mut err: Option<ErrorKind> = None;
+    let mut err: Option<String> = None;
     let mut exit_on_succ = false;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
@@ -2296,6 +2376,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     while running.load(Ordering::SeqCst) {
+        // Update our interface
+        oxide.if_hardware.interface = match get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()) {
+            Ok(interface) => interface,
+            Err(e) => {
+                // Uh oh... no interface
+                err = Some(e);
+                running.store(false, Ordering::SeqCst);
+                break;
+            }
+        };
+
+
         // Handle Hunting
         let target_chans = oxide.if_hardware.target_chans.clone();
         if oxide.config.autohunt
@@ -2462,8 +2554,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(code) => {
                 // This will result in "a serious packet read error" message.
-                err = Some(code.kind());
-                running.store(false, Ordering::SeqCst);
+                // err = Some(code.kind());
+                // running.store(false, Ordering::SeqCst);
             }
         };
 

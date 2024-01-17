@@ -49,6 +49,10 @@ pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String
         return Ok(());
     }
 
+    if oxide.target_data.whitelist.is_whitelisted(ap_data) {
+        return Ok(());
+    }
+
     // If we already have a 4whs, don't continue.
     if oxide
         .handshake_storage
@@ -108,6 +112,10 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
     };
 
     if !oxide.target_data.targets.is_target(ap_data) {
+        return Ok(());
+    }
+
+    if oxide.target_data.whitelist.is_whitelisted(ap_data) {
         return Ok(());
     }
 
@@ -182,6 +190,10 @@ pub fn m1_retrieval_attack_phase_2(
         return Ok(());
     }
 
+    if oxide.target_data.whitelist.is_whitelisted(ap_data) {
+        return Ok(());
+    }
+
     // Is our sequence state 1?
     if ap_data.auth_sequence.state != 1 {
         return Ok(());
@@ -249,6 +261,10 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
     };
 
     if !oxide.target_data.targets.is_target(ap_data) {
+        return Ok(());
+    }
+
+    if oxide.target_data.whitelist.is_whitelisted(ap_data) {
         return Ok(());
     }
 
@@ -356,6 +372,10 @@ pub fn anon_reassociation_attack(
         return Ok(());
     }
 
+    if oxide.target_data.whitelist.is_whitelisted(ap) {
+        return Ok(());
+    }
+
     let pcs = if ap.information.cs_ccmp.is_some_and(|x| x) {
         RsnCipherSuite::CCMP
     } else if ap.information.cs_tkip.is_some_and(|x| x) {
@@ -434,6 +454,10 @@ pub fn rogue_m2_attack_directed(
 
     // If we have an AP for this SSID, we will use as many of the same details as possible
     if let Some(ap) = oxide.access_points.get_device_by_ssid(&ssid) {
+        if oxide.target_data.whitelist.is_whitelisted(ap) {
+            return Ok(());
+        }
+        
         // Make sure this AP is a target and that this AP is
         if !oxide.target_data.targets.is_target(ap)
             || oxide
@@ -496,6 +520,10 @@ pub fn rogue_m2_attack_undirected(
                 .handshake_storage
                 .has_complete_handshake_for_ap(&ap.mac_address)
             {
+                return Ok(());
+            }
+
+            if oxide.target_data.whitelist.is_whitelisted(ap) {
                 return Ok(());
             }
         }
