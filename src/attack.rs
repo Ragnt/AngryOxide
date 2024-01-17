@@ -425,6 +425,7 @@ pub fn rogue_m2_attack_directed(
     if probe.station_info.ssid.is_none() {
         return Ok(());
     }
+
     let ssid = probe.station_info.ssid.unwrap();
 
     if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
@@ -526,20 +527,24 @@ pub fn rogue_m2_attack_undirected(
         if oxide.target_data.targets.has_ssid() {
             // Pick a random SSID from our targets and respond.
             let target = oxide.target_data.targets.get_random_ssid().unwrap();
-            if let Some(ap) = oxide.access_points.get_device_by_ssid(&target) {
+            let ap = if let Some(ap) = oxide.access_points.get_device_by_ssid_glob(&target) {
                 // Make sure this AP is a target and that this AP is
                 if oxide
                     .handshake_storage
                     .has_complete_handshake_for_ap(&ap.mac_address)
                 {
                     return Ok(());
+                } else {
+                    ap
                 }
-            }
+            } else {
+                return Ok(());
+            };
 
             let frx = build_probe_response(
                 &probe.header.address_2,
                 &oxide.target_data.rogue_client,
-                &target,
+                &ap.ssid.clone().unwrap(),
                 oxide.counters.sequence3(),
                 oxide.if_hardware.current_channel.get_channel_number(),
             );
@@ -551,7 +556,8 @@ pub fn rogue_m2_attack_undirected(
                 MessageType::Info,
                 format!(
                     "Anonymous Rogue AP Attempt: {} ({})",
-                    station.mac_address, target
+                    station.mac_address,
+                    ap.ssid.clone().unwrap()
                 ),
             ));
         }

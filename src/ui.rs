@@ -381,10 +381,7 @@ fn create_status_bar(
     };
 
     let dataflow = Line::from(vec![
-        Span::from(format!(
-            "Empty Reads: {}/s | UI: ",
-            oxide.counters.empty_reads_rate,
-        )),
+        Span::from(format!("ERs: {}/s | UI: ", oxide.counters.empty_reads_rate,)),
         flow,
     ]);
 
@@ -420,14 +417,19 @@ fn create_status_bar(
     );
     let mac: String = format!("MacAddr: {}", mac_addr.expect("Cannot get mac address"));
     let channel = format!(
-        "Frequency: {}",
+        "Frequency: {} {}",
         oxide
             .if_hardware
             .interface
             .frequency
             .clone()
             .unwrap_or_default()
-            .print()
+            .print(),
+        if oxide.config.autohunt {
+            "(Hunting)"
+        } else {
+            ""
+        }
     );
 
     let status_text = vec![interface.into(), mac.into(), channel.into()];

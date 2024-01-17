@@ -8,7 +8,7 @@ trait IsTarget {
     fn target_match(&self, ap: &AccessPoint) -> bool;
 }
 
-#[derive(Eq, PartialEq, Hash, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct TargetSSID {
     pub ssid: String,
 }
@@ -43,7 +43,7 @@ impl TargetSSID {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct TargetMAC {
     pub addr: MacAddress,
 }
@@ -62,7 +62,7 @@ impl TargetMAC {
         TargetMAC { addr }
     }
 }
-#[derive(Eq, PartialEq, Hash, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Target {
     MAC(TargetMAC),
     SSID(TargetSSID),
@@ -137,10 +137,11 @@ impl TargetList {
         false
     }
 
-    pub fn get_target(&mut self, ap: &mut AccessPoint) -> Result<Target, ()> {
+    pub fn get_targets(&mut self, ap: &mut AccessPoint) -> Result<Vec<Target>, ()> {
         if self.empty() {
             return Err(());
         };
+        let mut matches: Vec<Target> = Vec::new();
 
         for target in self.targets.clone() {
             match target {
@@ -154,7 +155,7 @@ impl TargetList {
                             }
                         }
                         ap.is_target = true;
-                        return Ok(target);
+                        matches.push(target);
                     }
                 }
                 Target::SSID(ref tgt) => {
@@ -165,10 +166,13 @@ impl TargetList {
                             }))
                         }
                         ap.is_target = true;
-                        return Ok(target);
+                        matches.push(target);
                     }
                 }
             }
+        }
+        if !matches.is_empty() {
+            return Ok(matches);
         }
         Err(())
     }

@@ -1,3 +1,4 @@
+use globset::Glob;
 use libwifi::frame::components::MacAddress;
 use libwifi::{Addresses, Frame};
 use nl80211_ng::channels::{WiFiBand, WiFiChannel};
@@ -433,15 +434,35 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
     where
         T: HasSSID,
     {
-        self.devices
-            .values_mut() // Get a mutable iterator over the values
-            .find_map(|x: &mut T| {
-                if x.ssid().as_ref().map_or(false, |f| f == ssid) {
+        self.devices.values_mut().find_map(|x: &mut T| {
+            if x.ssid().as_ref().map_or(false, |f| f == ssid) {
+                Some(x)
+            } else {
+                None
+            }
+        })
+    }
+
+    // Retrieve a device by MAC address GLOB
+    pub fn get_device_by_ssid_glob(&mut self, ssid: &str) -> Option<&mut T>
+    where
+        T: HasSSID,
+    {
+        self.devices.values_mut().find_map(|x: &mut T| {
+            if let Some(device_ssid) = x.ssid() {
+                if Glob::new(ssid)
+                    .unwrap()
+                    .compile_matcher()
+                    .is_match(device_ssid)
+                {
                     Some(x)
                 } else {
                     None
                 }
-            })
+            } else {
+                None
+            }
+        })
     }
 
     // Retrieve all devices

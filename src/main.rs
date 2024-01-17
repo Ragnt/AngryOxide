@@ -79,7 +79,7 @@ use libwifi::{Addresses, Frame};
 
 use crossterm::{cursor::Hide, cursor::Show, execute};
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File};
 use std::io::stdout;
 use std::io::Write;
@@ -258,12 +258,13 @@ pub struct OxideRuntime {
 }
 
 impl OxideRuntime {
-    fn new(cli_args: Arguments) -> Self {
+    fn new(cli_args: &Arguments) -> Self {
         println!("Starting AngryOxide... 😈");
 
-        let rogue = cli_args.rogue;
-        let interface_name = cli_args.interface;
-        let targets = cli_args.target;
+        let rogue = cli_args.rogue.clone();
+        let interface_name = cli_args.interface.clone();
+        let targets = cli_args.target.clone();
+        let mut notransmit = cli_args.notransmit.clone();
 
         // Setup initial lists / logs
         let access_points = WiFiDeviceList::new();
@@ -342,7 +343,15 @@ impl OxideRuntime {
 
         //// Setup Channels ////
 
-        let iface_bands: HashMap<u8, Vec<u8>> = iface.get_frequency_list_simple().unwrap();
+        let mut iface_bands: BTreeMap<u8, Vec<u8>> = iface
+            .get_frequency_list_simple()
+            .unwrap()
+            .into_iter()
+            .collect();
+        for (_key, value) in iface_bands.iter_mut() {
+            value.sort(); // This sorts each vector in place
+        }
+
         let mut hop_channels: Vec<(u8, u8)> = Vec::new();
         let mut hop_interval: Duration = Duration::from_secs(2);
         let mut target_chans: HashMap<Target, Vec<(u8, u8)>> = HashMap::new();
@@ -368,15 +377,17 @@ impl OxideRuntime {
             }
 
             // Set our hop interval much faster while hunting
-            hop_interval = Duration::from_millis(200);
+            hop_interval = Duration::from_millis(100);
+            // Set notx to true
+            notransmit = true;
 
-            // Setup our target_chans
+            // Setup our initial** target_chans
             for target in target_vec {
                 target_chans.insert(target, vec![]);
             }
         } else {
-            let mut channels = cli_args.channel;
-            let bands = cli_args.band;
+            let mut channels = cli_args.channel.clone();
+            let bands = cli_args.band.clone();
             let mut default_chans = false;
 
             if bands.is_empty() && channels.is_empty() {
@@ -606,7 +617,7 @@ impl OxideRuntime {
         };
 
         // Setup Filename Prefix
-        let file_prefix = if let Some(fname) = cli_args.output {
+        let file_prefix = if let Some(fname) = cli_args.output.clone() {
             fname.to_string()
         } else {
             "oxide".to_string()
@@ -667,7 +678,7 @@ impl OxideRuntime {
         };
 
         let config = Config {
-            notx: cli_args.notransmit,
+            notx: notransmit,
             deauth: !cli_args.nodeauth,
             autoexit: cli_args.autoexit,
             headless: cli_args.headless,
@@ -918,7 +929,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
 
                         // Proliferate the SSID / MAC to targets (if this is a target)
                         // Also handle adding the target channel to autohunt params.
-                        if let Ok(target) = oxide.target_data.targets.get_target(ap) {
+                        if let Ok(targets) = oxide.target_data.targets.get_targets(ap) {
                             if let Some(channel) = station_info.ds_parameter_set {
                                 if oxide.config.autohunt
                                     && oxide
@@ -926,20 +937,21 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         .hop_channels
                                         .contains(&(band.to_u8(), channel))
                                 {
-                                    if let Some(vec) =
-                                        oxide.if_hardware.target_chans.get_mut(&target)
-                                    {
-                                        if !vec.contains(&(band.to_u8(), channel)) {
-                                            vec.push((band.to_u8(), channel));
+                                    for target in targets {
+                                        if let Some(vec) =
+                                            oxide.if_hardware.target_chans.get_mut(&target)
+                                        {
+                                            // Update the target with this band/channel (if it isn't already there)
+                                            if !vec.contains(&(band.to_u8(), channel)) {
+                                                vec.push((band.to_u8(), channel));
+                                            }
+                                        } else {
+                                            // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
+                                            oxide
+                                                .if_hardware
+                                                .target_chans
+                                                .insert(target, vec![(band.to_u8(), channel)]);
                                         }
-                                    } else {
-                                        oxide.status_log.add_message(StatusMessage::new(
-                                            MessageType::Warning,
-                                            format!(
-                                                "Target not found in target_chans: {}",
-                                                target.get_string()
-                                            ),
-                                        ));
                                     }
                                 }
                             }
@@ -1070,7 +1082,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     *bssid,
                                     signal_strength,
                                     ssid,
-                                    Some((band, channel_u8)),
+                                    Some((band.clone(), channel_u8)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1109,10 +1121,40 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     oxide.target_data.rogue_client,
                                 ),
                             );
-                        // Proliferate the SSID / MAC to targets (if this is a target...)
-                        // This is important because some AP's will use the same MAC with multiple SSID's, and we want ALL those SSIDs
-                        // in our target deck if the user added the MAC (or vise versa, multiple AP's using the same SSID).
-                        oxide.target_data.targets.is_target(ap);
+                        // Proliferate the SSID / MAC to targets (if this is a target)
+                        // Also handle adding the target channel to autohunt params.
+                        if let Ok(targets) = oxide.target_data.targets.get_targets(ap) {
+                            // This is a target_data target
+                            if let Some(channel) = station_info.ds_parameter_set {
+                                // We have a channel in the broadcast (real channel)
+                                if oxide.config.autohunt
+                                    && oxide
+                                        .if_hardware
+                                        .hop_channels
+                                        .contains(&(band.to_u8(), channel))
+                                {
+                                    // We are autohunting and our current channel is real (band/channel match)
+                                    for target in targets {
+                                        // Go through all the target matches we got (which could be a Glob SSID, Match SSID, and MAC!)
+                                        if let Some(vec) =
+                                            oxide.if_hardware.target_chans.get_mut(&target)
+                                        {
+                                            // This target is inside hop_chans
+                                            // Update the target with this band/channel (if it isn't already there)
+                                            if !vec.contains(&(band.to_u8(), channel)) {
+                                                vec.push((band.to_u8(), channel));
+                                            }
+                                        } else {
+                                            // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
+                                            oxide
+                                                .if_hardware
+                                                .target_chans
+                                                .insert(target, vec![(band.to_u8(), channel)]);
+                                        }
+                                    }
+                                }
+                            }
+                        };
                         let _ = m1_retrieval_attack(oxide, bssid);
                     };
                 }
@@ -1792,10 +1834,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
             // Post Processing
         }
         Err(err) => {
-            if let libwifi::error::Error::Failure(message, _data) = err {
-                match &message[..] {
-                    "Input frame is too short to contain an FCS" => {}
-                    "Frame Check Sequence (FCS) mismatch" => {}
+            match err {
+                libwifi::error::Error::Failure(message, _data) => match &message[..] {
                     "An error occured while parsing the data: nom::ErrorKind is Eof" => {}
                     _ => {
                         oxide.status_log.add_message(StatusMessage::new(
@@ -1804,7 +1844,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         ));
                         oxide.counters.error_count += 1;
                     }
-                }
+                },
+                libwifi::error::Error::Incomplete(message) => {}
+                libwifi::error::Error::UnhandledFrameSubtype(_, _) => {}
+                libwifi::error::Error::UnhandledProtocol(message) => {}
             }
             return Err("Parsing Error".to_owned());
         }
@@ -2171,7 +2214,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         exit(EXIT_FAILURE);
     }
 
-    let mut oxide = OxideRuntime::new(cli);
+    let mut oxide = OxideRuntime::new(&cli);
 
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
@@ -2253,7 +2296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     while running.load(Ordering::SeqCst) {
-        // Handle hunting
+        // Handle Hunting
         let target_chans = oxide.if_hardware.target_chans.clone();
         if oxide.config.autohunt
             && hop_cycle >= 3
@@ -2264,28 +2307,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 MessageType::Priority,
                 "=== AutoHunting Complete! ===".to_string(),
             ));
-            let mut new_hops: Vec<(u8, u8)> = Vec::new();
-            for (target, chan) in target_chans {
-                for ch in chan {
-                    new_hops.push(ch);
-
+            for target in oxide.target_data.targets.get_ref() {
+                if let Some(channels) = target_chans.get(target) {
+                    let chans = format_channels(channels);
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Priority,
-                        format!(
-                            "Target {} found on Band {} Channel {}.",
-                            target.get_string(),
-                            ch.0,
-                            ch.1
-                        ),
+                        format!("Target: {} | Channels: [ {} ]", target.get_string(), chans),
                     ));
                 }
             }
+
+            let mut new_hops: Vec<(u8, u8)> = Vec::new();
+            for (_, chan) in target_chans {
+                for ch in chan {
+                    if !new_hops.contains(&ch) {
+                        new_hops.push(ch);
+                    }
+                }
+            }
+
+            // Setup channels hops
             oxide.if_hardware.hop_channels = new_hops;
-            oxide.if_hardware.hop_interval = Duration::from_secs(5);
+            oxide.if_hardware.hop_interval = Duration::from_secs(2);
             channels_binding = oxide.if_hardware.hop_channels.clone();
             cycle_iter = channels_binding.iter().cycle();
             first_channel = *cycle_iter.next().unwrap();
-            oxide.config.autohunt = false;
+
+            oxide.config.autohunt = false; // Disable autohunt.
+            if !cli.notransmit {
+                oxide.config.notx = false; // Turn notx back to false unless CLI notransmit is true.
+            }
         }
 
         // Calculate status rates
@@ -2590,4 +2641,35 @@ fn reset_terminal() {
     execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
     execute!(stdout(), DisableMouseCapture).expect("Could not disable mouse capture.");
     disable_raw_mode().expect("Could not disable raw mode.");
+}
+
+fn format_channels(channels: &Vec<(u8, u8)>) -> String {
+    let mut band_map: HashMap<u8, Vec<u8>> = HashMap::new();
+
+    // Group by band
+    for &(band, channel) in channels {
+        band_map.entry(band).or_insert_with(Vec::new).push(channel);
+    }
+
+    // Sort channels within each band
+    for channels in band_map.values_mut() {
+        channels.sort();
+    }
+
+    // Collect and format the string
+    let mut parts: Vec<String> = Vec::new();
+    for (&band, channels) in &band_map {
+        let channels_str = channels
+            .iter()
+            .map(|channel| channel.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        parts.push(format!("Band {}: {}", band, channels_str));
+    }
+
+    // Sort the bands for consistent ordering
+    parts.sort();
+
+    // Join all parts into a single string
+    parts.join(" | ")
 }
