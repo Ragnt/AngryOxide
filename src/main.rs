@@ -2549,10 +2549,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if !oxide.config.notar {
-        println!(
-            "📦 Creating Output Tarball ({}.tar.gz).",
-            oxide.file_data.file_prefix
-        );
+        println!("📦 Creating Output Tarball ({}.tar.gz).", file);
         println!("Please wait...");
         let _ = tar_and_compress_files(oxide.file_data.output_files, &file);
     }
