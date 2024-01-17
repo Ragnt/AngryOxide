@@ -2553,9 +2553,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(code) => {
-                // This will result in "a serious packet read error" message.
-                // err = Some(code.kind());
-                // running.store(false, Ordering::SeqCst);
+                if code.kind().to_string() == "network down" {
+                    oxide.if_hardware.netlink.set_interface_up(oxide.if_hardware.interface.index.unwrap()).ok();
+                } else {
+                    // This will result in "a serious packet read error" message.
+                    err = Some(code.kind().to_string());
+                    running.store(false, Ordering::SeqCst);
+                }
             }
         };
 
