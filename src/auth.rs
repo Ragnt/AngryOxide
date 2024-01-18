@@ -31,16 +31,14 @@ pub struct FourWayHandshake {
     pub essid: Option<String>,
 }
 
-// Example implementation for displaying a FourWayHandshake
 impl fmt::Display for FourWayHandshake {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Example handshake detail (customize as needed)
 
         write!(
             f,
             " {:<2} {:<2} {:<2} {:<2}     {:^2}    {:^8}",
             if self.msg1.is_some() {
-                "\u{2705}" // The check-mark is two char's wide, so we add a null char so the fmt lib doesn't add a space when padding to two.
+                "\u{2705}"
             } else {
                 "--"
             },
@@ -569,27 +567,6 @@ impl HandshakeStorage {
 
     pub fn get_handshakes(&self) -> HashMap<HandshakeSessionKey, Vec<FourWayHandshake>> {
         self.handshakes.clone()
-    }
-
-    pub fn find_handshakes_by_ap(
-        &self,
-        ap_mac: &MacAddress,
-    ) -> HashMap<MacAddress, Vec<FourWayHandshake>> {
-        self.handshakes
-            .iter()
-            .filter(|(key, _)| &key.ap_mac == ap_mac)
-            .map(|(key, handshakes)| (key.client_mac, handshakes.clone()))
-            .collect()
-    }
-
-    pub fn set_apless_for_ap(&mut self, ap_mac: &MacAddress) {
-        for (key, handshakes) in self.handshakes.iter_mut() {
-            if &key.ap_mac == ap_mac {
-                for handshake in handshakes {
-                    handshake.apless = true;
-                }
-            }
-        }
     }
 
     pub fn has_complete_handshake_for_ap(&self, ap_mac: &MacAddress) -> bool {
