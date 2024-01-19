@@ -867,6 +867,8 @@ impl OxideRuntime {
                         } else {
                             all_completes.push(false);
                         }
+                    } else {
+                        all_completes.push(false);
                     }
                 }
             }
