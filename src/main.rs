@@ -354,7 +354,7 @@ impl OxideRuntime {
                 .filter_map(|f| {
                     match MacAddress::from_str(&f) {
                         Ok(mac) => {
-                            if targ_list.is_target_mac(&mac) {
+                            if targ_list.is_actual_target_mac(&mac) {
                                 println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
                                 None
                             } else {
@@ -362,7 +362,7 @@ impl OxideRuntime {
                             }
                         },
                         Err(_) => {
-                            if targ_list.is_target_ssid(&f) {
+                            if targ_list.is_actual_target_ssid(&f) {
                                 println!("Whitelist {} is a target. Cannot add to whitelist.", f);
                                 None
                             } else {

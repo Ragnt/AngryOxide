@@ -182,6 +182,36 @@ impl TargetList {
         return matches;
     }
 
+    pub fn is_actual_target_mac(&self, mac: &MacAddress) -> bool {
+
+        for target in &self.targets {
+            match target {
+                Target::MAC(tgt) => {
+                    if tgt.addr == *mac {
+                        return true;
+                    }
+                }
+                Target::SSID(_) => {} // do nothing
+            }
+        }
+        false
+    }
+
+    pub fn is_actual_target_ssid(&self, ssid: &str) -> bool {
+
+        for target in &self.targets {
+            match target {
+                Target::MAC(_) => {} // do nothing, we don't have anything to compare to here.
+                Target::SSID(tgt) => {
+                    if tgt.match_ssid(ssid.to_owned()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     pub fn is_target_mac(&self, mac: &MacAddress) -> bool {
         if self.empty() {
             return true;
