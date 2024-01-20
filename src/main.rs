@@ -22,7 +22,7 @@ extern crate nix;
 
 use anyhow::Result;
 use attack::{
-    anon_reassociation_attack, csa_attack, deauth_attack, m1_retrieval_attack,
+    anon_reassociation_attack, csa_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
     m1_retrieval_attack_phase_2, rogue_m2_attack_directed, rogue_m2_attack_undirected,
 };
 
@@ -1060,17 +1060,19 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     // it is running it's own internal rate limiting.
                     let _ = m1_retrieval_attack(oxide, &bssid);
 
-                    // Conduct Death on 0 (and 128 if its a broadcast deauth)
+                    // Every 8 beacons (.8 seconds usually) conduct some form of attack.
                     if (beacon_count % 32) == 0 {
+                        // Deauth on 0 (broadcast on 128)
                         deauth_attack(oxide, &bssid)?;
-                    // Conduct Anon. Reassoc. on 32+8
                     } else if (beacon_count % 32) == 8 {
+                        // Anon. Reassoc. at 8
                         anon_reassociation_attack(oxide, &bssid)?;
-                    // Conduct CSA on 32+16
-                    // This attack is entirely unfounded right now on whether or not it actually does anything.
-                    // I may get rid of this and switch back to doing anon. reassoc. at 16.
                     } else if (beacon_count % 32) == 16 {
+                        // CSA at 16
                         csa_attack(oxide, beacon_frame)?;
+                    } else if (beacon_count % 32) == 24 {
+                        // Disassoc at 24
+                        disassoc_attack(oxide, &bssid)?;
                     }
 
                     // Increase beacon count (now that the attacks are over)

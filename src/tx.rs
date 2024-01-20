@@ -348,6 +348,40 @@ pub fn build_disassocation_from_client(
     rth
 }
 
+pub fn build_disassocation_from_ap(
+    ap_mac: &MacAddress,
+    client_mac: &MacAddress,
+    sequence: u16,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::Disassociation,
+        flags: 0u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: 15000u16.to_ne_bytes(),
+        address_1: *client_mac,
+        address_2: *ap_mac,
+        address_3: *client_mac,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: sequence,
+        },
+    };
+
+    let frx = Disassociation {
+        header,
+        reason_code: DeauthenticationReason::DisassociatedDueToInactivity,
+    };
+    rth.extend(frx.encode());
+    rth
+}
+
 pub fn build_reassociation_request(
     ap_mac: &MacAddress,
     client_mac: &MacAddress,
