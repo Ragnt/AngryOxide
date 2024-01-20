@@ -472,6 +472,7 @@ impl Station {
 #[derive(Clone, Debug, Default)]
 pub struct WiFiDeviceList<T: WiFiDeviceType> {
     devices: HashMap<MacAddress, T>,
+    devices_sorted: Vec<T>,
 }
 
 // Common functions for any type of device
@@ -479,6 +480,7 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
     pub fn new() -> Self {
         WiFiDeviceList {
             devices: HashMap::new(),
+            devices_sorted: Vec::new(),
         }
     }
 
@@ -561,6 +563,75 @@ impl WiFiDeviceList<AccessPoint> {
         all_clients
     }
 
+    pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool)  {
+        let mut access_points: Vec<AccessPoint> = self
+        .get_devices()
+        .iter()
+        .map(|(_, access_point)| access_point.clone())
+        .collect();
+    
+        match sort {
+            0 => access_points.sort_by(|a, b| {
+                // TGT
+                match (
+                    a.is_target(),
+                    a.is_whitelisted(),
+                    b.is_target(),
+                    b.is_whitelisted(),
+                ) {
+                    // Highest priority: is_target() = true, is_whitelist() = false
+                    (true, false, _, _) => std::cmp::Ordering::Less,
+                    (_, _, true, false) => std::cmp::Ordering::Greater,
+
+                    // Middle priority: is_target() = false, is_whitelist() = false
+                    (false, false, false, true) => std::cmp::Ordering::Less,
+                    (false, true, false, false) => std::cmp::Ordering::Greater,
+
+                    // Lowest priority: is_target() = false, is_whitelist() = true
+                    // This case is covered implicitly by the previous matches
+
+                    // Fallback for equal cases
+                    _ => std::cmp::Ordering::Equal,
+                }
+            }),
+            1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)), // CH
+            2 => access_points.sort_by(|a, b| {
+                // RSSI
+                let a_val = a.last_signal_strength.value;
+                let b_val = b.last_signal_strength.value;
+
+                match (a_val, b_val) {
+                    // If both values are the same (and it doesn't matter if they are zero or not)
+                    _ if a_val == b_val => std::cmp::Ordering::Equal,
+
+                    // Prioritize any non-zero value over zero
+                    (0, _) => std::cmp::Ordering::Greater, // A is worse if it's zero
+                    (_, 0) => std::cmp::Ordering::Less,    // B is worse if it's zero
+
+                    // Otherwise, just do a normal comparison
+                    _ => b_val.cmp(&a_val),
+                }
+            }),
+            3 => access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv)), // Last
+            4 => access_points.sort_by(|a, b| b.client_list.size().cmp(&a.client_list.size())), // Clients
+            5 => access_points.sort_by(|a, b| b.interactions.cmp(&a.interactions)), // Tx
+            6 => access_points.sort_by(|a, b| b.has_hs.cmp(&a.has_hs)),             // HS
+            7 => access_points.sort_by(|a, b| b.has_pmkid.cmp(&a.has_pmkid)),       // PM
+            _ => {
+                access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv));
+            }
+        }
+
+        if sort_reverse {
+            access_points.reverse();
+        }
+        self.devices_sorted = access_points;
+    }
+
+    pub fn get_devices_sorted(&self) -> &Vec<AccessPoint> {
+        &self.devices_sorted
+    }
+
     pub fn clear_all_interactions(&mut self) {
         for dev in self.devices.values_mut() {
             dev.interactions = 0;
@@ -621,8 +692,6 @@ impl WiFiDeviceList<AccessPoint> {
         selected_row: Option<usize>,
         sort: u8,
         sort_reverse: bool,
-        copys: bool,
-        copyl: bool,
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         let headers = vec![
@@ -638,66 +707,8 @@ impl WiFiDeviceList<AccessPoint> {
             "PMKID".to_string(),
         ];
 
-        let mut access_points: Vec<_> = self
-            .get_devices()
-            .iter()
-            .map(|(_, access_point)| access_point)
-            .collect();
-        match sort {
-            0 => access_points.sort_by(|a, b| {
-                // TGT
-                match (
-                    a.is_target(),
-                    a.is_whitelisted(),
-                    b.is_target(),
-                    b.is_whitelisted(),
-                ) {
-                    // Highest priority: is_target() = true, is_whitelist() = false
-                    (true, false, _, _) => std::cmp::Ordering::Less,
-                    (_, _, true, false) => std::cmp::Ordering::Greater,
-
-                    // Middle priority: is_target() = false, is_whitelist() = false
-                    (false, false, false, true) => std::cmp::Ordering::Less,
-                    (false, true, false, false) => std::cmp::Ordering::Greater,
-
-                    // Lowest priority: is_target() = false, is_whitelist() = true
-                    // This case is covered implicitly by the previous matches
-
-                    // Fallback for equal cases
-                    _ => std::cmp::Ordering::Equal,
-                }
-            }),
-            1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)), // CH
-            2 => access_points.sort_by(|a, b| {
-                // RSSI
-                let a_val = a.last_signal_strength.value;
-                let b_val = b.last_signal_strength.value;
-
-                match (a_val, b_val) {
-                    // If both values are the same (and it doesn't matter if they are zero or not)
-                    _ if a_val == b_val => std::cmp::Ordering::Equal,
-
-                    // Prioritize any non-zero value over zero
-                    (0, _) => std::cmp::Ordering::Greater, // A is worse if it's zero
-                    (_, 0) => std::cmp::Ordering::Less,    // B is worse if it's zero
-
-                    // Otherwise, just do a normal comparison
-                    _ => b_val.cmp(&a_val),
-                }
-            }),
-            3 => access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv)), // Last
-            4 => access_points.sort_by(|a, b| b.client_list.size().cmp(&a.client_list.size())), // Clients
-            5 => access_points.sort_by(|a, b| b.interactions.cmp(&a.interactions)), // Tx
-            6 => access_points.sort_by(|a, b| b.has_hs.cmp(&a.has_hs)),             // HS
-            7 => access_points.sort_by(|a, b| b.has_pmkid.cmp(&a.has_pmkid)),       // PM
-            _ => {
-                access_points.sort_by(|a, b| b.last_recv.cmp(&a.last_recv));
-            }
-        }
-
-        if sort_reverse {
-            access_points.reverse();
-        }
+        self.sort_devices(sort, sort_reverse);
+        let access_points = &self.devices_sorted;
 
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
         for (idx, ap) in access_points.iter().enumerate() {
@@ -746,12 +757,7 @@ impl WiFiDeviceList<AccessPoint> {
                     ap_row = merged;
                     height += 1;
                 }
-                if copys {
-                    terminal_clipboard::set_string(ap.mac_address.to_string()).unwrap();
-                }
-                if copyl {
-                    terminal_clipboard::set_string(ap.to_json_str()).unwrap();
-                }
+                
             }
             rows.push((ap_row, height));
         }
@@ -851,31 +857,11 @@ fn add_probe_rows(
 
 // Functions specific to a WiFiDeviceList holding Stations
 impl WiFiDeviceList<Station> {
-    pub fn get_table(
-        &mut self,
-        selected_row: Option<usize>,
-        sort: u8,
-        sort_reverse: bool,
-        copys: bool,
-        copyl: bool,
-    ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
-        // Header fields
-        //"MAC Address", "RSSI", "Last", Tx, "Probes"
-        let headers = vec![
-            "MAC Address".to_string(),
-            "RSSI".to_string(),
-            "Last".to_string(),
-            "Tx".to_string(),
-            "Rogue M2".to_string(),
-            "Probes".to_string(),
-        ];
-
-        // Make our stations object
-
+    pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool)  {
         let mut stations: Vec<_> = self
             .get_devices()
             .iter()
-            .map(|(_, access_point)| access_point)
+            .map(|(_, station)| station.clone())
             .collect();
 
         match sort {
@@ -914,6 +900,33 @@ impl WiFiDeviceList<Station> {
         if sort_reverse {
             stations.reverse();
         }
+        self.devices_sorted = stations;
+    }
+
+    pub fn get_devices_sorted(&self) -> &Vec<Station> {
+        &self.devices_sorted
+    }
+
+    pub fn get_table(
+        &mut self,
+        selected_row: Option<usize>,
+        sort: u8,
+        sort_reverse: bool
+    ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
+        // Header fields
+        //"MAC Address", "RSSI", "Last", Tx, "Probes"
+        let headers = vec![
+            "MAC Address".to_string(),
+            "RSSI".to_string(),
+            "Last".to_string(),
+            "Tx".to_string(),
+            "Rogue M2".to_string(),
+            "Probes".to_string(),
+        ];
+
+        // Make our stations object
+        self.sort_devices(sort, sort_reverse);
+        let stations = &self.devices_sorted;
 
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
         for (idx, station) in stations.iter().enumerate() {
@@ -953,12 +966,6 @@ impl WiFiDeviceList<Station> {
                         cl_row = merged;
                         height += 1;
                     }
-                }
-                if copys {
-                    terminal_clipboard::set_string(station.mac_address.to_string()).unwrap();
-                }
-                if copyl {
-                    terminal_clipboard::set_string(station.to_json_str()).unwrap();
                 }
             }
             rows.push((cl_row, height));

@@ -5,7 +5,7 @@ use rand::Rng;
 use std::{io::Result, time::Instant};
 
 use crate::{
-    auth::HandshakeStorage,
+    auth::{FourWayHandshake, HandshakeStorage},
     devices::{AccessPoint, Station, WiFiDeviceList},
     matrix::MatrixSnowstorm,
     snowstorm::Snowstorm,
@@ -81,23 +81,29 @@ pub struct UiState {
     pub show_quit: bool,
     pub copy_short: bool,
     pub copy_long: bool,
+    pub add_target: bool,
+    pub set_autoexit: bool,
+    pub show_keybinds: bool,
 
     // AP Menu Options
     pub ap_sort: u8,
     pub ap_state: TableState,
     pub ap_table_data: WiFiDeviceList<AccessPoint>,
+    pub ap_selected_item: Option<AccessPoint>,
     pub ap_sort_reverse: bool,
 
     // Client Menu Options
-    pub cl_sort: u8,
-    pub cl_state: TableState,
-    pub cl_table_data: WiFiDeviceList<Station>,
-    pub cl_sort_reverse: bool,
+    pub sta_sort: u8,
+    pub sta_state: TableState,
+    pub sta_table_data: WiFiDeviceList<Station>,
+    pub sta_selected_item: Option<Station>,
+    pub sta_sort_reverse: bool,
 
     // Handshake Menu Options
     pub hs_sort: u8,
     pub hs_state: TableState,
     pub hs_table_data: HandshakeStorage,
+    pub hs_selected_item: Option<FourWayHandshake>,
     pub hs_sort_reverse: bool,
 
     // Messages
@@ -147,9 +153,9 @@ impl UiState {
 
     fn cl_sort_next(&mut self) {
         if !self.show_quit {
-            self.cl_sort += 1;
-            if self.cl_sort == 5 {
-                self.cl_sort = 0;
+            self.sta_sort += 1;
+            if self.sta_sort == 5 {
+                self.sta_sort = 0;
             }
         }
     }
@@ -182,7 +188,7 @@ impl UiState {
         if !self.show_quit {
             let sort = match self.current_menu {
                 MenuType::AccessPoints => &mut self.ap_sort_reverse,
-                MenuType::Clients => &mut self.cl_sort_reverse,
+                MenuType::Clients => &mut self.sta_sort_reverse,
                 MenuType::Handshakes => &mut self.hs_sort_reverse,
                 MenuType::Messages => &mut self.messages_sort_reverse,
             };
@@ -194,7 +200,7 @@ impl UiState {
         if !self.show_quit {
             let state = match self.current_menu {
                 MenuType::AccessPoints => &mut self.ap_state,
-                MenuType::Clients => &mut self.cl_state,
+                MenuType::Clients => &mut self.sta_state,
                 MenuType::Handshakes => &mut self.hs_state,
                 MenuType::Messages => &mut self.messages_state,
             };
@@ -216,7 +222,7 @@ impl UiState {
         if !self.show_quit {
             let state = match self.current_menu {
                 MenuType::AccessPoints => &mut self.ap_state,
-                MenuType::Clients => &mut self.cl_state,
+                MenuType::Clients => &mut self.sta_state,
                 MenuType::Handshakes => &mut self.hs_state,
                 MenuType::Messages => &mut self.messages_state,
             };
@@ -239,7 +245,7 @@ impl UiState {
         if !self.show_quit {
             let state: &mut TableState = match self.current_menu {
                 MenuType::AccessPoints => &mut self.ap_state,
-                MenuType::Clients => &mut self.cl_state,
+                MenuType::Clients => &mut self.sta_state,
                 MenuType::Handshakes => &mut self.hs_state,
                 MenuType::Messages => &mut self.messages_state,
             };
@@ -255,7 +261,7 @@ impl UiState {
         if !self.show_quit {
             let state: &mut TableState = match self.current_menu {
                 MenuType::AccessPoints => &mut self.ap_state,
-                MenuType::Clients => &mut self.cl_state,
+                MenuType::Clients => &mut self.sta_state,
                 MenuType::Handshakes => &mut self.hs_state,
                 MenuType::Messages => &mut self.messages_state,
             };
@@ -337,32 +343,31 @@ pub fn print_ui(
             Paragraph::new(Line::from(vec![
                 Span::raw("| quit: ").style(Style::new()),
                 Span::styled("[q]", Style::default().reversed()),
-                Span::raw(" | sort table: ").style(Style::new()),
-                Span::styled("[e]", Style::default().reversed()),
-                Span::raw(" | reverse: ").style(Style::new()),
-                Span::styled("[r]", Style::default().reversed()),
                 Span::raw(" | change tab: ").style(Style::new()),
                 Span::styled("[a]/[d]", Style::default().reversed()),
                 Span::raw(" | pause: ").style(Style::new()),
                 Span::styled("[space]", Style::default().reversed()),
                 Span::raw(" | scroll: ").style(Style::new()),
                 Span::styled("[w/W]/[s/S]", Style::default().reversed()),
-                Span::raw(" |").style(Style::new()),
-                Span::raw(" | copy: ").style(Style::new()),
-                Span::styled("[c/C]", Style::default().reversed()),
+                Span::raw(" | show keybinds: ").style(Style::new()),
+                Span::styled("[k]", Style::default().reversed()),
                 Span::raw(" |").style(Style::new()),
             ]))
             .alignment(Alignment::Center),
             full_layout[2],
         );
+
+        if oxide.ui_state.show_keybinds {
+            create_keybind_popup(frame, frame.size());
+        }
     })?;
     Ok(())
 }
 
 fn create_quit_popup(frame: &mut Frame<'_>, area: Rect) {
     let popup_area = Rect {
-        x: area.width / 2 - 25,
-        y: area.height / 2 - 3,
+        x: (area.width / 2) - 25,
+        y: (area.height / 2) - 3,
         width: 50,
         height: 4,
     };
@@ -372,6 +377,89 @@ fn create_quit_popup(frame: &mut Frame<'_>, area: Rect) {
         .style(Style::new().yellow().bold())
         .border_style(Style::new().red());
     frame.render_widget(popup, popup_area);
+}
+
+fn create_keybind_popup(frame: &mut Frame<'_>, area: Rect) {
+    let window_area = Rect {
+        x: (area.width / 2) - 25,
+        y: (area.height / 2) - 9,
+        width: 50,
+        height: 16,
+    };
+
+    frame.render_widget(Clear, window_area);
+    let block = Block::new().borders(Borders::ALL);
+    let hotkeys: Vec<Line<'_>> = vec![
+        Line::from(vec![Span::styled("", Style::default().bold())]),
+        Line::from(vec![Span::styled("KEY BINDS", Style::default().bold())]),
+        Line::from(vec![Span::styled("", Style::default().bold())]),
+        Line::from(vec![
+            Span::raw("Sort Table").style(Style::new()),
+            Span::raw(repeat_dot(33)).style(Style::new()),
+            Span::styled("[e]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Reverse Sorting").style(Style::new()),
+            Span::raw(repeat_dot(28)).style(Style::new()),
+            Span::styled("[r]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Change Tabs").style(Style::new()),
+            Span::raw(repeat_dot(28)).style(Style::new()),
+            Span::styled("[a]/[d]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Scroll Table").style(Style::new()),
+            Span::raw(repeat_dot(27)).style(Style::new()),
+            Span::styled("[w]/[s]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Scroll Table (by 10)").style(Style::new()),
+            Span::raw(repeat_dot(19)).style(Style::new()),
+            Span::styled("[W]/[S]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Pause UI").style(Style::new()),
+            Span::raw(repeat_dot(31)).style(Style::new()),
+            Span::styled("[space]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Add Selected as Target").style(Style::new()),
+            Span::raw(repeat_dot(21)).style(Style::new()),
+            Span::styled("[t]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Add Selected as Target (with autoexit)").style(Style::new()),
+            Span::raw(repeat_dot(5)).style(Style::new()),
+            Span::styled("[T]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Copy Selected (SHORT)").style(Style::new()),
+            Span::raw(repeat_dot(22)).style(Style::new()),
+            Span::styled("[c]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Copy Selected (LONG JSON)").style(Style::new()),
+            Span::raw(repeat_dot(18)).style(Style::new()),
+            Span::styled("[C]", Style::default().reversed()),
+        ]),
+        Line::from(vec![Span::styled("", Style::default().bold())]),
+    ];
+
+    let hotkey_para = Paragraph::new(hotkeys)
+        .wrap(Wrap { trim: true })
+        .block(block)
+        .alignment(Alignment::Center);
+
+    frame.render_widget(hotkey_para, window_area);
+}
+
+fn repeat_char(c: char, count: usize) -> String {
+    std::iter::repeat(c).take(count).collect()
+}
+
+fn repeat_dot(count: usize) -> String {
+    std::iter::repeat('.').take(count).collect()
 }
 
 fn create_status_bar(
@@ -503,12 +591,32 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         oxide.ui_state.ap_state.selected(),
         oxide.ui_state.ap_sort,
         oxide.ui_state.ap_sort_reverse,
-        oxide.ui_state.copy_short,
-        oxide.ui_state.copy_long,
     );
 
-    oxide.ui_state.copy_short = false;
-    oxide.ui_state.copy_long = false;
+    let selected_object = if let Some(sel_idx) = oxide.ui_state.ap_state.selected() {
+        oxide
+            .ui_state
+            .ap_table_data
+            .get_devices_sorted()
+            .get(sel_idx)
+    } else {
+        None
+    };
+
+    oxide.ui_state.ap_selected_item = selected_object.cloned();
+
+    if oxide.ui_state.copy_short {
+        if let Some(ap) = selected_object {
+            terminal_clipboard::set_string(ap.mac_address.to_string()).unwrap();
+        }
+        oxide.ui_state.copy_short = false;
+    }
+    if oxide.ui_state.copy_long {
+        if let Some(ap) = selected_object {
+            terminal_clipboard::set_string(ap.to_json_str()).unwrap();
+        }
+        oxide.ui_state.copy_long = false;
+    }
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];
@@ -583,19 +691,39 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
     // Update the table data (from the real source) - This allows us to "pause the data"
     if !oxide.ui_state.paused {
-        oxide.ui_state.cl_table_data = oxide.unassoc_clients.clone();
+        oxide.ui_state.sta_table_data = oxide.unassoc_clients.clone();
     }
 
-    let (mut headers, rows) = oxide.ui_state.cl_table_data.get_table(
-        oxide.ui_state.cl_state.selected(),
-        oxide.ui_state.cl_sort,
-        oxide.ui_state.cl_sort_reverse,
-        oxide.ui_state.copy_short,
-        oxide.ui_state.copy_long,
+    let (mut headers, rows) = oxide.ui_state.sta_table_data.get_table(
+        oxide.ui_state.sta_state.selected(),
+        oxide.ui_state.sta_sort,
+        oxide.ui_state.sta_sort_reverse,
     );
 
-    oxide.ui_state.copy_short = false;
-    oxide.ui_state.copy_long = false;
+    let selected_object = if let Some(sel_idx) = oxide.ui_state.sta_state.selected() {
+        oxide
+            .ui_state
+            .sta_table_data
+            .get_devices_sorted()
+            .get(sel_idx)
+    } else {
+        None
+    };
+
+    oxide.ui_state.sta_selected_item = selected_object.cloned();
+
+    if oxide.ui_state.copy_short {
+        if let Some(station) = selected_object {
+            terminal_clipboard::set_string(station.mac_address.to_string()).unwrap();
+        }
+        oxide.ui_state.copy_short = false;
+    }
+    if oxide.ui_state.copy_long {
+        if let Some(station) = selected_object {
+            terminal_clipboard::set_string(station.to_json_str()).unwrap();
+        }
+        oxide.ui_state.copy_long = false;
+    }
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];
@@ -607,12 +735,12 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
     }
 
     // Set headers for sort
-    let sort_icon = if oxide.ui_state.cl_sort_reverse {
+    let sort_icon = if oxide.ui_state.sta_sort_reverse {
         "▲"
     } else {
         "▼"
     };
-    match oxide.ui_state.cl_sort {
+    match oxide.ui_state.sta_sort {
         0 => headers[2] = format!("{} {}", headers[2], sort_icon),
         1 => headers[1] = format!("{} {}", headers[1], sort_icon),
         2 => headers[3] = format!("{} {}", headers[3], sort_icon),
@@ -647,9 +775,9 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
         .end_symbol(Some("↓"));
 
     let mut scrollbar_state = ScrollbarState::new(oxide.get_current_menu_len())
-        .position(oxide.ui_state.cl_state.selected().unwrap_or(0));
+        .position(oxide.ui_state.sta_state.selected().unwrap_or(0));
 
-    frame.render_stateful_widget(table, area, &mut oxide.ui_state.cl_state);
+    frame.render_stateful_widget(table, area, &mut oxide.ui_state.sta_state);
     frame.render_stateful_widget(
         scrollbar,
         area.inner(&Margin {
@@ -672,8 +800,26 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         oxide.ui_state.copy_long,
     );
 
-    oxide.ui_state.copy_short = false;
-    oxide.ui_state.copy_long = false;
+    let selected_object = if let Some(sel_idx) = oxide.ui_state.hs_state.selected() {
+        oxide.ui_state.hs_table_data.get_sorted().get(sel_idx)
+    } else {
+        None
+    };
+
+    oxide.ui_state.hs_selected_item = selected_object.cloned();
+
+    if oxide.ui_state.copy_short {
+        if let Some(hs) = selected_object {
+            terminal_clipboard::set_string(hs.json_summary()).unwrap();
+        }
+        oxide.ui_state.copy_short = false;
+    }
+    if oxide.ui_state.copy_long {
+        if let Some(hs) = selected_object {
+            terminal_clipboard::set_string(hs.json_detail()).unwrap();
+        }
+        oxide.ui_state.copy_long = false;
+    }
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];

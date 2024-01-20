@@ -77,7 +77,10 @@ impl EventHandler {
                                 KeyCode::Char('Y') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('c') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('C') => tx.send(EventType::Key(event)),
-                                _ => Ok({}),
+                                KeyCode::Char('t') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('T') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('k') => tx.send(EventType::Key(event)),
+                                _ => Ok(()),
                             };
                         }
                     } else if let Event::Mouse(mouse) = event {

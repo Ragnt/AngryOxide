@@ -272,7 +272,7 @@ impl OxideRuntime {
         let interface_name = cli_args.interface.clone();
         let targets = cli_args.target.clone();
         let wh_list = cli_args.whitelist.clone();
-        let mut notransmit = cli_args.notransmit.clone();
+        let mut notransmit = cli_args.notransmit;
 
         // Setup initial lists / logs
         let access_points = WiFiDeviceList::new();
@@ -659,19 +659,25 @@ impl OxideRuntime {
             show_quit: false,
             copy_short: false,
             copy_long: false,
+            add_target: false,
+            set_autoexit: false,
+            show_keybinds: false,
             ui_snowstorm: use_snowstorm,
             ap_sort: 0,
             ap_state: TableState::new(),
             ap_table_data: access_points.clone(),
             ap_sort_reverse: false,
-            cl_sort: 0,
-            cl_state: TableState::new(),
-            cl_table_data: unassoc_clients.clone(),
-            cl_sort_reverse: false,
+            ap_selected_item: None,
+            sta_sort: 0,
+            sta_state: TableState::new(),
+            sta_table_data: unassoc_clients.clone(),
+            sta_sort_reverse: false,
+            sta_selected_item: None,
             hs_sort: 0,
             hs_state: TableState::new(),
             hs_table_data: handshake_storage.clone(),
             hs_sort_reverse: false,
+            hs_selected_item: None,
             messages_sort: 0,
             messages_state: TableState::new(),
             messages_table_data: log.get_all_messages(),
@@ -951,10 +957,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     bssid,
                                     signal_strength,
                                     ssid.clone(),
-                                    Some((
-                                        band.clone(),
-                                        station_info.ds_parameter_set.unwrap_or(channel_u8), // TRY to use the broadcasted channel number
-                                    )),
+                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1159,7 +1162,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     *bssid,
                                     signal_strength,
                                     ssid,
-                                    Some((band.clone(), channel_u8)),
+                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1288,7 +1291,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     ap_addr,
                                     signal,
                                     None,
-                                    Some((band, channel_u8)),
+                                    None,
                                     None,
                                     oxide.target_data.rogue_client,
                                 ),
@@ -1431,7 +1434,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                         },
                         None,
-                        Some((band, channel_u8)),
+                        None,
                         None,
                         clients,
                         oxide.target_data.rogue_client,
@@ -1496,7 +1499,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             ap_mac,
                             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                             None,
-                            Some((band, channel_u8)),
+                            None,
                             None,
                             oxide.target_data.rogue_client,
                         );
@@ -1536,7 +1539,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                             ),
                             None,
-                            Some((band, channel_u8)),
+                            None,
                             Some(APFlags {
                                 apie_essid: station_info.ssid.as_ref().map(|_| true),
                                 gs_ccmp: station_info
@@ -1625,7 +1628,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             new_ap,
                             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                             ssid.clone(),
-                            Some((band, channel_u8)),
+                            None,
                             None,
                             WiFiDeviceList::<Station>::new(),
                             oxide.target_data.rogue_client,
@@ -1670,7 +1673,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                             ),
                             None,
-                            Some((band, channel_u8)),
+                            None,
                             None,
                             clients,
                             oxide.target_data.rogue_client,
@@ -1732,7 +1735,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                         },
                         None,
-                        Some((band, channel_u8)),
+                        None,
                         None,
                         clients,
                         oxide.target_data.rogue_client,
@@ -1801,7 +1804,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                         },
                         None,
-                        Some((band, channel_u8)),
+                        None,
                         None,
                         clients,
                         oxide.target_data.rogue_client,
@@ -1861,7 +1864,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                         },
                         None,
-                        Some((band, channel_u8)),
+                        None,
                         None,
                         clients,
                         oxide.target_data.rogue_client,
@@ -2529,6 +2532,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     KeyCode::Char('C') => {
                                         oxide.ui_state.copy_long = true;
                                     }
+                                    KeyCode::Char('t') => {
+                                        oxide.ui_state.add_target = true;
+                                    }
+                                    KeyCode::Char('T') => {
+                                        oxide.ui_state.add_target = true;
+                                        oxide.ui_state.set_autoexit = true;
+                                    }
+                                    KeyCode::Char('k') => {
+                                        oxide.ui_state.show_keybinds =
+                                            !oxide.ui_state.show_keybinds;
+                                    }
                                     _ => {}
                                 }
                             }
@@ -2547,6 +2561,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+        }
+
+        if oxide.ui_state.add_target {
+            match oxide.ui_state.current_menu {
+                MenuType::AccessPoints => {
+                    if let Some(ref ap) = oxide.ui_state.ap_selected_item {
+                        if let Some(accesspoint) = oxide.access_points.get_device(&ap.mac_address) {
+                            oxide
+                                .target_data
+                                .targets
+                                .add(Target::MAC(targets::TargetMAC {
+                                    addr: ap.mac_address,
+                                }));
+                            accesspoint.is_target = true;
+                            if let Some(ssid) = &ap.ssid {
+                                oxide
+                                    .target_data
+                                    .targets
+                                    .add(Target::SSID(targets::TargetSSID {
+                                        ssid: ssid.to_string(),
+                                    }));
+                            }
+                            if oxide.config.notx {
+                                oxide.config.notx = false;
+                            }
+                            if oxide.ui_state.set_autoexit {
+                                oxide.config.autoexit = true;
+                            }
+                        }
+                    }
+                }
+                MenuType::Clients => {}
+                MenuType::Handshakes => {}
+                MenuType::Messages => {}
+            }
+            oxide.ui_state.add_target = false;
+            oxide.ui_state.set_autoexit = false;
         }
 
         // Headless UI status messages

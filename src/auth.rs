@@ -637,12 +637,14 @@ impl HandshakeSessionKey {
 #[derive(Debug, Clone)]
 pub struct HandshakeStorage {
     handshakes: HashMap<HandshakeSessionKey, Vec<FourWayHandshake>>,
+    handshakes_sorted: Vec<FourWayHandshake>,
 }
 
 impl HandshakeStorage {
     pub fn new() -> Self {
         HandshakeStorage {
             handshakes: HashMap::new(),
+            handshakes_sorted: Vec::new(),
         }
     }
 
@@ -664,6 +666,27 @@ impl HandshakeStorage {
         self.handshakes.iter().any(|(key, handshakes)| {
             &key.ap_mac == ap_mac && handshakes.iter().any(|hs| hs.has_m1())
         })
+    }
+
+    pub fn sort_handshakes(&mut self) {
+        // Make our handshakes list
+        let mut print_handshakes: Vec<FourWayHandshake> = Vec::new();
+
+        let binding = self.get_handshakes();
+        for handshake_list in binding.values() {
+            for handshake in handshake_list {
+                print_handshakes.push(handshake.clone());
+            }
+        }
+
+        print_handshakes.sort_by(|a, b| {
+            b.last_msg
+                .clone()
+                .unwrap()
+                .timestamp
+                .cmp(&a.last_msg.clone().unwrap().timestamp)
+        });
+        self.handshakes_sorted = print_handshakes;
     }
 
     pub fn add_or_update_handshake(
@@ -738,22 +761,8 @@ impl HandshakeStorage {
         ];
 
         // Make our handshakes list
-        let mut print_handshakes: Vec<&FourWayHandshake> = Vec::new();
-
-        let binding = self.get_handshakes();
-        for handshake_list in binding.values() {
-            for handshake in handshake_list {
-                print_handshakes.push(handshake);
-            }
-        }
-
-        print_handshakes.sort_by(|a, b| {
-            b.last_msg
-                .clone()
-                .unwrap()
-                .timestamp
-                .cmp(&a.last_msg.clone().unwrap().timestamp)
-        });
+        self.sort_handshakes();
+        let print_handshakes = &self.handshakes_sorted;
 
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
 
@@ -806,6 +815,10 @@ impl HandshakeStorage {
             rows.push((hs_row, height));
         }
         (headers, rows)
+    }
+
+    pub fn get_sorted(&self) -> &Vec<FourWayHandshake> {
+        &self.handshakes_sorted
     }
 }
 
