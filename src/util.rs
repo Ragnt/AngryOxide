@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+use libwifi::frame::{EapolKey, KeyInformation};
 use radiotap::field::ext::TimeUnit;
 use std::fs::File;
 use std::io;
@@ -21,6 +23,62 @@ pub fn epoch_to_string(epoch: u64) -> String {
             Err(_) => "Time is in the future".to_string(),
         },
         None => "Invalid timestamp".to_string(),
+    }
+}
+
+pub fn slice_to_hex_string(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+pub fn epoch_to_iso_string(epoch: u64) -> String {
+    match UNIX_EPOCH.checked_add(Duration::from_secs(epoch)) {
+        Some(epoch_time) => DateTime::<Utc>::from(epoch_time).format("%+").to_string(),
+        None => "Invalid timestamp".to_string(),
+    }
+}
+
+pub fn system_time_to_iso8601(system_time: SystemTime) -> String {
+    let datetime: DateTime<Utc> = system_time.into();
+    datetime.to_rfc3339()
+}
+
+pub fn key_info_to_json_str(keyinfo: KeyInformation) -> String {
+    format!(
+        "{{\"descriptor_version\": {},\"key_type\": {},\"key_index\": {},\"install\": {},\"key_ack\": {},\"key_mic\": {},\"secure\": {},\"error\": {},\"request\": {},\"encrypted_key_data\": {},\"smk_message\": {}}}",
+        keyinfo.descriptor_version,
+        keyinfo.key_type,
+        keyinfo.key_index,
+        keyinfo.install,
+        keyinfo.key_ack,
+        keyinfo.key_mic,
+        keyinfo.secure,
+        keyinfo.error,
+        keyinfo.request,
+        keyinfo.encrypted_key_data,
+        keyinfo.smk_message
+    )
+}
+
+pub fn eapol_to_json_str(key: &EapolKey) -> String {
+    format!("{{\"protocol_version\": {},\"timestamp\": \"{}\",\"key_information\": {},\"key_length\": {},\"replay_counter\": {},\"key_nonce\": \"{}\",\"key_iv\": \"{}\",\"key_rsc\": {},\"key_id\": {},\"key_mic\": \"{}\",\"key_data\": \"{}\"}}",
+    key.protocol_version,
+    system_time_to_iso8601(key.timestamp),
+    key_info_to_json_str(key.parse_key_information()),
+    key.key_length,
+    key.replay_counter,
+    slice_to_hex_string(&key.key_nonce),
+    slice_to_hex_string(&key.key_iv),
+    key.key_rsc,
+    &key.key_id,
+    slice_to_hex_string(&key.key_mic),
+    slice_to_hex_string(&key.key_data))
+}
+
+pub fn option_bool_to_json_string(option: Option<bool>) -> String {
+    match option {
+        Some(true) => "true".to_string(),
+        Some(false) => "false".to_string(),
+        None => "\"none\"".to_string(),
     }
 }
 

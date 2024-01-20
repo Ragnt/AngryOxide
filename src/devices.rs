@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::util::epoch_to_string;
+use crate::util::{epoch_to_iso_string, epoch_to_string, option_bool_to_json_string};
 use crate::OxideRuntime;
 
 // Constants for timeouts
@@ -250,6 +250,26 @@ impl AccessPoint {
         self.is_whitelisted
     }
 
+    pub fn to_json_str(&self) -> String {
+        format!(
+            "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {},\"ssid\": \"{}\",\"channel\": {},\"client_list\": [{}],\"information\": {},\"beacon_count\": {},\"has_hs\": {},\"has_pmkid\": {},\"is_target\": {},\"is_whitelisted\": {}}}",
+            self.mac_address,
+            self.last_signal_strength.value,
+            epoch_to_iso_string(self.last_recv),
+            self.interactions,
+            self.ssid.as_ref().unwrap_or(&"".to_string()).clone(),
+            self.channel
+                .as_ref()
+                .map_or("".to_string(), |ch| ch.short_string().to_string()),
+            self.client_list.get_all_json(),
+            self.information.to_json_str(),
+            self.beacon_count,
+            self.has_hs,
+            self.has_pmkid,
+            self.is_target,
+            self.is_whitelisted,
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -267,6 +287,21 @@ pub struct APFlags {
 }
 
 impl APFlags {
+    pub fn to_json_str(&self) -> String {
+        format!("{{\"apie_essid\": {},\"gs_ccmp\": {},\"gs_tkip\": {},\"cs_ccmp\": {},\"cs_tkip\": {},\"rsn_akm_psk\": {},\"rsn_akm_psk256\": {},\"rsn_akm_pskft\": {}, \"wpa_akm_psk\": {},\"ap_mfp\": {}}}", 
+        option_bool_to_json_string(self.apie_essid), 
+        option_bool_to_json_string(self.gs_ccmp), 
+        option_bool_to_json_string(self.gs_tkip), 
+        option_bool_to_json_string(self.cs_ccmp), 
+        option_bool_to_json_string(self.cs_tkip), 
+        option_bool_to_json_string(self.rsn_akm_psk), 
+        option_bool_to_json_string(self.rsn_akm_psk256), 
+        option_bool_to_json_string(self.rsn_akm_pskft), 
+        option_bool_to_json_string(self.wpa_akm_psk), 
+        option_bool_to_json_string(self.ap_mfp)
+    )
+    }
+
     // Checks if the AKM is PSK from any one of the indicators
     pub fn akm_mask(&self) -> bool {
         self.rsn_akm_psk.unwrap_or(false)
@@ -391,7 +426,7 @@ impl Station {
         }
     }
 
-    pub fn probes_to_string_list(&mut self) -> String {
+    pub fn probes_to_string_list(&self) -> String {
         self.probes
             .as_ref()
             .unwrap_or(&Vec::new())
@@ -399,6 +434,38 @@ impl Station {
             .map(|ssid| ssid.to_string())
             .collect::<Vec<String>>()
             .join(", ")
+    }
+
+    pub fn probes_to_string_list_json(&self) -> String {
+        self.probes
+            .as_ref()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .map(|ssid| format!("\"{}\"", ssid.to_string()))
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+
+    pub fn to_json_str(&self) -> String {
+        format!(
+            "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {},\"probes\": [{}],\"has_rogue_m2\": {}}}",
+            self.mac_address.to_string(),
+            self.last_signal_strength.value.to_string(),
+            epoch_to_iso_string(self.last_recv).to_string(),
+            self.interactions,
+            self.probes_to_string_list_json(),
+            self.has_rogue_m2
+        )
+    }
+
+    pub fn to_json_str_client(&self) -> String {
+        format!(
+            "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {}}}",
+            self.mac_address.to_string(),
+            self.last_signal_strength.value.to_string(),
+            epoch_to_iso_string(self.last_recv).to_string(),
+            self.interactions
+        )
     }
 }
 
@@ -554,6 +621,8 @@ impl WiFiDeviceList<AccessPoint> {
         selected_row: Option<usize>,
         sort: u8,
         sort_reverse: bool,
+        copys: bool,
+        copyl: bool,
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         let headers = vec![
@@ -575,24 +644,30 @@ impl WiFiDeviceList<AccessPoint> {
             .map(|(_, access_point)| access_point)
             .collect();
         match sort {
-            0 => access_points.sort_by(|a, b| { // TGT
-                match (a.is_target(), a.is_whitelisted(), b.is_target(), b.is_whitelisted()) {
+            0 => access_points.sort_by(|a, b| {
+                // TGT
+                match (
+                    a.is_target(),
+                    a.is_whitelisted(),
+                    b.is_target(),
+                    b.is_whitelisted(),
+                ) {
                     // Highest priority: is_target() = true, is_whitelist() = false
                     (true, false, _, _) => std::cmp::Ordering::Less,
                     (_, _, true, false) => std::cmp::Ordering::Greater,
-            
+
                     // Middle priority: is_target() = false, is_whitelist() = false
                     (false, false, false, true) => std::cmp::Ordering::Less,
                     (false, true, false, false) => std::cmp::Ordering::Greater,
-            
+
                     // Lowest priority: is_target() = false, is_whitelist() = true
                     // This case is covered implicitly by the previous matches
-            
+
                     // Fallback for equal cases
                     _ => std::cmp::Ordering::Equal,
                 }
-            }), 
-            1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)),         // CH
+            }),
+            1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)), // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI
                 let a_val = a.last_signal_strength.value;
@@ -627,8 +702,17 @@ impl WiFiDeviceList<AccessPoint> {
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
         for (idx, ap) in access_points.iter().enumerate() {
             let mut ap_row = vec![
-                format!("{}", if ap.is_target() { "\u{274E}" } else if ap.is_whitelisted() { "\u{2B1C}" } else { "" }), // TGT
-                format!("{}", ap.mac_address),                               // MAC Address
+                format!(
+                    "{}",
+                    if ap.is_target() {
+                        "\u{274E}"
+                    } else if ap.is_whitelisted() {
+                        "\u{2B1C}"
+                    } else {
+                        ""
+                    }
+                ), // TGT
+                format!("{}", ap.mac_address), // MAC Address
                 ap.channel
                     .as_ref()
                     .map_or("".to_string(), |ch| ch.short_string().to_string()), // CH
@@ -639,10 +723,10 @@ impl WiFiDeviceList<AccessPoint> {
                         _ => ap.last_signal_strength.value.to_string(),
                     }
                 ), // RSSI
-                format!("{}", epoch_to_string(ap.last_recv).to_string()),    // Last
-                ap.ssid.as_ref().unwrap_or(&"".to_string()).clone(),         // SSID
-                format!("{}", ap.client_list.size()),                        // Clients
-                format!("{}", ap.interactions),                              // Tx
+                format!("{}", epoch_to_string(ap.last_recv).to_string()), // Last
+                ap.ssid.as_ref().unwrap_or(&"".to_string()).clone(), // SSID
+                format!("{}", ap.client_list.size()), // Clients
+                format!("{}", ap.interactions), // Tx
                 if ap.has_hs {
                     "\u{2705}".to_string()
                 } else {
@@ -661,6 +745,12 @@ impl WiFiDeviceList<AccessPoint> {
                     let merged = add_client_rows(ap_row, client, last);
                     ap_row = merged;
                     height += 1;
+                }
+                if copys {
+                    terminal_clipboard::set_string(ap.mac_address.to_string()).unwrap();
+                }
+                if copyl {
+                    terminal_clipboard::set_string(ap.to_json_str()).unwrap();
                 }
             }
             rows.push((ap_row, height));
@@ -766,6 +856,8 @@ impl WiFiDeviceList<Station> {
         selected_row: Option<usize>,
         sort: u8,
         sort_reverse: bool,
+        copys: bool,
+        copyl: bool,
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         //"MAC Address", "RSSI", "Last", Tx, "Probes"
@@ -862,6 +954,12 @@ impl WiFiDeviceList<Station> {
                         height += 1;
                     }
                 }
+                if copys {
+                    terminal_clipboard::set_string(station.mac_address.to_string()).unwrap();
+                }
+                if copyl {
+                    terminal_clipboard::set_string(station.to_json_str()).unwrap();
+                }
             }
             rows.push((cl_row, height));
         }
@@ -902,5 +1000,13 @@ impl WiFiDeviceList<Station> {
         for dev in self.devices.values_mut() {
             dev.interactions = 0;
         }
+    }
+
+    pub fn get_all_json(&self) -> String {
+        let mut strings: Vec<String> = Vec::new();
+        for client in &self.devices {
+            strings.push(client.1.to_json_str_client())
+        }
+        strings.join(",")
     }
 }

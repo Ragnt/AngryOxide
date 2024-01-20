@@ -12,10 +12,10 @@ mod snowstorm;
 mod status;
 mod tabbedblock;
 mod targets;
-mod whitelist;
 mod tx;
 mod ui;
 mod util;
+mod whitelist;
 
 extern crate libc;
 extern crate nix;
@@ -43,7 +43,7 @@ use nix::unistd::geteuid;
 
 use nl80211_ng::attr::Nl80211Iftype;
 use nl80211_ng::channels::{map_str_to_band_and_channel, WiFiBand, WiFiChannel};
-use nl80211_ng::{set_interface_chan, Interface, Nl80211, get_interface_info_idx};
+use nl80211_ng::{get_interface_info_idx, set_interface_chan, Interface, Nl80211};
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -351,24 +351,22 @@ impl OxideRuntime {
         let whitelist_vec: Vec<White> = if let Some(vec_whitelist) = wh_list {
             vec_whitelist
                 .into_iter()
-                .filter_map(|f| {
-                    match MacAddress::from_str(&f) {
-                        Ok(mac) => {
-                            if targ_list.is_actual_target_mac(&mac) {
-                                println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
-                                None
-                            } else {
-                                Some(White::MAC(WhiteMAC::new(mac)))
-                            }
-                        },
-                        Err(_) => {
-                            if targ_list.is_actual_target_ssid(&f) {
-                                println!("Whitelist {} is a target. Cannot add to whitelist.", f);
-                                None
-                            } else {
-                                Some(White::SSID(WhiteSSID::new(&f)))
-                            }
-                        },
+                .filter_map(|f| match MacAddress::from_str(&f) {
+                    Ok(mac) => {
+                        if targ_list.is_actual_target_mac(&mac) {
+                            println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
+                            None
+                        } else {
+                            Some(White::MAC(WhiteMAC::new(mac)))
+                        }
+                    }
+                    Err(_) => {
+                        if targ_list.is_actual_target_ssid(&f) {
+                            println!("Whitelist {} is a target. Cannot add to whitelist.", f);
+                            None
+                        } else {
+                            Some(White::SSID(WhiteSSID::new(&f)))
+                        }
                     }
                 })
                 .collect()
@@ -658,6 +656,9 @@ impl OxideRuntime {
         let state = UiState {
             current_menu: MenuType::AccessPoints,
             paused: false,
+            show_quit: false,
+            copy_short: false,
+            copy_long: false,
             ui_snowstorm: use_snowstorm,
             ap_sort: 0,
             ap_state: TableState::new(),
@@ -1197,7 +1198,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     oxide.target_data.rogue_client,
                                 ),
                             );
-                        
+
                         // Proliferate whitelist
                         let _ = oxide.target_data.whitelist.get_whitelisted(ap);
 
@@ -2379,16 +2380,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while running.load(Ordering::SeqCst) {
         // Update our interface
-        oxide.if_hardware.interface = match get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()) {
-            Ok(interface) => interface,
-            Err(e) => {
-                // Uh oh... no interface
-                err = Some(e);
-                running.store(false, Ordering::SeqCst);
-                break;
-            }
-        };
-
+        oxide.if_hardware.interface =
+            match get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()) {
+                Ok(interface) => interface,
+                Err(e) => {
+                    // Uh oh... no interface
+                    err = Some(e);
+                    running.store(false, Ordering::SeqCst);
+                    break;
+                }
+            };
 
         // Handle Hunting
         let target_chans = oxide.if_hardware.target_chans.clone();
@@ -2506,10 +2507,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             oxide.ui_state.table_next_item(table_len);
                                         }
                                     }
-                                    KeyCode::Char('q') => running.store(false, Ordering::SeqCst),
+                                    KeyCode::Char('q') => {
+                                        oxide.ui_state.show_quit = !oxide.ui_state.show_quit;
+                                    }
+                                    KeyCode::Char('y') | KeyCode::Char('Y') => {
+                                        if oxide.ui_state.show_quit {
+                                            running.store(false, Ordering::SeqCst)
+                                        }
+                                    }
+                                    KeyCode::Char('n') | KeyCode::Char('N') => {
+                                        if oxide.ui_state.show_quit {
+                                            oxide.ui_state.show_quit = false;
+                                        }
+                                    }
                                     KeyCode::Char(' ') => oxide.ui_state.toggle_pause(),
                                     KeyCode::Char('e') => oxide.ui_state.sort_next(),
                                     KeyCode::Char('r') => oxide.ui_state.toggle_reverse(),
+                                    KeyCode::Char('c') => {
+                                        oxide.ui_state.copy_short = true;
+                                    }
+                                    KeyCode::Char('C') => {
+                                        oxide.ui_state.copy_long = true;
+                                    }
                                     _ => {}
                                 }
                             }
@@ -2556,7 +2575,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(code) => {
                 if code.kind().to_string() == "network down" {
-                    oxide.if_hardware.netlink.set_interface_up(oxide.if_hardware.interface.index.unwrap()).ok();
+                    oxide
+                        .if_hardware
+                        .netlink
+                        .set_interface_up(oxide.if_hardware.interface.index.unwrap())
+                        .ok();
                 } else {
                     // This will result in "a serious packet read error" message.
                     err = Some(code.kind().to_string());

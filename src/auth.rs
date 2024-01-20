@@ -6,9 +6,15 @@ use std::{
 
 use chrono::{DateTime, Local};
 
-use libwifi::frame::{components::MacAddress, EapolKey, MessageType, Pmkid};
+use libwifi::frame::{components::MacAddress, EapolKey, KeyInformation, MessageType, Pmkid};
 
-use crate::{util::epoch_to_string, OxideRuntime};
+use crate::{
+    util::{
+        eapol_to_json_str, epoch_to_iso_string, epoch_to_string, key_info_to_json_str,
+        slice_to_hex_string, system_time_to_iso8601,
+    },
+    OxideRuntime,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct FourWayHandshake {
@@ -33,7 +39,6 @@ pub struct FourWayHandshake {
 
 impl fmt::Display for FourWayHandshake {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
         write!(
             f,
             " {:<2} {:<2} {:<2} {:<2}     {:^2}    {:^8}",
@@ -84,6 +89,86 @@ impl FourWayHandshake {
             mac_client: None,
             essid: None,
         }
+    }
+
+    pub fn json_summary(&self) -> String {
+        format!(
+            "{{\"mac_ap\": \"{}\",\"mac_client\": \"{}\",\"essid\": \"{}\",\"m1\": {},\"m2\": {},\"m3\": {},\"m4\": {},\"last_msg\": \"{}\",\"apless\": {},\"nonce_correction\": {},\"pmkid\": {},\"complete\": {}}}",
+            if let Some(mac) = self.mac_ap {mac.to_string()} else {"".to_string()},
+            if let Some(mac) = self.mac_client {mac.to_string()} else {"".to_string()},
+            if let Some(essid) = &self.essid {essid.to_string()} else {"".to_string()},
+            self.msg1.is_some(),
+            self.msg2.is_some(),
+            self.msg3.is_some(),
+            self.msg4.is_some(),
+            if let Some(msg) = &self.last_msg {system_time_to_iso8601(msg.timestamp)} else {"".to_string()},
+            self.apless,
+            self.nc,
+            if self.pmkid.is_some() {"true"} else {"false"},
+            self.complete()
+        )
+    }
+
+    pub fn json_detail(&self) -> String {
+        format!(
+            "{{\"mac_ap\": \"{}\",\"mac_client\": \"{}\",\"essid\": \"{}\",\"m1\": {},\"m2\": {},\"m3\": {},\"m4\": {},\"last_msg\": \"{}\",\"apless\": {},\"nonce-correction\": {},\"pmkid\": \"{}\",\"complete\": {}}}",
+            if let Some(mac) = self.mac_ap {
+                mac.to_string()
+            } else {
+                "".to_string()
+            },
+            if let Some(mac) = self.mac_client {
+                mac.to_string()
+            } else {
+                "".to_string()
+            },
+            if let Some(essid) = &self.essid {
+                essid.to_string()
+            } else {
+                "".to_string()
+            },
+            if let Some(msg) = &self.msg1 {
+                eapol_to_json_str(msg)
+            } else {
+                "{}".to_string()
+            },
+            if let Some(msg) = &self.msg2 {
+                eapol_to_json_str(msg)
+            } else {
+                "{}".to_string()
+            },
+            if let Some(msg) = &self.msg3 {
+                eapol_to_json_str(msg)
+            } else {
+                "{}".to_string()
+            },
+            if let Some(msg) = &self.msg4 {
+                eapol_to_json_str(msg)
+            } else {
+                "{}".to_string()
+            },
+            if let Some(msg) = &self.last_msg {
+                system_time_to_iso8601(msg.timestamp)
+            } else {
+                "".to_string()
+            },
+            self.apless,
+            if self.b_endian {
+                "\"BE\""
+            } else if self.l_endian {
+                "\"LE\""
+            } else if self.nc {
+                "true"
+            } else {
+                "false"
+            },
+            if let Some(pmkid) = self.pmkid {
+                slice_to_hex_string(&pmkid.pmkid)
+            } else {
+                "".to_string()
+            },
+            self.complete()
+        )
     }
 
     pub fn complete(&self) -> bool {
@@ -634,6 +719,8 @@ impl HandshakeStorage {
     pub fn get_table(
         &mut self,
         selected_row: Option<usize>,
+        copys: bool,
+        copyl: bool,
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         let headers = vec![
@@ -708,6 +795,12 @@ impl HandshakeStorage {
                         hs_row = merged;
                         height += 1;
                     }
+                }
+                if copys {
+                    terminal_clipboard::set_string(handshake.json_summary()).unwrap();
+                }
+                if copyl {
+                    terminal_clipboard::set_string(handshake.json_detail()).unwrap();
                 }
             }
             rows.push((hs_row, height));

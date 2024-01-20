@@ -75,9 +75,12 @@ impl MenuType {
 }
 
 pub struct UiState {
+    // General State
     pub current_menu: MenuType,
     pub paused: bool,
-    pub ui_snowstorm: bool,
+    pub show_quit: bool,
+    pub copy_short: bool,
+    pub copy_long: bool,
 
     // AP Menu Options
     pub ap_sort: u8,
@@ -97,142 +100,171 @@ pub struct UiState {
     pub hs_table_data: HandshakeStorage,
     pub hs_sort_reverse: bool,
 
+    // Messages
     pub messages_sort: u8,
     pub messages_state: TableState,
     pub messages_table_data: Vec<StatusMessage>,
     pub messages_sort_reverse: bool,
 
+    // Snowstorm
+    pub ui_snowstorm: bool,
     pub snowstorm: Snowstorm,
     pub matrix_snowstorm: MatrixSnowstorm,
 }
 
 impl UiState {
     pub fn menu_next(&mut self) {
-        self.current_menu = self.current_menu.next();
+        if !self.show_quit {
+            self.current_menu = self.current_menu.next();
+        }
     }
 
     pub fn menu_back(&mut self) {
-        self.current_menu = self.current_menu.previous();
+        if !self.show_quit {
+            self.current_menu = self.current_menu.previous();
+        }
     }
 
     pub fn sort_next(&mut self) {
-        match self.current_menu {
-            MenuType::AccessPoints => self.ap_sort_next(),
-            MenuType::Clients => self.cl_sort_next(),
-            MenuType::Handshakes => self.hs_sort_next(),
-            MenuType::Messages => (),
-        };
+        if !self.show_quit {
+            match self.current_menu {
+                MenuType::AccessPoints => self.ap_sort_next(),
+                MenuType::Clients => self.cl_sort_next(),
+                MenuType::Handshakes => self.hs_sort_next(),
+                MenuType::Messages => (),
+            };
+        }
     }
 
     fn ap_sort_next(&mut self) {
-        self.ap_sort += 1;
-        if self.ap_sort == 8 {
-            self.ap_sort = 0;
+        if !self.show_quit {
+            self.ap_sort += 1;
+            if self.ap_sort == 8 {
+                self.ap_sort = 0;
+            }
         }
     }
 
     fn cl_sort_next(&mut self) {
-        self.cl_sort += 1;
-        if self.cl_sort == 5 {
-            self.cl_sort = 0;
+        if !self.show_quit {
+            self.cl_sort += 1;
+            if self.cl_sort == 5 {
+                self.cl_sort = 0;
+            }
         }
     }
 
     fn hs_sort_next(&mut self) {
-        self.hs_sort += 1;
-        if self.hs_sort == 4 {
-            self.hs_sort = 0;
+        if !self.show_quit {
+            self.hs_sort += 1;
+            if self.hs_sort == 4 {
+                self.hs_sort = 0;
+            }
         }
     }
 
     fn messages_sort_next(&mut self) {
-        self.messages_sort += 1;
-        if self.messages_sort == 2 {
-            self.messages_sort = 0;
+        if !self.show_quit {
+            self.messages_sort += 1;
+            if self.messages_sort == 2 {
+                self.messages_sort = 0;
+            }
         }
     }
 
     pub fn toggle_pause(&mut self) {
-        self.paused = !self.paused
+        if !self.show_quit {
+            self.paused = !self.paused
+        }
     }
 
     pub fn toggle_reverse(&mut self) {
-        let sort = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_sort_reverse,
-            MenuType::Clients => &mut self.cl_sort_reverse,
-            MenuType::Handshakes => &mut self.hs_sort_reverse,
-            MenuType::Messages => &mut self.messages_sort_reverse,
-        };
-        *sort = !*sort;
+        if !self.show_quit {
+            let sort = match self.current_menu {
+                MenuType::AccessPoints => &mut self.ap_sort_reverse,
+                MenuType::Clients => &mut self.cl_sort_reverse,
+                MenuType::Handshakes => &mut self.hs_sort_reverse,
+                MenuType::Messages => &mut self.messages_sort_reverse,
+            };
+            *sort = !*sort;
+        }
     }
 
     pub fn table_next_item(&mut self, table_size: usize) {
-        let state = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => {
-                if i >= table_size - 1 {
-                    table_size - 1
-                } else {
-                    i + 1
+        if !self.show_quit {
+            let state = match self.current_menu {
+                MenuType::AccessPoints => &mut self.ap_state,
+                MenuType::Clients => &mut self.cl_state,
+                MenuType::Handshakes => &mut self.hs_state,
+                MenuType::Messages => &mut self.messages_state,
+            };
+            let i = match state.selected() {
+                Some(i) => {
+                    if i >= table_size - 1 {
+                        table_size - 1
+                    } else {
+                        i + 1
+                    }
                 }
-            }
-            None => 0,
-        };
-        state.select(Some(i));
+                None => 0,
+            };
+            state.select(Some(i));
+        }
     }
 
     pub fn table_next_item_big(&mut self, table_size: usize) {
-        let state = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(mut i) => {
-                i += 10;
-                if i >= table_size - 1 {
-                    table_size - 1
-                } else {
-                    i
+        if !self.show_quit {
+            let state = match self.current_menu {
+                MenuType::AccessPoints => &mut self.ap_state,
+                MenuType::Clients => &mut self.cl_state,
+                MenuType::Handshakes => &mut self.hs_state,
+                MenuType::Messages => &mut self.messages_state,
+            };
+            let i = match state.selected() {
+                Some(mut i) => {
+                    i += 10;
+                    if i >= table_size - 1 {
+                        table_size - 1
+                    } else {
+                        i
+                    }
                 }
-            }
-            None => 0,
-        };
-        state.select(Some(i));
+                None => 0,
+            };
+            state.select(Some(i));
+        }
     }
 
     pub fn table_previous_item(&mut self) {
-        let state: &mut TableState = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => i.saturating_sub(1),
-            None => 0,
-        };
-        state.select(Some(i));
+        if !self.show_quit {
+            let state: &mut TableState = match self.current_menu {
+                MenuType::AccessPoints => &mut self.ap_state,
+                MenuType::Clients => &mut self.cl_state,
+                MenuType::Handshakes => &mut self.hs_state,
+                MenuType::Messages => &mut self.messages_state,
+            };
+            let i = match state.selected() {
+                Some(i) => i.saturating_sub(1),
+                None => 0,
+            };
+            state.select(Some(i));
+        }
     }
 
     pub fn table_previous_item_big(&mut self) {
-        let state: &mut TableState = match self.current_menu {
-            MenuType::AccessPoints => &mut self.ap_state,
-            MenuType::Clients => &mut self.cl_state,
-            MenuType::Handshakes => &mut self.hs_state,
-            MenuType::Messages => &mut self.messages_state,
-        };
-        let i = match state.selected() {
-            Some(i) => i.saturating_sub(10),
-            None => 0,
-        };
-        state.select(Some(i));
+        if !self.show_quit {
+            let state: &mut TableState = match self.current_menu {
+                MenuType::AccessPoints => &mut self.ap_state,
+                MenuType::Clients => &mut self.cl_state,
+                MenuType::Handshakes => &mut self.hs_state,
+                MenuType::Messages => &mut self.messages_state,
+            };
+            let i = match state.selected() {
+                Some(i) => i.saturating_sub(10),
+                None => 0,
+            };
+            state.select(Some(i));
+        }
     }
 }
 
@@ -244,7 +276,6 @@ pub fn print_ui(
 ) -> Result<()> {
     terminal.hide_cursor()?;
     terminal.draw(|frame| {
-
         if frame.size().width < 105 || frame.size().height < 20 {
             let area = frame.size();
 
@@ -260,6 +291,11 @@ pub fn print_ui(
                 .style(Style::new().yellow().bold())
                 .border_style(Style::new().red());
             frame.render_widget(popup, popup_area);
+            return;
+        }
+
+        if oxide.ui_state.show_quit {
+            create_quit_popup(frame, frame.size());
             return;
         }
 
@@ -312,12 +348,30 @@ pub fn print_ui(
                 Span::raw(" | scroll: ").style(Style::new()),
                 Span::styled("[w/W]/[s/S]", Style::default().reversed()),
                 Span::raw(" |").style(Style::new()),
+                Span::raw(" | copy: ").style(Style::new()),
+                Span::styled("[c/C]", Style::default().reversed()),
+                Span::raw(" |").style(Style::new()),
             ]))
             .alignment(Alignment::Center),
             full_layout[2],
         );
     })?;
     Ok(())
+}
+
+fn create_quit_popup(frame: &mut Frame<'_>, area: Rect) {
+    let popup_area = Rect {
+        x: area.width / 2 - 25,
+        y: area.height / 2 - 3,
+        width: 50,
+        height: 4,
+    };
+
+    let popup = Popup::default()
+        .content("Are you sure you want to quit? \n[y/n]")
+        .style(Style::new().yellow().bold())
+        .border_style(Style::new().red());
+    frame.render_widget(popup, popup_area);
 }
 
 fn create_status_bar(
@@ -327,7 +381,6 @@ fn create_status_bar(
     start_time: Instant,
     framerate: u64,
 ) {
-
     // Top Bar Layout
     let top_layout: std::rc::Rc<[Rect]> = Layout::default()
         .direction(Direction::Horizontal)
@@ -450,7 +503,12 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         oxide.ui_state.ap_state.selected(),
         oxide.ui_state.ap_sort,
         oxide.ui_state.ap_sort_reverse,
+        oxide.ui_state.copy_short,
+        oxide.ui_state.copy_long,
     );
+
+    oxide.ui_state.copy_short = false;
+    oxide.ui_state.copy_long = false;
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];
@@ -532,7 +590,12 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
         oxide.ui_state.cl_state.selected(),
         oxide.ui_state.cl_sort,
         oxide.ui_state.cl_sort_reverse,
+        oxide.ui_state.copy_short,
+        oxide.ui_state.copy_long,
     );
+
+    oxide.ui_state.copy_short = false;
+    oxide.ui_state.copy_long = false;
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];
@@ -603,10 +666,14 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         oxide.ui_state.hs_table_data = oxide.handshake_storage.clone();
     }
 
-    let (headers, rows) = oxide
-        .ui_state
-        .hs_table_data
-        .get_table(oxide.ui_state.hs_state.selected());
+    let (headers, rows) = oxide.ui_state.hs_table_data.get_table(
+        oxide.ui_state.hs_state.selected(),
+        oxide.ui_state.copy_short,
+        oxide.ui_state.copy_long,
+    );
+
+    oxide.ui_state.copy_short = false;
+    oxide.ui_state.copy_long = false;
 
     // Fill Rows
     let mut rows_vec: Vec<Row> = vec![];
@@ -966,6 +1033,7 @@ impl Widget for Popup<'_> {
             .wrap(Wrap { trim: true })
             .style(self.style)
             .block(block)
+            .alignment(Alignment::Center)
             .render(area, buf);
     }
 }

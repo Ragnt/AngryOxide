@@ -120,6 +120,21 @@ impl NullDataFrame for QosNull {
 }
 
 #[derive(Clone, Debug)]
+pub struct KeyInformation {
+    pub descriptor_version: u8,
+    pub key_type: bool,
+    pub key_index: u8,
+    pub install: bool,
+    pub key_ack: bool,
+    pub key_mic: bool,
+    pub secure: bool,
+    pub error: bool,
+    pub request: bool,
+    pub encrypted_key_data: bool,
+    pub smk_message: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct EapolKey {
     pub protocol_version: u8,
     pub timestamp: SystemTime,
@@ -214,6 +229,22 @@ impl EapolKey {
         buf.write_u16::<BigEndian>(key_data_length)?;
         buf.extend_from_slice(&self.key_data);
         Ok(buf)
+    }
+
+    pub fn parse_key_information(&self) -> KeyInformation {
+        KeyInformation {
+            descriptor_version: (self.key_information & 0x0007) as u8, // Bits 0-2
+            key_type: (self.key_information & 0x0008) != 0,            // Bit 3
+            key_index: ((self.key_information & 0x0030) >> 4) as u8,   // Bits 4-5
+            install: (self.key_information & 0x0040) != 0,             // Bit 6
+            key_ack: (self.key_information & 0x0080) != 0,             // Bit 7
+            key_mic: (self.key_information & 0x0100) != 0,             // Bit 8
+            secure: (self.key_information & 0x0200) != 0,              // Bit 9
+            error: (self.key_information & 0x0400) != 0,               // Bit 10
+            request: (self.key_information & 0x0800) != 0,             // Bit 11
+            encrypted_key_data: (self.key_information & 0x1000) != 0,  // Bit 12
+            smk_message: (self.key_information & 0x2000) != 0,         // Bit 13
+        }
     }
 
     pub fn determine_key_type(&self) -> MessageType {

@@ -71,6 +71,12 @@ impl EventHandler {
                                 KeyCode::Char(' ') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('e') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('r') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('n') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('N') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('y') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('Y') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('c') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('C') => tx.send(EventType::Key(event)),
                                 _ => Ok({}),
                             };
                         }
