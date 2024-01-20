@@ -395,7 +395,8 @@ pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<()
             ));
         }
         // Rate limit broadcast deauths to every 128 beacons.
-        if (beacon_count % 128) == 0 {
+        let rate = beacon_count % (oxide.target_data.attack_rate.to_rate() * 4);
+        if rate == 0 {
             // There is no client
             let frx = build_deauthentication_fm_ap(
                 ap_mac,

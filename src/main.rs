@@ -92,8 +92,8 @@ use std::process::exit;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+use std::{fmt, thread};
 
 use clap::Parser;
 
@@ -118,10 +118,13 @@ struct Arguments {
     #[arg(short, long)]
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
     whitelist: Option<Vec<String>>,
+    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
+    /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
+    rate: u8,
     #[arg(short, long)]
     /// Optional - Output filename.
     output: Option<String>,
-    #[arg(short, long)]
+    #[arg(long)]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(long, default_value = "127.0.0.1:2947")]
@@ -208,6 +211,46 @@ impl Counters {
     }
 }
 
+#[derive(Debug)]
+pub enum AttackRate {
+    Slow,
+    Normal,
+    Fast,
+}
+
+impl fmt::Display for AttackRate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                AttackRate::Slow => "Slow",
+                AttackRate::Normal => "Normal",
+                AttackRate::Fast => "Fast",
+            }
+        )
+    }
+}
+
+impl AttackRate {
+    pub fn to_rate(&self) -> u32 {
+        match self {
+            AttackRate::Slow => 200,
+            AttackRate::Normal => 100,
+            AttackRate::Fast => 40,
+        }
+    }
+
+    pub fn from_u8(rate: u8) -> Self {
+        match rate {
+            1 => AttackRate::Slow,
+            2 => AttackRate::Normal,
+            3 => AttackRate::Fast,
+            _ => AttackRate::Normal,
+        }
+    }
+}
+
 pub struct RawSockets {
     rx_socket: OwnedFd,
     tx_socket: OwnedFd,
@@ -236,6 +279,7 @@ pub struct IfHardware {
 pub struct TargetData {
     whitelist: WhiteList,
     targets: TargetList,
+    attack_rate: AttackRate,
     rogue_client: MacAddress,
     rogue_m1: EapolKey,
     rogue_essids: HashMap<MacAddress, String>,
@@ -547,6 +591,22 @@ impl OxideRuntime {
             println!();
         }
 
+        // Print attack Rate
+
+        if notransmit && !can_autohunt {
+            println!(
+                "💲 Attack Rate: {} ({}) [NO TRANSMIT ENABLED]",
+                AttackRate::from_u8(cli_args.rate),
+                cli_args.rate
+            );
+        } else {
+            println!(
+                "💲 Attack Rate: {} ({})",
+                AttackRate::from_u8(cli_args.rate),
+                cli_args.rate
+            );
+        }
+
         ///////////////////////////////
 
         if let Some(ref phy) = iface.phy {
@@ -773,6 +833,7 @@ impl OxideRuntime {
             rogue_client,
             rogue_m1,
             rogue_essids,
+            attack_rate: AttackRate::from_u8(cli_args.rate),
         };
 
         OxideRuntime {
@@ -1060,18 +1121,15 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     // it is running it's own internal rate limiting.
                     let _ = m1_retrieval_attack(oxide, &bssid);
 
-                    // Every 8 beacons (.8 seconds usually) conduct some form of attack.
-                    if (beacon_count % 32) == 0 {
-                        // Deauth on 0 (broadcast on 128)
+                    let rate = beacon_count % oxide.target_data.attack_rate.to_rate();
+
+                    if (rate) == 0 {
                         deauth_attack(oxide, &bssid)?;
-                    } else if (beacon_count % 32) == 8 {
-                        // Anon. Reassoc. at 8
+                    } else if (rate) == oxide.target_data.attack_rate.to_rate() / 4 {
                         anon_reassociation_attack(oxide, &bssid)?;
-                    } else if (beacon_count % 32) == 16 {
-                        // CSA at 16
+                    } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 2 {
                         csa_attack(oxide, beacon_frame)?;
-                    } else if (beacon_count % 32) == 24 {
-                        // Disassoc at 24
+                    } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 3 {
                         disassoc_attack(oxide, &bssid)?;
                     }
 
