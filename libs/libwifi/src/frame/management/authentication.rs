@@ -105,6 +105,7 @@ pub enum DeauthenticationReason {
     SessionInformationUnavailable = 48,
     DisassociatedForSCPRequestUnsuccessful = 49,
     DeauthenticatedForSCPRequestUnsuccessful = 50,
+    DisassociatedDueToPoorRSSI = 71,
     Unknown,
 }
 
@@ -158,6 +159,7 @@ impl DeauthenticationReason {
             48 => DeauthenticationReason::SessionInformationUnavailable,
             49 => DeauthenticationReason::DisassociatedForSCPRequestUnsuccessful,
             50 => DeauthenticationReason::DeauthenticatedForSCPRequestUnsuccessful,
+            71 => DeauthenticationReason::DisassociatedDueToPoorRSSI,
             _ => DeauthenticationReason::Unknown,
         }
     }

