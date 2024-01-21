@@ -83,10 +83,10 @@ use libwifi::{Addresses, Frame};
 use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{self, File};
+use std::fs::{self, remove_file, File};
+use std::io;
 use std::io::stdout;
 use std::io::Write;
-use std::io::{self, ErrorKind};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::process::exit;
 use std::str::FromStr;
@@ -121,6 +121,9 @@ struct Arguments {
     #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
+    #[arg(long)]
+    /// Optional - Disable Active Monitor mode.
+    noactive: bool,
     #[arg(short, long)]
     /// Optional - Output filename.
     output: Option<String>,
@@ -647,17 +650,19 @@ impl OxideRuntime {
 
         // Put into monitor mode
         thread::sleep(Duration::from_millis(500));
+
+        // Setting Monitor
         println!(
-            "💲 Setting {} to monitor mode. (\"active\" flag: {})",
+            "💲 Setting {} to Monitor mode. (\"active\" flag: {})",
             interface_name,
-            iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x)
+            (iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive)
         );
-        netlink
-            .set_interface_monitor(
-                iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x),
-                idx,
-            )
-            .ok();
+
+        if iface.phy.clone().unwrap().active_monitor.is_some() && !cli_args.noactive {
+            netlink.set_interface_monitor(true, idx).ok();
+        } else {
+            netlink.set_interface_monitor(false, idx).ok();
+        }
 
         if let Some(ref phy) = iface.phy {
             if phy.current_iftype.clone().is_some()
@@ -2849,7 +2854,7 @@ fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Resu
 
     // Delete original files after they are successfully added to the tarball
     for path in &output_files {
-        if let Err(e) = fs::remove_file(path) {
+        if let Err(e) = remove_file(path) {
             eprintln!("Failed to delete file {}: {}", path, e);
         }
     }
@@ -2877,7 +2882,7 @@ fn format_channels(channels: &Vec<(u8, u8)>) -> String {
 
     // Group by band
     for &(band, channel) in channels {
-        band_map.entry(band).or_insert_with(Vec::new).push(channel);
+        band_map.entry(band).or_default().push(channel);
     }
 
     // Sort channels within each band
