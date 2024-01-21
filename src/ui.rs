@@ -1113,6 +1113,9 @@ fn create_status_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rec
                 Cell::from(status.message_type.to_string()).style(Style::new().fg(Color::Green))
             }
             crate::status::MessageType::Info => Cell::from(status.message_type.to_string()),
+            crate::status::MessageType::Status => {
+                Cell::from(status.message_type.to_string()).style(Style::new().fg(Color::Cyan))
+            }
         };
 
         rows_vec.push(Row::new(vec![
