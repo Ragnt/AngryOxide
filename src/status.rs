@@ -9,6 +9,7 @@ pub enum MessageType {
     Warning,
     Info,
     Priority,
+    Status,
 }
 
 impl fmt::Display for MessageType {
@@ -18,6 +19,7 @@ impl fmt::Display for MessageType {
             MessageType::Warning => "Warning",
             MessageType::Info => "Info",
             MessageType::Priority => "Priority",
+            MessageType::Status => "Status",
         };
         write!(f, "{}", message_type_str)
     }
@@ -61,6 +63,7 @@ impl MessageLog {
                 MessageType::Warning => "\x1b[33m",
                 MessageType::Info => "",
                 MessageType::Priority => "\x1b[32m",
+                MessageType::Status => "\x1b[36m",
             };
             let white = "\x1b[0m";
             println!(

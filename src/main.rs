@@ -2666,21 +2666,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Headless UI status messages
+        // ... [rest of your code] ...
+
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
+
             if oxide.config.headless {
+                let headers = vec![
+                    "Status :: Timestamp",
+                    "AP MAC",
+                    "Client MAC",
+                    "SSID",
+                    "M1",
+                    "M2",
+                    "M3",
+                    "M4",
+                    "PM",
+                    "OK",
+                    "NC",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+
+                let (_, rows) = oxide.handshake_storage.get_table(None, false, false);
+                let column_widths = max_column_widths(&headers, &rows);
+
+                let header_string = format_row(&headers, &column_widths);
+
+                let mut row_strings = Vec::new();
+                for (row_data, _) in rows {
+                    // Clone the row data and prepend "Status" to the timestamp
+                    let mut modified_row_data = row_data.clone();
+                    if let Some(timestamp) = modified_row_data.get_mut(0) {
+                        *timestamp = format!("Status :: {}", timestamp);
+                    }
+                    row_strings.push(format_row(&modified_row_data, &column_widths));
+                }
+                let rows_string = row_strings.join("\n");
+
+                let handshakes_table = format!("{}\n{}", header_string, rows_string);
+
                 oxide.status_log.add_message(StatusMessage::new(
-                    MessageType::Info,
+                    MessageType::Status,
                     format!(
-                        "Status: Frames: {} | Rate: {} Empty Reads: {} | Channel: {}",
+                        "Frames: {} | Rate: {} | Empty Reads: {} | Channel: {}\n{}",
                         oxide.counters.frame_count,
                         frame_rate,
                         oxide.counters.empty_reads_rate,
-                        oxide.if_hardware.current_channel
+                        oxide.if_hardware.current_channel,
+                        handshakes_table
                     ),
                 ));
             }
         }
+
+        // ... [rest of your code] ...
 
         // Read Frame
         match read_frame(&mut oxide) {
@@ -2906,4 +2947,37 @@ fn format_channels(channels: &Vec<(u8, u8)>) -> String {
 
     // Join all parts into a single string
     parts.join(" | ")
+}
+
+fn max_column_widths(headers: &[String], rows: &[(Vec<String>, u16)]) -> Vec<usize> {
+    let mut max_widths = headers.iter().map(|h| h.len()).collect::<Vec<_>>();
+
+    for (row_data, _) in rows {
+        for (i, cell) in row_data.iter().enumerate() {
+            let adjusted_length = cell
+                .chars()
+                .fold(0, |acc, ch| acc + if ch == '✅' { 2 } else { 1 });
+            max_widths[i] = max_widths[i].max(adjusted_length);
+        }
+    }
+
+    max_widths
+}
+
+fn format_row(row: &[String], widths: &[usize]) -> String {
+    row.iter()
+        .enumerate()
+        .map(|(i, cell)| {
+            // Count the number of special characters
+            let special_chars_count = cell.chars().filter(|&ch| ch == '✅').count();
+            // Adjust width by reducing 1 space for each special character
+            let adjusted_width = if special_chars_count > 0 {
+                widths[i].saturating_sub(special_chars_count)
+            } else {
+                widths[i]
+            };
+            format!("{:width$}", cell, width = adjusted_width)
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
