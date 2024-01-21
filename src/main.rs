@@ -2666,13 +2666,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Headless UI status messages
-        // ... [rest of your code] ...
 
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
 
             if oxide.config.headless {
-                let headers = vec![
+                let headers = [
                     "Status :: Timestamp",
                     "AP MAC",
                     "Client MAC",
@@ -2696,7 +2695,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let mut row_strings = Vec::new();
                 for (row_data, _) in rows {
-                    // Clone the row data and prepend "Status" to the timestamp
                     let mut modified_row_data = row_data.clone();
                     if let Some(timestamp) = modified_row_data.get_mut(0) {
                         *timestamp = format!("Status :: {}", timestamp);
@@ -2710,7 +2708,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Status,
                     format!(
-                        "Frames: {} | Rate: {} | Empty Reads: {} | Channel: {}\n{}",
+                        "Frames: {} | Rate: {} | ERs: {} | Channel: {}\n{}",
                         oxide.counters.frame_count,
                         frame_rate,
                         oxide.counters.empty_reads_rate,
@@ -2720,8 +2718,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ));
             }
         }
-
-        // ... [rest of your code] ...
 
         // Read Frame
         match read_frame(&mut oxide) {

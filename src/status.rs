@@ -67,9 +67,9 @@ impl MessageLog {
             };
             let white = "\x1b[0m";
             println!(
-                "{} {}{} :: {}{}",
-                message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+                "{}{} {} :: {}{}",
                 color,
+                message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
                 message.message_type,
                 message.content,
                 white,
