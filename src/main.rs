@@ -683,14 +683,11 @@ impl OxideRuntime {
         let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
         thread::sleep(Duration::from_millis(500));
 
-        log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!(
-                "Sockets Opened Rx: {} Tx: {}",
-                rx_socket.as_raw_fd(),
-                tx_socket.as_raw_fd()
-            ),
-        ));
+        println!(
+            "💲 Sockets Opened [Rx: {} | Tx: {}]",
+            rx_socket.as_raw_fd(),
+            tx_socket.as_raw_fd()
+        );
 
         // Setup RogueM1 Data
         let mut rng = thread_rng();
