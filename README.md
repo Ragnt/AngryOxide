@@ -6,7 +6,8 @@
 
 [![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Ragnt/AngryOxide) [![Discord](https://img.shields.io/discord/1194365883099922643)](https://discord.gg/QsEgaFndsQ)
 
-[![Discord](<img src='https://wearline.co/wp-content/uploads/2022/11/discord-button.png' width='150'>)](https://discord.gg/QsEgaFndsQ)
+[![Discord]<img src='https://wearline.co/wp-content/uploads/2022/11/discord-button.png' width='150'>](https://discord.gg/QsEgaFndsQ)
+
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
 You can get information about how to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
