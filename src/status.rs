@@ -25,6 +25,18 @@ impl fmt::Display for MessageType {
     }
 }
 
+impl MessageType {
+    pub fn to_str(&self) -> String {
+        match self {
+            MessageType::Error => "Error".to_owned(),
+            MessageType::Warning => "Warning".to_owned(),
+            MessageType::Info => "Info".to_owned(),
+            MessageType::Priority => "Priority".to_owned(),
+            MessageType::Status => "Status".to_owned(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct StatusMessage {
     pub timestamp: DateTime<Utc>,
@@ -61,16 +73,16 @@ impl MessageLog {
             let color = match message.message_type {
                 MessageType::Error => "\x1b[31m",
                 MessageType::Warning => "\x1b[33m",
-                MessageType::Info => "",
+                MessageType::Info => "\x1b[0m",
                 MessageType::Priority => "\x1b[32m",
                 MessageType::Status => "\x1b[36m",
             };
             let white = "\x1b[0m";
             println!(
-                "{}{} {} :: {}{}",
+                "{}{} | {:^8} | {}{}",
                 color,
                 message.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
-                message.message_type,
+                message.message_type.to_str(),
                 message.content,
                 white,
             )

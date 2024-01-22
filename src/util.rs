@@ -130,3 +130,36 @@ pub fn is_file_less_than_100mb(file: &File) -> io::Result<bool> {
     let metadata = file.metadata()?;
     Ok(metadata.len() < 100 * 1024 * 1024)
 }
+
+pub fn max_column_widths(headers: &[String], rows: &[(Vec<String>, u16)]) -> Vec<usize> {
+    let mut max_widths = headers.iter().map(|h| h.len()).collect::<Vec<_>>();
+
+    for (row_data, _) in rows {
+        for (i, cell) in row_data.iter().enumerate() {
+            let adjusted_length = cell
+                .chars()
+                .fold(0, |acc, ch| acc + if ch == '✅' { 2 } else { 1 });
+            max_widths[i] = max_widths[i].max(adjusted_length);
+        }
+    }
+
+    max_widths
+}
+
+pub fn format_row(row: &[String], widths: &[usize]) -> String {
+    row.iter()
+        .enumerate()
+        .map(|(i, cell)| {
+            // Count the number of special characters
+            let special_chars_count = cell.chars().filter(|&ch| ch == '✅').count();
+            // Adjust width by reducing 1 space for each special character
+            let adjusted_width = if special_chars_count > 0 {
+                widths[i].saturating_sub(special_chars_count)
+            } else {
+                widths[i]
+            };
+            format!("{:width$}", cell, width = adjusted_width)
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}

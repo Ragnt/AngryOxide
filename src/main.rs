@@ -75,7 +75,7 @@ use crate::matrix::MatrixSnowstorm;
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
-use crate::util::parse_ip_address_port;
+use crate::util::{format_row, max_column_widths, parse_ip_address_port};
 use crate::whitelist::{White, WhiteMAC, WhiteSSID};
 
 use libwifi::{Addresses, Frame};
@@ -2538,7 +2538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
-                        format!("Error: {e:?}"),
+                        format!("Channel Switch Error: {e:?}"),
                     ));
                 }
                 oxide.if_hardware.current_channel =
@@ -2666,53 +2666,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if last_status_time.elapsed() >= status_interval {
             last_status_time = Instant::now();
-
             if oxide.config.headless {
-                let headers = [
-                    "Status :: Timestamp",
-                    "AP MAC",
-                    "Client MAC",
-                    "SSID",
-                    "M1",
-                    "M2",
-                    "M3",
-                    "M4",
-                    "PM",
-                    "OK",
-                    "NC",
-                ]
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>();
-
-                let (_, rows) = oxide.handshake_storage.get_table(None, false, false);
-                let column_widths = max_column_widths(&headers, &rows);
-
-                let header_string = format_row(&headers, &column_widths);
-
-                let mut row_strings = Vec::new();
-                for (row_data, _) in rows {
-                    let mut modified_row_data = row_data.clone();
-                    if let Some(timestamp) = modified_row_data.get_mut(0) {
-                        *timestamp = format!("Status :: {}", timestamp);
-                    }
-                    row_strings.push(format_row(&modified_row_data, &column_widths));
-                }
-                let rows_string = row_strings.join("\n");
-
-                let handshakes_table = format!("{}\n{}", header_string, rows_string);
-
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Status,
                     format!(
-                        "Frames: {} | Rate: {} | ERs: {} | Channel: {}\n{}",
+                        "Frames: {} | Rate: {} | ERs: {} | Channel: {}",
                         oxide.counters.frame_count,
                         frame_rate,
                         oxide.counters.empty_reads_rate,
                         oxide.if_hardware.current_channel,
-                        handshakes_table
                     ),
                 ));
+                //print_handshakes_headless(&mut oxide);
             }
         }
 
@@ -2830,6 +2795,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn print_handshakes_headless(oxide: &mut OxideRuntime) {
+    // Planning on rewworking this in the future so it isn't so intrusive (and potentially not giving useless data)
+    let headers = ["[HS] Timestamp", "AP MAC", "SSID", "PM", "OK", "NC"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+
+    let indices_to_remove = [2, 4, 5, 6, 7];
+
+    let (_, mut rows) = oxide.handshake_storage.get_table(None, false, false);
+
+    for tuple in &mut rows {
+        let row = &mut tuple.0;
+        for &index in indices_to_remove.iter().rev() {
+            if index < row.len() {
+                row.remove(index);
+            }
+        }
+    }
+
+    let column_widths = max_column_widths(&headers, &rows);
+    let header_string = format_row(&headers, &column_widths);
+
+    let mut row_strings = Vec::new();
+
+    for (row_data, _) in rows {
+        let mut modified_row_data = row_data.clone();
+        if let Some(timestamp) = modified_row_data.get_mut(0) {
+            *timestamp = format!("[HS] {}", timestamp);
+        }
+        row_strings.push(format_row(&modified_row_data, &column_widths));
+    }
+
+    //let rows_string = row_strings.join("\n");
+    //let handshakes_table = format!("{}\n{}", header_string, rows_string);
+
+    oxide
+        .status_log
+        .add_message(StatusMessage::new(MessageType::Status, header_string));
+
+    for row in row_strings {
+        oxide
+            .status_log
+            .add_message(StatusMessage::new(MessageType::Status, row));
+    }
+}
+
 fn write_handshakes(handshakes_map: &HashMap<String, Vec<String>>) -> Result<Vec<String>, ()> {
     let mut hashfiles = Vec::new();
     for (key, values) in handshakes_map {
@@ -2940,37 +2952,4 @@ fn format_channels(channels: &Vec<(u8, u8)>) -> String {
 
     // Join all parts into a single string
     parts.join(" | ")
-}
-
-fn max_column_widths(headers: &[String], rows: &[(Vec<String>, u16)]) -> Vec<usize> {
-    let mut max_widths = headers.iter().map(|h| h.len()).collect::<Vec<_>>();
-
-    for (row_data, _) in rows {
-        for (i, cell) in row_data.iter().enumerate() {
-            let adjusted_length = cell
-                .chars()
-                .fold(0, |acc, ch| acc + if ch == '✅' { 2 } else { 1 });
-            max_widths[i] = max_widths[i].max(adjusted_length);
-        }
-    }
-
-    max_widths
-}
-
-fn format_row(row: &[String], widths: &[usize]) -> String {
-    row.iter()
-        .enumerate()
-        .map(|(i, cell)| {
-            // Count the number of special characters
-            let special_chars_count = cell.chars().filter(|&ch| ch == '✅').count();
-            // Adjust width by reducing 1 space for each special character
-            let adjusted_width = if special_chars_count > 0 {
-                widths[i].saturating_sub(special_chars_count)
-            } else {
-                widths[i]
-            };
-            format!("{:width$}", cell, width = adjusted_width)
-        })
-        .collect::<Vec<_>>()
-        .join(" | ")
 }
