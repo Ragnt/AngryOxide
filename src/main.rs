@@ -137,7 +137,7 @@ struct Arguments {
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
     autohunt: bool,
     #[arg(long)]
-    /// Optional - Set the tool to headless mode without a UI. (useful with --headless)
+    /// Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
     headless: bool,
     #[arg(long)]
     /// Optional - AO will auto-exit when all targets have a valid hashline.
