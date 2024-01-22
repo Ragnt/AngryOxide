@@ -239,7 +239,7 @@ impl AccessPoint {
         if self.has_hs {
             return true;
         }
-        return false;
+        false
     }
 
     pub fn is_target(&self) -> bool {
