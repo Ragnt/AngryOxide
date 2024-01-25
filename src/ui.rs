@@ -459,7 +459,7 @@ fn repeat_char(c: char, count: usize) -> String {
 }
 
 fn repeat_dot(count: usize) -> String {
-    std::iter::repeat('.').take(count).collect()
+    ".".repeat(count)
 }
 
 fn create_status_bar(

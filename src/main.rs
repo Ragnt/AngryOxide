@@ -83,7 +83,7 @@ use libwifi::{Addresses, Frame};
 use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{self, remove_file, File};
+use std::fs::{remove_file, File};
 use std::io;
 use std::io::stdout;
 use std::io::Write;
@@ -325,7 +325,7 @@ impl OxideRuntime {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
-        let mut log = status::MessageLog::new(cli_args.headless);
+        let log = status::MessageLog::new(cli_args.headless);
 
         // Get + Setup Interface
 
@@ -1993,9 +1993,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         oxide.counters.error_count += 1;
                     }
                 },
-                libwifi::error::Error::Incomplete(message) => {}
+                libwifi::error::Error::Incomplete(_) => {}
                 libwifi::error::Error::UnhandledFrameSubtype(_, _) => {}
-                libwifi::error::Error::UnhandledProtocol(message) => {}
+                libwifi::error::Error::UnhandledProtocol(_) => {}
             }
             return Err("Parsing Error".to_owned());
         }
@@ -2556,16 +2556,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Event::Key(key) = event {
                             if key.kind == KeyEventKind::Press {
                                 match key.code {
-                                    KeyCode::Char('d') => oxide.ui_state.menu_next(),
-                                    KeyCode::Char('a') => oxide.ui_state.menu_back(),
-                                    KeyCode::Char('w') | KeyCode::Char('W') => {
+                                    KeyCode::Char('d') | KeyCode::Right => {
+                                        oxide.ui_state.menu_next()
+                                    }
+                                    KeyCode::Char('a') | KeyCode::Left => {
+                                        oxide.ui_state.menu_back()
+                                    }
+                                    KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Up => {
                                         if key.modifiers.intersects(KeyModifiers::SHIFT) {
                                             oxide.ui_state.table_previous_item_big();
                                         } else {
                                             oxide.ui_state.table_previous_item();
                                         }
                                     }
-                                    KeyCode::Char('s') | KeyCode::Char('S') => {
+                                    KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Down => {
                                         if key.modifiers.intersects(KeyModifiers::SHIFT) {
                                             oxide.ui_state.table_next_item_big(table_len);
                                         } else {
