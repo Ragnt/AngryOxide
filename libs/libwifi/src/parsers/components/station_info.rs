@@ -4,8 +4,10 @@ use nom::sequence::tuple;
 use nom::IResult;
 
 use crate::frame::components::{
-    RsnAkmSuite, RsnCipherSuite, RsnInformation, StationInfo, VendorSpecificInfo, WpaAkmSuite,
-    WpaCipherSuite, WpaInformation,
+    AudioDevices, Cameras, Category, Computers, Displays, DockingDevices, GamingDevices,
+    InputDevices, MultimediaDevices, NetworkInfrastructure, PrintersEtAl, RsnAkmSuite,
+    RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone, VendorSpecificInfo,
+    WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
 };
 
 /// Parse variable length and variable field information.
@@ -62,6 +64,11 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
                             // Specific parsing for WPA Information Element
                             station_info.wpa_info =
                                 Some(parse_wpa_information(&vendor_data).unwrap());
+                        }
+
+                        if oui == [0x00, 0x50, 0xf2] && oui_type == 4 {
+                            // Specific parsing for WPA Information Element
+                            station_info.wps_info = parse_wps_information(&vendor_data).ok();
                         }
 
                         let vendor_specific_info = VendorSpecificInfo {
@@ -137,6 +144,236 @@ fn parse_wpa_information(data: &[u8]) -> Result<WpaInformation, &'static str> {
         unicast_cipher_suites,
         akm_suites,
     })
+}
+
+fn parse_wps_information(data: &[u8]) -> Result<WpsInformation, &'static str> {
+    let mut wps_info = WpsInformation::default();
+    let mut offset = 0;
+
+    while offset < data.len() {
+        if offset + 4 > data.len() {
+            return Err("Invalid WPS data length");
+        }
+
+        let element_type = u16::from_be_bytes([data[offset], data[offset + 1]]);
+        let element_length = u16::from_be_bytes([data[offset + 2], data[offset + 3]]) as usize;
+        offset += 4;
+
+        if offset + element_length > data.len() {
+            return Err("Invalid WPS data length for element");
+        }
+
+        match element_type {
+            0x1057 => {
+                wps_info.setup_state = match data[offset] {
+                    0x01 => WpsSetupState::NotConfigured,
+                    0x02 => WpsSetupState::Configured,
+                    _ => return Err("Invalid WPS Setup State"),
+                };
+            }
+            0x1021 => {
+                wps_info.manufacturer =
+                    parse_string_from_bytes(&data[offset..offset + element_length])?;
+            }
+            0x1023 => {
+                wps_info.model = parse_string_from_bytes(&data[offset..offset + element_length])?;
+            }
+            0x1024 => {
+                wps_info.model_number =
+                    parse_string_from_bytes(&data[offset..offset + element_length])?;
+            }
+            0x1042 => {
+                wps_info.serial_number =
+                    parse_string_from_bytes(&data[offset..offset + element_length])?;
+            }
+            0x1054 => {
+                let device_type_data = data[offset..offset + element_length].to_vec();
+                if device_type_data.len() >= 8 {
+                    let oui = device_type_data[2..6].to_vec();
+                    if oui == [0x00, 0x50, 0xf2, 0x04] {
+                        let category = device_type_data[0..2].to_vec();
+                        let subcategory = device_type_data[6..8].to_vec();
+                        if let Some(cat) = bytes_to_category(category, subcategory) {
+                            wps_info.primary_device_type = cat.to_string();
+                        } else {
+                            wps_info.primary_device_type = "".to_owned();
+                        }
+                    }
+                } else {
+                    wps_info.primary_device_type = "".to_owned();
+                }
+            }
+            0x1011 => {
+                wps_info.device_name =
+                    parse_string_from_bytes(&data[offset..offset + element_length])?;
+            }
+            _ => {} // Unknown or unhandled type
+        }
+
+        offset += element_length;
+    }
+
+    Ok(wps_info)
+}
+
+fn bytes_to_category(catbytes: Vec<u8>, subbytes: Vec<u8>) -> Option<Category> {
+    if catbytes.len() == 2 {
+        let value = u16::from(catbytes[0]) << 8 | u16::from(catbytes[1]);
+        let subvalue = u16::from(subbytes[0]) << 8 | u16::from(subbytes[1]);
+        match value {
+            0x0001 => match subvalue {
+                0x0001 => Some(Category::Computer(Computers::PC)),
+                0x0002 => Some(Category::Computer(Computers::Server)),
+                0x0003 => Some(Category::Computer(Computers::MediaCenter)),
+                0x0004 => Some(Category::Computer(Computers::UltraMobilePC)),
+                0x0005 => Some(Category::Computer(Computers::Notebook)),
+                0x0006 => Some(Category::Computer(Computers::Desktop)),
+                0x0007 => Some(Category::Computer(Computers::MID)),
+                0x0008 => Some(Category::Computer(Computers::Netbook)),
+                0x0009 => Some(Category::Computer(Computers::Tablet)),
+                0x000a => Some(Category::Computer(Computers::Ultrabook)),
+                _ => None,
+            },
+            0x0002 => match subvalue {
+                0x0001 => Some(Category::InputDevice(InputDevices::Keyboard)),
+                0x0002 => Some(Category::InputDevice(InputDevices::Mouse)),
+                0x0003 => Some(Category::InputDevice(InputDevices::Joystick)),
+                0x0004 => Some(Category::InputDevice(InputDevices::Trackball)),
+                0x0005 => Some(Category::InputDevice(InputDevices::GamingController)),
+                0x0006 => Some(Category::InputDevice(InputDevices::Remote)),
+                0x0007 => Some(Category::InputDevice(InputDevices::Touchscreen)),
+                0x0008 => Some(Category::InputDevice(InputDevices::BiometricReader)),
+                0x0009 => Some(Category::InputDevice(InputDevices::BarcodeReader)),
+                _ => None,
+            },
+            0x0003 => match subvalue {
+                0x0001 => Some(Category::PrintersScannersFaxCopier(PrintersEtAl::Printer)),
+                0x0002 => Some(Category::PrintersScannersFaxCopier(PrintersEtAl::Scanner)),
+                0x0003 => Some(Category::PrintersScannersFaxCopier(PrintersEtAl::Fax)),
+                0x0004 => Some(Category::PrintersScannersFaxCopier(PrintersEtAl::Copier)),
+                0x0005 => Some(Category::PrintersScannersFaxCopier(PrintersEtAl::AllInOne)),
+                _ => None,
+            },
+            0x0004 => match subvalue {
+                0x0001 => Some(Category::Camera(Cameras::DigitalCamera)),
+                0x0002 => Some(Category::Camera(Cameras::VideoCamera)),
+                0x0003 => Some(Category::Camera(Cameras::Webcam)),
+                0x0004 => Some(Category::Camera(Cameras::SecurityCamera)),
+                _ => None,
+            },
+            0x0005 => Some(Category::Storage(Storage::NAS)),
+            0x0006 => match subvalue {
+                0x0001 => Some(Category::NetworkInfrastructure(NetworkInfrastructure::AP)),
+                0x0002 => Some(Category::NetworkInfrastructure(
+                    NetworkInfrastructure::Router,
+                )),
+                0x0003 => Some(Category::NetworkInfrastructure(
+                    NetworkInfrastructure::Switch,
+                )),
+                0x0004 => Some(Category::NetworkInfrastructure(
+                    NetworkInfrastructure::Gateway,
+                )),
+                0x0005 => Some(Category::NetworkInfrastructure(
+                    NetworkInfrastructure::Bridge,
+                )),
+                _ => None,
+            },
+            0x0007 => match subvalue {
+                0x0001 => Some(Category::Displays(Displays::Television)),
+                0x0002 => Some(Category::Displays(Displays::ElectronicPictureFrame)),
+                0x0003 => Some(Category::Displays(Displays::Projector)),
+                0x0004 => Some(Category::Displays(Displays::Monitor)),
+                _ => None,
+            },
+            0x0008 => match subvalue {
+                0x0001 => Some(Category::MultimediaDevices(MultimediaDevices::DAR)),
+                0x0002 => Some(Category::MultimediaDevices(MultimediaDevices::PVR)),
+                0x0003 => Some(Category::MultimediaDevices(MultimediaDevices::MCX)),
+                0x0004 => Some(Category::MultimediaDevices(MultimediaDevices::SetTopBox)),
+                0x0005 => Some(Category::MultimediaDevices(MultimediaDevices::MediaServer)),
+                0x0006 => Some(Category::MultimediaDevices(
+                    MultimediaDevices::ProtableVideoPlayer,
+                )),
+                _ => None,
+            },
+            0x0009 => match subvalue {
+                0x0001 => Some(Category::GamingDevices(GamingDevices::Xbox)),
+                0x0002 => Some(Category::GamingDevices(GamingDevices::Xbox360)),
+                0x0003 => Some(Category::GamingDevices(GamingDevices::Playstation)),
+                0x0004 => Some(Category::GamingDevices(GamingDevices::GameConsole)),
+                0x0005 => Some(Category::GamingDevices(GamingDevices::PortableGamingDevice)),
+                _ => None,
+            },
+            0x000a => match subvalue {
+                0x0001 => Some(Category::Telephone(Telephone::WindowsMobile)),
+                0x0002 => Some(Category::Telephone(Telephone::PhoneSingleMode)),
+                0x0003 => Some(Category::Telephone(Telephone::PhoneDualMode)),
+                0x0004 => Some(Category::Telephone(Telephone::SmartphoneSingleMode)),
+                0x0005 => Some(Category::Telephone(Telephone::SmartphoneDualMode)),
+                _ => None,
+            },
+            0x000b => match subvalue {
+                0x0001 => Some(Category::AudioDevices(AudioDevices::AutioTunerReceiver)),
+                0x0002 => Some(Category::AudioDevices(AudioDevices::Speakers)),
+                0x0003 => Some(Category::AudioDevices(AudioDevices::PortableMusicPlayer)),
+                0x0004 => Some(Category::AudioDevices(AudioDevices::Headset)),
+                0x0005 => Some(Category::AudioDevices(AudioDevices::Headphones)),
+                0x0006 => Some(Category::AudioDevices(AudioDevices::Microphone)),
+                0x0007 => Some(Category::AudioDevices(AudioDevices::HomeTheaterSystems)),
+                _ => None,
+            },
+            0x000c => match subvalue {
+                0x0001 => Some(Category::DockingDevices(
+                    DockingDevices::ComputerDockingStation,
+                )),
+                0x0002 => Some(Category::DockingDevices(DockingDevices::MediaKiosk)),
+                _ => None,
+            },
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+fn bytes_to_subcategory(category: &Category, bytes: Vec<u8>) -> Option<String> {
+    if bytes.len() == 2 {
+        let value = u16::from(bytes[0]) << 8 | u16::from(bytes[1]);
+        match category {
+            Category::Computer(_) => {
+                match value {
+                    0x0001 => Some(Computers::PC.to_string()), // Example mapping
+                    // Add other mappings here
+                    _ => None,
+                }
+            }
+            // Implement for other categories
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+fn parse_device_type_data(device_type_data: &[u8]) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+    // Ensure the slice has enough bytes to parse
+    if device_type_data.len() >= 8 {
+        let category = device_type_data[0..2].to_vec();
+        let oui = device_type_data[2..6].to_vec();
+        let subcategory = device_type_data[6..8].to_vec();
+
+        Some((category, oui, subcategory))
+    } else {
+        // Return None if the data does not have enough bytes
+        None
+    }
+}
+
+fn parse_string_from_bytes(data: &[u8]) -> Result<String, &'static str> {
+    match std::str::from_utf8(data) {
+        Ok(s) => Ok(s.to_string()),
+        Err(_) => Err("Invalid UTF-8 string"),
+    }
 }
 
 fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {

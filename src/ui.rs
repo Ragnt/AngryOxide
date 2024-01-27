@@ -5,6 +5,7 @@ use rand::Rng;
 use std::{io::Result, time::Instant};
 
 use crate::{
+    advancedtable::{self, advtable::AdvTable},
     auth::{FourWayHandshake, HandshakeStorage},
     devices::{AccessPoint, Station, WiFiDeviceList},
     matrix::MatrixSnowstorm,
@@ -21,7 +22,6 @@ use crate::{
 use nl80211_ng::get_interface_info_idx;
 
 // Ratatui imports:
-
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect, SegmentSize},
@@ -619,12 +619,12 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
     }
 
     // Fill Rows
-    let mut rows_vec: Vec<Row> = vec![];
+    let mut rows_vec: Vec<advancedtable::advtable::AdvRow> = vec![];
     for (mut row, height) in rows {
         if oxide.ui_state.paused {
-            row[3] = "Paused".to_owned();
+            row[4] = "Paused".to_owned();
         }
-        rows_vec.push(Row::new(row).height(height));
+        rows_vec.push(advancedtable::advtable::AdvRow::new(row).height(height));
     }
 
     // Set headers for sort
@@ -647,7 +647,7 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
 
-    let table: Table<'_> = Table::new(
+    let table: AdvTable<'_> = AdvTable::new(
         rows_vec.clone(),
         vec![
             Constraint::Length(5), // TGT
@@ -661,13 +661,18 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
             Constraint::Min(6),    // 4wHS
             Constraint::Min(7),    // PMKID
         ],
+        area,
     )
     .segment_size(SegmentSize::EvenDistribution)
     .highlight_style(selected_style)
-    .header(Row::new(headers).style(Style::new().bold()))
+    .header(advancedtable::advtable::AdvRow::new(headers).style(Style::new().bold()))
     .highlight_symbol(">> ")
-    .highlight_spacing(HighlightSpacing::Always)
+    .highlight_spacing(advancedtable::advtable::HighlightSpacing::Always)
     .block(Block::default().borders(Borders::RIGHT));
+
+    let select_area = table
+        .clone()
+        .selected_row_area(&mut oxide.ui_state.ap_state.clone());
 
     let scrollbar = Scrollbar::default()
         .orientation(ScrollbarOrientation::VerticalRight)
@@ -686,6 +691,58 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
         }),
         &mut scrollbar_state,
     );
+
+    if let Some(area) = select_area {
+        if let Some(ap) = selected_object {
+            let area = Rect {
+                x: area.x,
+                y: area.y + 1,
+                width: area.width,
+                height: 3,
+            };
+            let selected_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(vec![
+                    Constraint::Min(18),
+                    Constraint::Min(33),
+                    Constraint::Min(33),
+                ])
+                .split(area);
+
+            let wps_block = Paragraph::new(
+                ap.wps_data
+                    .as_ref()
+                    .map_or("Not Present".to_string(), |f| f.setup_state.to_string()),
+            )
+            .block(Block::default().borders(Borders::ALL).title(" WPS Status "));
+
+            let oui_block = Paragraph::new(
+                ap.oui_data
+                    .as_ref()
+                    .map_or("Unknown".to_string(), |f| f.long_name()),
+            )
+            .block(Block::default().borders(Borders::ALL).title(" OUI Lookup "));
+
+            let make_model_block =
+                Paragraph::new(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
+                    let str = format!("{} {}", f.manufacturer, f.device_name);
+                    if str.is_empty() {
+                        "Unknown".to_string()
+                    } else {
+                        str
+                    }
+                }))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Make / Model "),
+                );
+
+            frame.render_widget(wps_block, selected_layout[0]);
+            frame.render_widget(oui_block, selected_layout[1]);
+            frame.render_widget(make_model_block, selected_layout[2]);
+        }
+    }
 }
 
 fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
@@ -729,7 +786,7 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
     let mut rows_vec: Vec<Row> = vec![];
     for (mut row, height) in rows {
         if oxide.ui_state.paused {
-            row[2] = "Paused".to_owned();
+            row[3] = "Paused".to_owned();
         }
         rows_vec.push(Row::new(row).height(height));
     }

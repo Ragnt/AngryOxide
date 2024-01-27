@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use libwifi::frame::components::WpsInformation;
 use libwifi::frame::{EapolKey, KeyInformation};
 use radiotap::field::ext::TimeUnit;
 use std::fs::File;
@@ -162,4 +163,19 @@ pub fn format_row(row: &[String], widths: &[usize]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" | ")
+}
+
+pub fn wps_to_json(wps_info: &Option<WpsInformation>) -> String {
+    if let Some(wps) = wps_info {
+        format!("{{\"setup_state\": \"{:?}\", \"manufacturer\": \"{}\", \"model\": \"{}\", \"model_number\": \"{}\", \"serial_number\": \"{}\", \"primary_device_type\": \"{}\", \"device_name\": \"{}\"}}",
+    wps.setup_state,
+    wps.manufacturer,
+    wps.model,
+    wps.model_number,
+    wps.serial_number,
+    wps.primary_device_type,
+    wps.device_name)
+    } else {
+        "{}".to_string()
+    }
 }
