@@ -292,13 +292,14 @@ pub struct APFlags {
     pub rsn_akm_psk: Option<bool>,
     pub rsn_akm_psk256: Option<bool>,
     pub rsn_akm_pskft: Option<bool>,
+    pub rsn_akm_sae: Option<bool>,
     pub wpa_akm_psk: Option<bool>,
     pub ap_mfp: Option<bool>,
 }
 
 impl APFlags {
     pub fn to_json_str(&self) -> String {
-        format!("{{\"apie_essid\": {},\"gs_ccmp\": {},\"gs_tkip\": {},\"cs_ccmp\": {},\"cs_tkip\": {},\"rsn_akm_psk\": {},\"rsn_akm_psk256\": {},\"rsn_akm_pskft\": {}, \"wpa_akm_psk\": {},\"ap_mfp\": {}}}", 
+        format!("{{\"apie_essid\": {},\"gs_ccmp\": {},\"gs_tkip\": {},\"cs_ccmp\": {},\"cs_tkip\": {},\"rsn_akm_psk\": {},\"rsn_akm_psk256\": {},\"rsn_akm_pskft\": {},\"rsn_akm_sae\": {}, \"wpa_akm_psk\": {},\"ap_mfp\": {}}}", 
         option_bool_to_json_string(self.apie_essid), 
         option_bool_to_json_string(self.gs_ccmp), 
         option_bool_to_json_string(self.gs_tkip), 
@@ -307,9 +308,35 @@ impl APFlags {
         option_bool_to_json_string(self.rsn_akm_psk), 
         option_bool_to_json_string(self.rsn_akm_psk256), 
         option_bool_to_json_string(self.rsn_akm_pskft), 
+        option_bool_to_json_string(self.rsn_akm_sae), 
         option_bool_to_json_string(self.wpa_akm_psk), 
         option_bool_to_json_string(self.ap_mfp)
     )
+    }
+
+    pub fn get_rsn_akm_true(&self) -> String {
+        let mut true_flags = Vec::new();
+
+        if self.rsn_akm_psk == Some(true) {
+            true_flags.push("PSK");
+        }
+        if self.rsn_akm_psk256 == Some(true) {
+            true_flags.push("PSK256");
+        }
+        if self.rsn_akm_pskft == Some(true) {
+            true_flags.push("PSKFT");
+        }
+        if self.rsn_akm_sae == Some(true) {
+            true_flags.push("SAE");
+        }
+
+        if true_flags.is_empty() {
+            true_flags.push("Open")
+        }
+
+        true_flags.join(", ")
+
+        
     }
 
     // Checks if the AKM is PSK from any one of the indicators
@@ -345,6 +372,9 @@ impl APFlags {
         }
         if let Some(val) = other.rsn_akm_pskft {
             self.rsn_akm_pskft = Some(val);
+        }
+        if let Some(val) = other.rsn_akm_sae {
+            self.rsn_akm_sae = Some(val);
         }
         if let Some(val) = other.wpa_akm_psk {
             self.wpa_akm_psk = Some(val);
@@ -776,21 +806,24 @@ impl WiFiDeviceList<AccessPoint> {
             ];
             let mut height = 1;
             if selected_row.is_some() && idx == selected_row.unwrap() {
-                height = 4;
+                height = 5;
                 for _ in 0..3 {
                     for col in &mut ap_row {
                         col.push('\n');
                     }
                 }
                 if ap.client_list.size() >= 1 {
-                    height += 1;
-                    ap_row = add_client_header(ap_row);
+                    height += 1; // Add 1 for the "Clients" text
+                    //ap_row = add_client_header(ap_row);
                     for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
+                        height += 1; // add 1 for each client
+                    }
+                    /*for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
                         let last = idx == ap.client_list.size() - 1;
                         let merged = add_client_rows(ap_row, client, last);
                         ap_row = merged;
                         height += 1;
-                    }
+                    }*/
                 }
             }
             rows.push((ap_row, height));

@@ -173,10 +173,10 @@ use ratatui::{
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct AdvTable<'a> {
     /// Data to display in each row
-    rows: Vec<AdvRow<'a>>,
+    rows: Vec<Row<'a>>,
 
     /// Optional header
-    header: Option<AdvRow<'a>>,
+    header: Option<Row<'a>>,
 
     /// Width constraints for each column
     widths: Vec<Constraint>,
@@ -262,7 +262,7 @@ pub struct AdvTable<'a> {
 /// Row::new(cells).red().italic();
 /// ```
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
-pub struct AdvRow<'a> {
+pub struct Row<'a> {
     cells: Vec<Cell<'a>>,
     height: u16,
     bottom_margin: u16,
@@ -394,7 +394,7 @@ impl<'a> AdvTable<'a> {
     /// ```
     pub fn new<R, C>(rows: R, widths: C, area: Rect) -> Self
     where
-        R: IntoIterator<Item = AdvRow<'a>>,
+        R: IntoIterator<Item = Row<'a>>,
         C: IntoIterator,
         C::Item: AsRef<Constraint>,
     {
@@ -436,7 +436,7 @@ impl<'a> AdvTable<'a> {
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn rows<T>(mut self, rows: T) -> Self
     where
-        T: IntoIterator<Item = AdvRow<'a>>,
+        T: IntoIterator<Item = Row<'a>>,
     {
         self.rows = rows.into_iter().collect();
         self
@@ -459,7 +459,7 @@ impl<'a> AdvTable<'a> {
     /// let table = Table::default().header(header);
     /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
-    pub fn header(mut self, header: AdvRow<'a>) -> Self {
+    pub fn header(mut self, header: Row<'a>) -> Self {
         self.header = Some(header);
         self
     }
@@ -709,10 +709,10 @@ impl<'a> AdvTable<'a> {
             let is_selected = state.selected_mut().map_or(false, |s| s == i);
             if is_selected {
                 self.selected_row_area = Some(Rect {
-                    x: table_row_area.x + 9,
-                    y: table_row_area.y,
-                    width: table_row_area.width - 18,
-                    height: table_row_area.height - 1,
+                    x: table_row_area.x,
+                    y: table_row_area.y+1,
+                    width: table_row_area.width,
+                    height: table_row_area.height-1,
                 });
             }
         }
@@ -720,7 +720,7 @@ impl<'a> AdvTable<'a> {
     }
 }
 
-impl<'a> AdvRow<'a> {
+impl<'a> Row<'a> {
     /// Creates a new [`Row`]
     ///
     /// The `cells` parameter accepts any value that can be converted into an iterator of anything
@@ -1144,7 +1144,7 @@ fn ensure_percentages_less_than_100(widths: &[Constraint]) {
 }
 
 // private methods for rendering
-impl AdvRow<'_> {
+impl Row<'_> {
     /// Returns the total height of the row.
     fn total_height(&self) -> u16 {
         self.height.saturating_add(self.bottom_margin)
@@ -1200,8 +1200,8 @@ impl<'a> Styled for Cell<'a> {
     }
 }
 
-impl<'a> Styled for AdvRow<'a> {
-    type Item = AdvRow<'a>;
+impl<'a> Styled for Row<'a> {
+    type Item = Row<'a>;
 
     fn style(&self) -> Style {
         self.style

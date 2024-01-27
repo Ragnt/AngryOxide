@@ -381,13 +381,13 @@ fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {
         return Err("RSN Information data too short");
     }
 
-    let version = u16::from_le_bytes([data[0], data[1]]);
+    let version = u16::from_ne_bytes([data[0], data[1]]);
     if version != 1 {
         return Err("Unsupported RSN version");
     }
 
     let group_cipher_suite = parse_group_cipher_suite(&data[2..6]);
-    let pairwise_cipher_suite_count = u16::from_le_bytes([data[6], data[7]]) as usize;
+    let pairwise_cipher_suite_count = u16::from_ne_bytes([data[6], data[7]]) as usize;
     let mut offset = 8;
 
     let mut pairwise_cipher_suites = Vec::new();
@@ -397,7 +397,7 @@ fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {
         offset += 4;
     }
 
-    let akm_suite_count = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+    let akm_suite_count = u16::from_ne_bytes([data[offset], data[offset + 1]]) as usize;
     offset += 2;
 
     let mut akm_suites = Vec::new();
@@ -408,7 +408,7 @@ fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {
     }
 
     if data.len() >= offset + 2 {
-        let rsn_capabilities = u16::from_le_bytes([data[offset], data[offset + 1]]);
+        let rsn_capabilities = u16::from_ne_bytes([data[offset], data[offset + 1]]);
 
         let pre_auth = (rsn_capabilities & (1 << 0)) != 0;
         let no_pairwise = (rsn_capabilities & (1 << 1)) != 0;
@@ -460,20 +460,14 @@ fn parse_wpa_akm_suite(data: &[u8]) -> WpaAkmSuite {
     }
 }
 
-/*
-RsnCipherSuite::WEP => vec![0x00, 0x0F, 0xAC, 0x01],
-RsnCipherSuite::TKIP => vec![0x00, 0x0F, 0xAC, 0x02],
-RsnCipherSuite::WRAP => vec![0x00, 0x0F, 0xAC, 0x03],
-RsnCipherSuite::CCMP => vec![0x00, 0x0F, 0xAC, 0x04],
-RsnCipherSuite::WEP104 => vec![0x00, 0x0F, 0xAC, 0x05],
-*/
 fn parse_group_cipher_suite(data: &[u8]) -> RsnCipherSuite {
     match data {
+        [0x00, 0x0F, 0xAC, 0x00] => RsnCipherSuite::None,
         [0x00, 0x0F, 0xAC, 0x01] => RsnCipherSuite::WEP,
-        [0x00, 0x0F, 0xAC, 0x05] => RsnCipherSuite::WEP104,
         [0x00, 0x0F, 0xAC, 0x02] => RsnCipherSuite::TKIP,
-        [0x00, 0x0F, 0xAC, 0x04] => RsnCipherSuite::CCMP,
         [0x00, 0x0F, 0xAC, 0x03] => RsnCipherSuite::WRAP,
+        [0x00, 0x0F, 0xAC, 0x04] => RsnCipherSuite::CCMP,
+        [0x00, 0x0F, 0xAC, 0x05] => RsnCipherSuite::WEP104,
         _ => RsnCipherSuite::Unknown(data.to_vec()),
     }
 }
@@ -481,16 +475,25 @@ fn parse_group_cipher_suite(data: &[u8]) -> RsnCipherSuite {
 fn parse_pairwise_cipher_suite(data: &[u8]) -> RsnCipherSuite {
     match data {
         [0x00, 0x0F, 0xAC, 0x00] => RsnCipherSuite::None,
+        [0x00, 0x0F, 0xAC, 0x01] => RsnCipherSuite::WEP,
         [0x00, 0x0F, 0xAC, 0x02] => RsnCipherSuite::TKIP,
+        [0x00, 0x0F, 0xAC, 0x03] => RsnCipherSuite::WRAP,
         [0x00, 0x0F, 0xAC, 0x04] => RsnCipherSuite::CCMP,
+        [0x00, 0x0F, 0xAC, 0x05] => RsnCipherSuite::WEP104,
         _ => RsnCipherSuite::Unknown(data.to_vec()),
     }
 }
 
 fn parse_akm_suite(data: &[u8]) -> RsnAkmSuite {
     match data {
-        [0x00, 0x0F, 0xAC, 0x02] => RsnAkmSuite::PSK,
         [0x00, 0x0F, 0xAC, 0x01] => RsnAkmSuite::EAP,
+        [0x00, 0x0F, 0xAC, 0x02] => RsnAkmSuite::PSK,
+        [0x00, 0x0F, 0xAC, 0x03] => RsnAkmSuite::EAPFT,
+        [0x00, 0x0F, 0xAC, 0x04] => RsnAkmSuite::PSKFT,
+        [0x00, 0x0F, 0xAC, 0x05] => RsnAkmSuite::EAP256,
+        [0x00, 0x0F, 0xAC, 0x06] => RsnAkmSuite::PSK256,
+        [0x00, 0x0F, 0xAC, 0x08] => RsnAkmSuite::SAE,
+        [0x00, 0x0F, 0xAC, 0x0b] => RsnAkmSuite::SUITEBEAP256,
         _ => RsnAkmSuite::Unknown(data.to_vec()),
     }
 }

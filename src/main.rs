@@ -1056,6 +1056,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         rsn_akm_pskft: station_info.rsn_information.as_ref().map(
                                             |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
                                         ),
+                                        rsn_akm_sae: station_info.rsn_information.as_ref().map(
+                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE),
+                                        ),
                                         wpa_akm_psk: station_info
                                             .wpa_info
                                             .as_ref()
@@ -1264,6 +1267,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         ),
                                         rsn_akm_pskft: station_info.rsn_information.as_ref().map(
                                             |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
+                                        ),
+                                        rsn_akm_sae: station_info.rsn_information.as_ref().map(
+                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE),
                                         ),
                                         wpa_akm_psk: station_info
                                             .wpa_info
@@ -1664,6 +1670,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     .rsn_information
                                     .as_ref()
                                     .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT)),
+                                rsn_akm_sae: station_info
+                                        .rsn_information
+                                        .as_ref()
+                                        .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
                                 wpa_akm_psk: station_info
                                     .wpa_info
                                     .as_ref()
