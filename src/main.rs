@@ -1,3 +1,4 @@
+mod advancedtable;
 mod ascii;
 mod attack;
 mod auth;
@@ -6,6 +7,7 @@ mod devices;
 mod eventhandler;
 mod gps;
 mod matrix;
+mod oui;
 mod pcapng;
 mod rawsocks;
 mod snowstorm;
@@ -48,6 +50,7 @@ use nl80211_ng::{get_interface_info_idx, set_interface_chan, Interface, Nl80211}
 use flate2::write::GzEncoder;
 use flate2::Compression;
 
+use oui::OuiDatabase;
 use pcapng::{FrameData, PcapWriter};
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
@@ -289,6 +292,7 @@ pub struct TargetData {
 }
 
 pub struct FileData {
+    oui_database: OuiDatabase,
     file_prefix: String,
     current_pcap: PcapWriter,
     db_writer: DatabaseWriter,
@@ -678,6 +682,10 @@ impl OxideRuntime {
         println!("💲 Setting {} up.", interface_name);
         netlink.set_interface_up(idx).ok();
 
+        // Setup OUI Database
+        let oui_db = OuiDatabase::new();
+        println!("💲 OUI Records Imported: {}", oui_db.record_count());
+
         // Open sockets
         let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
         let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
@@ -783,6 +791,7 @@ impl OxideRuntime {
         gps_source.start();
 
         let file_data: FileData = FileData {
+            oui_database: oui_db,
             file_prefix,
             current_pcap: pcap_file,
             db_writer: database,
@@ -1057,6 +1066,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             .map(|rsn| rsn.mfp_required),
                                     }),
                                     oxide.target_data.rogue_client,
+                                    station_info.wps_info.clone(),
+                                    oxide.file_data.oui_database.search(&bssid),
                                 ),
                             );
 
@@ -1162,6 +1173,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             client_mac,
                                             signal_strength,
                                             vec![ssid.to_string()],
+                                            oxide.file_data.oui_database.search(&client_mac),
                                         ),
                                     );
                                 }
@@ -1181,6 +1193,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             client_mac,
                                             signal_strength,
                                             vec![],
+                                            oxide.file_data.oui_database.search(&client_mac),
                                         ),
                                     );
                                 }
@@ -1192,6 +1205,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             client_mac,
                                             signal_strength,
                                             vec![ssid.to_string()],
+                                            oxide.file_data.oui_database.search(&client_mac),
                                         ),
                                     );
                                 }
@@ -1261,6 +1275,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             .map(|rsn| rsn.mfp_required),
                                     }),
                                     oxide.target_data.rogue_client,
+                                    station_info.wps_info.clone(),
+                                    oxide.file_data.oui_database.search(&bssid),
                                 ),
                             );
 
@@ -1327,7 +1343,12 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             // First let's add it to our unassociated clients list:
                             let station = oxide.unassoc_clients.add_or_update_device(
                                 client,
-                                &Station::new_unassoc_station(client, signal, vec![]),
+                                &Station::new_unassoc_station(
+                                    client,
+                                    signal,
+                                    vec![],
+                                    oxide.file_data.oui_database.search(&client),
+                                ),
                             );
 
                             if ap_addr == oxide.target_data.rogue_client {
@@ -1356,6 +1377,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     None,
                                     None,
                                     oxide.target_data.rogue_client,
+                                    None,
+                                    oxide.file_data.oui_database.search(&ap_addr),
                                 ),
                             );
 
@@ -1368,6 +1391,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         AntennaSignal::from_bytes(&[0u8])
                                             .map_err(|err| err.to_string())?,
                                         vec![],
+                                        oxide.file_data.oui_database.search(&client),
                                     ),
                                 );
                             } else {
@@ -1424,6 +1448,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 None,
                                 None,
                                 oxide.target_data.rogue_client,
+                                None,
+                                oxide.file_data.oui_database.search(&ap_addr),
                             ),
                         );
                     }
@@ -1443,6 +1469,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         .map_err(|err| err.to_string())?
                                 },
                                 vec![],
+                                oxide.file_data.oui_database.search(&station_addr),
                             ),
                         );
                     }
@@ -1484,6 +1511,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                             },
                             Some(ap_addr),
+                            oxide.file_data.oui_database.search(&station_addr),
                         );
                         clients.add_or_update_device(station_addr, client);
                         oxide.unassoc_clients.remove_device(&station_addr);
@@ -1500,6 +1528,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         None,
                         clients,
                         oxide.target_data.rogue_client,
+                        None,
+                        oxide.file_data.oui_database.search(&ap_addr),
                     );
                     oxide.access_points.add_or_update_device(ap_addr, &ap);
                 }
@@ -1525,6 +1555,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         .map_err(|err| err.to_string())?,
                                 ),
                                 vec![],
+                                oxide.file_data.oui_database.search(&client_mac),
                             ),
                         );
 
@@ -1564,6 +1595,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             None,
                             None,
                             oxide.target_data.rogue_client,
+                            None,
+                            oxide.file_data.oui_database.search(&ap_mac),
                         );
                         oxide.access_points.add_or_update_device(ap_mac, &ap);
                     };
@@ -1590,6 +1623,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 client_mac,
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                                 Some(bssid),
+                                oxide.file_data.oui_database.search(&client_mac),
                             );
                             clients.add_or_update_device(client_mac, client);
                             oxide.unassoc_clients.remove_device(&client_mac);
@@ -1641,6 +1675,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             }),
                             clients,
                             oxide.target_data.rogue_client,
+                            station_info.wps_info.clone(),
+                            oxide.file_data.oui_database.search(&bssid),
                         );
                         oxide.access_points.add_or_update_device(bssid, &ap);
                     };
@@ -1671,6 +1707,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                             ),
                             Some(old_ap),
+                            oxide.file_data.oui_database.search(&client_mac),
                         );
                         clients.add_or_update_device(client_mac, client);
                         oxide.unassoc_clients.remove_device(&client_mac);
@@ -1683,6 +1720,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             None,
                             clients,
                             oxide.target_data.rogue_client,
+                            None,
+                            oxide.file_data.oui_database.search(&old_ap),
                         );
                         oxide.access_points.add_or_update_device(old_ap, &ap);
 
@@ -1694,6 +1733,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             None,
                             WiFiDeviceList::<Station>::new(),
                             oxide.target_data.rogue_client,
+                            None,
+                            oxide.file_data.oui_database.search(&new_ap),
                         );
                         oxide.access_points.add_or_update_device(new_ap, &newap);
                     };
@@ -1719,6 +1760,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 client_mac,
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
                                 Some(ap_mac),
+                                oxide.file_data.oui_database.search(&client_mac),
                             );
                             clients.add_or_update_device(client_mac, client);
                             oxide.unassoc_clients.remove_device(&client_mac);
@@ -1739,6 +1781,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             None,
                             clients,
                             oxide.target_data.rogue_client,
+                            None,
+                            oxide.file_data.oui_database.search(&ap_mac),
                         );
                         oxide.access_points.add_or_update_device(ap_mac, &ap);
                     };
@@ -1785,6 +1829,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                             },
                             Some(ap_addr),
+                            oxide.file_data.oui_database.search(&station_addr),
                         );
                         clients.add_or_update_device(station_addr, client);
                         oxide.unassoc_clients.remove_device(&station_addr);
@@ -1801,6 +1846,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         None,
                         clients,
                         oxide.target_data.rogue_client,
+                        None,
+                        oxide.file_data.oui_database.search(&ap_addr),
                     );
                     oxide.access_points.add_or_update_device(ap_addr, &ap);
                 }
@@ -1854,6 +1901,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                             },
                             Some(ap_addr),
+                            oxide.file_data.oui_database.search(&station_addr),
                         );
                         clients.add_or_update_device(station_addr, client);
                         oxide.unassoc_clients.remove_device(&station_addr);
@@ -1870,6 +1918,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         None,
                         clients,
                         oxide.target_data.rogue_client,
+                        None,
+                        oxide.file_data.oui_database.search(&ap_addr),
                     );
                     oxide.access_points.add_or_update_device(ap_addr, &ap);
                 }
@@ -1914,6 +1964,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                             },
                             Some(ap_addr),
+                            oxide.file_data.oui_database.search(&station_addr),
                         );
                         clients.add_or_update_device(station_addr, client);
                         oxide.unassoc_clients.remove_device(&station_addr);
@@ -1930,53 +1981,43 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         None,
                         clients,
                         oxide.target_data.rogue_client,
+                        None,
+                        oxide.file_data.oui_database.search(&ap_addr),
                     );
                     oxide.access_points.add_or_update_device(ap_addr, &ap);
                 }
-                Frame::Data(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
-                }
+                Frame::Data(data_frame) => handle_data_frame(&data_frame, &radiotap, oxide)?,
                 Frame::NullData(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_null_data_frame(&data_frame, &radiotap, oxide)?
                 }
                 Frame::QosNull(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_null_data_frame(&data_frame, &radiotap, oxide)?
                 }
-                Frame::QosData(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
-                }
-                Frame::DataCfAck(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
-                }
-                Frame::DataCfPoll(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
-                }
+                Frame::QosData(data_frame) => handle_data_frame(&data_frame, &radiotap, oxide)?,
+                Frame::DataCfAck(data_frame) => handle_data_frame(&data_frame, &radiotap, oxide)?,
+                Frame::DataCfPoll(data_frame) => handle_data_frame(&data_frame, &radiotap, oxide)?,
                 Frame::DataCfAckCfPoll(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_data_frame(&data_frame, &radiotap, oxide)?
                 }
-                Frame::CfAck(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
-                }
-                Frame::CfPoll(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
-                }
+                Frame::CfAck(data_frame) => handle_null_data_frame(&data_frame, &radiotap, oxide)?,
+                Frame::CfPoll(data_frame) => handle_null_data_frame(&data_frame, &radiotap, oxide)?,
                 Frame::CfAckCfPoll(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_null_data_frame(&data_frame, &radiotap, oxide)?
                 }
                 Frame::QosDataCfAck(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_data_frame(&data_frame, &radiotap, oxide)?
                 }
                 Frame::QosDataCfPoll(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_data_frame(&data_frame, &radiotap, oxide)?
                 }
                 Frame::QosDataCfAckCfPoll(data_frame) => {
-                    handle_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_data_frame(&data_frame, &radiotap, oxide)?
                 }
                 Frame::QosCfPoll(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_null_data_frame(&data_frame, &radiotap, oxide)?
                 }
                 Frame::QosCfAckCfPoll(data_frame) => {
-                    handle_null_data_frame(&data_frame, &radiotap, oxide, (band, channel_u8))?
+                    handle_null_data_frame(&data_frame, &radiotap, oxide)?
                 }
             }
             // Post Processing
@@ -2037,7 +2078,6 @@ fn handle_data_frame(
     data_frame: &impl DataFrame,
     rthdr: &Radiotap,
     oxide: &mut OxideRuntime,
-    chan: (WiFiBand, u8),
 ) -> Result<(), String> {
     oxide.counters.data += 1;
 
@@ -2077,6 +2117,7 @@ fn handle_data_frame(
                     AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
                 },
                 Some(ap_addr),
+                oxide.file_data.oui_database.search(&station_addr),
             );
             clients.add_or_update_device(station_addr, client);
             oxide.unassoc_clients.remove_device(&station_addr);
@@ -2091,10 +2132,12 @@ fn handle_data_frame(
                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
             },
             None,
-            Some(chan),
+            None,
             None,
             clients,
             oxide.target_data.rogue_client,
+            None,
+            oxide.file_data.oui_database.search(&ap_addr),
         );
         oxide.access_points.add_or_update_device(ap_addr, &ap);
     }
@@ -2243,7 +2286,6 @@ fn handle_null_data_frame(
     data_frame: &impl NullDataFrame,
     rthdr: &Radiotap,
     oxide: &mut OxideRuntime,
-    chan: (WiFiBand, u8),
 ) -> Result<(), String> {
     oxide.counters.null_data += 1;
     let from_ds: bool = data_frame.header().frame_control.from_ds();
@@ -2281,6 +2323,7 @@ fn handle_null_data_frame(
                 AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
             },
             Some(ap_addr),
+            oxide.file_data.oui_database.search(&station_addr),
         );
         clients.add_or_update_device(station_addr, client);
         oxide.unassoc_clients.remove_device(&station_addr);
@@ -2293,10 +2336,12 @@ fn handle_null_data_frame(
             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?
         },
         None,
-        Some(chan),
+        None,
         None,
         clients,
         oxide.target_data.rogue_client,
+        None,
+        oxide.file_data.oui_database.search(&ap_addr),
     );
     oxide.access_points.add_or_update_device(ap_addr, &ap);
 

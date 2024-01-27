@@ -50,7 +50,6 @@ crc = "3.0.1"
 clap = { version = "4.4.10", features = ["derive"] }
 strum = "0.25.0"
 strum_macros = "0.25.3"
-mac_oui = { version = "0.4.8", features = ["with-db"] }
 derive_setters = "0.1.6"
 gpsd_proto = "1.0.0"
 itertools = "0.12.0"
@@ -65,3 +64,5 @@ procfs = "0.16.0"
 uname = "0.1.1"
 globset = "0.4.14"
 terminal-clipboard = "0.4.1"
+unicode-width = "0.1.11"
+stability = "0.1.1"

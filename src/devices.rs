@@ -1,18 +1,15 @@
 use globset::Glob;
-use libwifi::frame::components::MacAddress;
-use libwifi::{Addresses, Frame};
+use libwifi::frame::components::{MacAddress, WpsInformation};
 use nl80211_ng::channels::{WiFiBand, WiFiChannel};
 use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
-use ratatui::symbols;
-use ratatui::widgets::Row;
 use std::collections::HashMap;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::util::{epoch_to_iso_string, epoch_to_string, option_bool_to_json_string};
-use crate::OxideRuntime;
+use crate::oui::OuiRecord;
+use crate::util::{epoch_to_iso_string, epoch_to_string, option_bool_to_json_string, wps_to_json};
 
 // Constants for timeouts
 const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change state unless five seconds has passed.
@@ -86,6 +83,7 @@ trait HasSSID {
 #[derive(Clone, Debug)]
 pub struct AccessPoint {
     pub mac_address: MacAddress,
+    pub oui_data: Option<OuiRecord>,
     pub last_signal_strength: AntennaSignal,
     pub last_recv: u64,
     pub interactions: u64,
@@ -99,6 +97,7 @@ pub struct AccessPoint {
     pub has_pmkid: bool,
     pub is_target: bool,
     pub is_whitelisted: bool,
+    pub wps_data: Option<WpsInformation>
 }
 
 impl WiFiDeviceType for AccessPoint {}
@@ -113,6 +112,7 @@ impl Default for AccessPoint {
     fn default() -> Self {
         AccessPoint {
             mac_address: MacAddress([255, 255, 255, 255, 255, 255]),
+            oui_data: None,
             last_signal_strength: AntennaSignal::from_bytes(&[0u8]).unwrap(),
             last_recv: 0,
             interactions: 0,
@@ -126,6 +126,7 @@ impl Default for AccessPoint {
             has_pmkid: false,
             is_target: false,
             is_whitelisted: false,
+            wps_data: None
         }
     }
 }
@@ -138,6 +139,8 @@ impl AccessPoint {
         channel: Option<(WiFiBand, u8)>,
         information: Option<APFlags>,
         rogue_mac: MacAddress,
+        wps_data: Option<WpsInformation>,
+        oui_data: Option<OuiRecord>
     ) -> Self {
         let client_list = WiFiDeviceList::new();
         let last_recv = SystemTime::now()
@@ -153,6 +156,7 @@ impl AccessPoint {
 
         AccessPoint {
             mac_address,
+            oui_data,
             last_signal_strength,
             last_recv,
             interactions: 0,
@@ -170,6 +174,7 @@ impl AccessPoint {
             has_pmkid: false,
             is_target: false,
             is_whitelisted: false,
+            wps_data
         }
     }
 
@@ -181,6 +186,8 @@ impl AccessPoint {
         information: Option<APFlags>,
         client_list: WiFiDeviceList<Station>,
         rogue_mac: MacAddress,
+        wps_data: Option<WpsInformation>,
+        oui_data: Option<OuiRecord>,
     ) -> Self {
         let last_recv = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -195,6 +202,7 @@ impl AccessPoint {
 
         AccessPoint {
             mac_address,
+            oui_data,
             last_signal_strength,
             last_recv,
             interactions: 0,
@@ -212,6 +220,7 @@ impl AccessPoint {
             has_pmkid: false,
             is_target: false,
             is_whitelisted: false,
+            wps_data
         }
     }
 
@@ -252,7 +261,7 @@ impl AccessPoint {
 
     pub fn to_json_str(&self) -> String {
         format!(
-            "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {},\"ssid\": \"{}\",\"channel\": {},\"client_list\": [{}],\"information\": {},\"beacon_count\": {},\"has_hs\": {},\"has_pmkid\": {},\"is_target\": {},\"is_whitelisted\": {}}}",
+            "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {},\"ssid\": \"{}\",\"channel\": {},\"client_list\": [{}],\"information\": {}, \"wps_info\": {},\"beacon_count\": {},\"has_hs\": {},\"has_pmkid\": {},\"is_target\": {},\"is_whitelisted\": {}}}",
             self.mac_address,
             self.last_signal_strength.value,
             epoch_to_iso_string(self.last_recv),
@@ -263,6 +272,7 @@ impl AccessPoint {
                 .map_or("".to_string(), |ch| ch.short_string().to_string()),
             self.client_list.get_all_json(),
             self.information.to_json_str(),
+            wps_to_json(&self.wps_data),
             self.beacon_count,
             self.has_hs,
             self.has_pmkid,
@@ -350,6 +360,7 @@ impl APFlags {
 #[derive(Clone, Debug)]
 pub struct Station {
     pub mac_address: MacAddress,
+    pub oui_data: Option<OuiRecord>,
     pub last_signal_strength: AntennaSignal,
     pub last_recv: u64,
     pub interactions: u64,
@@ -368,6 +379,7 @@ impl Default for Station {
     fn default() -> Self {
         Station {
             mac_address: MacAddress([255, 255, 255, 255, 255, 255]),
+            oui_data: None,
             last_signal_strength: AntennaSignal::from_bytes(&[0u8]).unwrap(),
             last_recv: 0,
             interactions: 0,
@@ -386,9 +398,11 @@ impl Station {
         mac_address: MacAddress,
         signal_strength: AntennaSignal,
         access_point: Option<MacAddress>,
+        oui_info: Option<OuiRecord>,
     ) -> Station {
         Station {
             mac_address,
+            oui_data: oui_info,
             last_signal_strength: signal_strength,
             last_recv: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -408,9 +422,11 @@ impl Station {
         mac_address: MacAddress,
         signal_strength: AntennaSignal,
         probes: Vec<String>,
+        oui_info: Option<OuiRecord>,
     ) -> Station {
         Station {
             mac_address,
+            oui_data: oui_info,
             last_signal_strength: signal_strength,
             last_recv: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -680,6 +696,15 @@ impl WiFiDeviceList<AccessPoint> {
             }
             // Update information
             ap.information.update_with(&new_ap.information);
+
+            // Update WPS info
+            if let Some(orig) = &mut ap.wps_data {
+                if let Some(new_data) = &new_ap.wps_data {
+                    orig.update_with(new_data);
+                }
+            } else {
+                ap.wps_data = new_ap.wps_data.clone();
+            }
             return ap;
         }
         // Add a new access point
@@ -751,18 +776,63 @@ impl WiFiDeviceList<AccessPoint> {
             ];
             let mut height = 1;
             if selected_row.is_some() && idx == selected_row.unwrap() {
-                for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
-                    let last = idx == ap.client_list.size() - 1;
-                    let merged = add_client_rows(ap_row, client, last);
-                    ap_row = merged;
-                    height += 1;
+                height = 4;
+                for _ in 0..3 {
+                    for col in &mut ap_row {
+                        col.push('\n');
+                    }
                 }
-                
+                if ap.client_list.size() >= 1 {
+                    height += 1;
+                    ap_row = add_client_header(ap_row);
+                    for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
+                        let last = idx == ap.client_list.size() - 1;
+                        let merged = add_client_rows(ap_row, client, last);
+                        ap_row = merged;
+                        height += 1;
+                    }
+                }
             }
             rows.push((ap_row, height));
         }
         (headers, rows)
     }
+}
+
+fn add_client_header(ap_row: Vec<String>) -> Vec<String> {
+    let mut merged = Vec::with_capacity(ap_row.len());
+
+    let new_str: String = format!("{}\n", ap_row[0]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\nClients", ap_row[1]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[2]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[3]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[4]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[5]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[6]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[7]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[8]);
+    merged.push(new_str);
+
+    let new_str: String = format!("{}\n", ap_row[9]);
+    merged.push(new_str);
+
+    merged
 }
 
 fn add_client_rows(ap_row: Vec<String>, client: &Station, last: bool) -> Vec<String> {

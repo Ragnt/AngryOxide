@@ -1,6 +1,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use nom::AsBytes;
 use rand::{thread_rng, Rng, RngCore};
 
 /// This is our representation of a MAC-address
@@ -34,6 +35,17 @@ impl MacAddress {
             // Return None if the Vec is not exactly 6 bytes long
             None
         }
+    }
+
+    /// Generate u64.
+    pub fn to_u64(&self) -> u64 {
+        let bytes = self.0;
+        (bytes[0] as u64) << 40
+            | (bytes[1] as u64) << 32
+            | (bytes[2] as u64) << 24
+            | (bytes[3] as u64) << 16
+            | (bytes[4] as u64) << 8
+            | (bytes[5] as u64)
     }
 
     /// Generate string with delimitters.

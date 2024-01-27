@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Clone, Debug, Default)]
 /// StationInfo is used to parse and store variable length fields that are often sent
 /// with management frames.
@@ -25,6 +27,7 @@ pub struct StationInfo {
     pub vht_capabilities: Option<Vec<u8>>,
     pub rsn_information: Option<RsnInformation>,
     pub wpa_info: Option<WpaInformation>,
+    pub wps_info: Option<WpsInformation>,
     pub vendor_specific: Vec<VendorSpecificInfo>,
     pub data: Vec<(u8, Vec<u8>)>,
 }
@@ -146,6 +149,290 @@ impl StationInfo {
     }
 }
 
+pub enum Category {
+    Computer(Computers),
+    InputDevice(InputDevices),
+    PrintersScannersFaxCopier(PrintersEtAl),
+    Camera(Cameras),
+    Storage(Storage),
+    NetworkInfrastructure(NetworkInfrastructure),
+    Displays(Displays),
+    MultimediaDevices(MultimediaDevices),
+    GamingDevices(GamingDevices),
+    Telephone(Telephone),
+    AudioDevices(AudioDevices),
+    DockingDevices(DockingDevices),
+    Others,
+}
+
+impl fmt::Display for Category {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Category::Computer(sub) => write!(f, "{}", sub),
+            Category::InputDevice(sub) => write!(f, "{}", sub),
+            Category::PrintersScannersFaxCopier(sub) => {
+                write!(f, "{}", sub)
+            }
+            Category::Camera(sub) => write!(f, "{}", sub),
+            Category::Storage(sub) => write!(f, "{}", sub),
+            Category::NetworkInfrastructure(sub) => write!(f, "{}", sub),
+            Category::Displays(sub) => write!(f, "{}", sub),
+            Category::MultimediaDevices(sub) => write!(f, "{}", sub),
+            Category::GamingDevices(sub) => write!(f, "{}", sub),
+            Category::Telephone(sub) => write!(f, "{}", sub),
+            Category::AudioDevices(sub) => write!(f, "{}", sub),
+            Category::DockingDevices(sub) => write!(f, "{}", sub),
+            Category::Others => write!(f, "Others"),
+        }
+    }
+}
+
+pub enum Computers {
+    PC,
+    Server,
+    MediaCenter,
+    UltraMobilePC,
+    Notebook,
+    Desktop,
+    MID,
+    Netbook,
+    Tablet,
+    Ultrabook,
+}
+
+pub enum InputDevices {
+    Keyboard,
+    Mouse,
+    Joystick,
+    Trackball,
+    GamingController,
+    Remote,
+    Touchscreen,
+    BiometricReader,
+    BarcodeReader,
+}
+
+pub enum PrintersEtAl {
+    Printer,
+    Scanner,
+    Fax,
+    Copier,
+    AllInOne,
+}
+
+pub enum Cameras {
+    DigitalCamera,
+    VideoCamera,
+    Webcam,
+    SecurityCamera,
+}
+
+pub enum Storage {
+    NAS,
+}
+
+pub enum NetworkInfrastructure {
+    AP,
+    Router,
+    Switch,
+    Gateway,
+    Bridge,
+}
+
+pub enum Displays {
+    Television,
+    ElectronicPictureFrame,
+    Projector,
+    Monitor,
+}
+
+pub enum MultimediaDevices {
+    DAR,
+    PVR,
+    MCX,
+    SetTopBox,
+    MediaServer,
+    ProtableVideoPlayer,
+}
+
+pub enum GamingDevices {
+    Xbox,
+    Xbox360,
+    Playstation,
+    GameConsole,
+    PortableGamingDevice,
+}
+
+pub enum Telephone {
+    WindowsMobile,
+    PhoneSingleMode,
+    PhoneDualMode,
+    SmartphoneSingleMode,
+    SmartphoneDualMode,
+}
+
+pub enum AudioDevices {
+    AutioTunerReceiver,
+    Speakers,
+    PortableMusicPlayer,
+    Headset,
+    Headphones,
+    Microphone,
+    HomeTheaterSystems,
+}
+
+pub enum DockingDevices {
+    ComputerDockingStation,
+    MediaKiosk,
+}
+
+impl fmt::Display for Computers {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Computers::PC => write!(f, "PC"),
+            Computers::Server => write!(f, "Server"),
+            Computers::MediaCenter => write!(f, "Media Center"),
+            Computers::UltraMobilePC => write!(f, "Ultra Mobile PC"),
+            Computers::Notebook => write!(f, "Notebook"),
+            Computers::Desktop => write!(f, "Desktop"),
+            Computers::MID => write!(f, "Mobile Internet Device"),
+            Computers::Netbook => write!(f, "Netbook"),
+            Computers::Tablet => write!(f, "Tablet"),
+            Computers::Ultrabook => write!(f, "Ultrabook"),
+        }
+    }
+}
+
+impl fmt::Display for InputDevices {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            InputDevices::Keyboard => write!(f, "Keyboard"),
+            InputDevices::Mouse => write!(f, "Mouse"),
+            InputDevices::Joystick => write!(f, "Joystick"),
+            InputDevices::Trackball => write!(f, "Trackball"),
+            InputDevices::GamingController => write!(f, "Gaming Controller"),
+            InputDevices::Remote => write!(f, "Input Remote"),
+            InputDevices::Touchscreen => write!(f, "Touchscreen"),
+            InputDevices::BiometricReader => write!(f, "Biometric Reader"),
+            InputDevices::BarcodeReader => write!(f, "Barcode Reader"),
+        }
+    }
+}
+
+impl fmt::Display for PrintersEtAl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PrintersEtAl::Printer => write!(f, "Printer"),
+            PrintersEtAl::Scanner => write!(f, "Scanner"),
+            PrintersEtAl::Fax => write!(f, "Fax Machine"),
+            PrintersEtAl::Copier => write!(f, "Copier"),
+            PrintersEtAl::AllInOne => write!(f, "All-In-One Printer"),
+        }
+    }
+}
+
+impl fmt::Display for Cameras {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Cameras::DigitalCamera => write!(f, "Digital Camera"),
+            Cameras::VideoCamera => write!(f, "Video Camera"),
+            Cameras::Webcam => write!(f, "Webcam"),
+            Cameras::SecurityCamera => write!(f, "Security Camera"),
+        }
+    }
+}
+
+impl fmt::Display for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Storage::NAS => write!(f, "NAS"),
+        }
+    }
+}
+
+impl fmt::Display for NetworkInfrastructure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NetworkInfrastructure::AP => write!(f, "Access Point"),
+            NetworkInfrastructure::Router => write!(f, "Router"),
+            NetworkInfrastructure::Switch => write!(f, "Network Switch"),
+            NetworkInfrastructure::Gateway => write!(f, "Network Gateway"),
+            NetworkInfrastructure::Bridge => write!(f, "Network Bridge"),
+        }
+    }
+}
+
+impl fmt::Display for Displays {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Displays::Television => write!(f, "Television"),
+            Displays::ElectronicPictureFrame => write!(f, "Electronic Picture Frame"),
+            Displays::Projector => write!(f, "Projector"),
+            Displays::Monitor => write!(f, "Monitor"),
+        }
+    }
+}
+
+impl fmt::Display for MultimediaDevices {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MultimediaDevices::DAR => write!(f, "Digital Audio Recorder"),
+            MultimediaDevices::PVR => write!(f, "Personal Video Recorder"),
+            MultimediaDevices::MCX => write!(f, "Media Center Extender"),
+            MultimediaDevices::SetTopBox => write!(f, "Set-Top Box"),
+            MultimediaDevices::MediaServer => write!(f, "Media Server"),
+            MultimediaDevices::ProtableVideoPlayer => write!(f, "Portable Video Player"),
+        }
+    }
+}
+
+impl fmt::Display for GamingDevices {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GamingDevices::Xbox => write!(f, "Xbox"),
+            GamingDevices::Xbox360 => write!(f, "Xbox 360"),
+            GamingDevices::Playstation => write!(f, "Playstation"),
+            GamingDevices::GameConsole => write!(f, "Game Console"),
+            GamingDevices::PortableGamingDevice => write!(f, "Portable Gaming Device"),
+        }
+    }
+}
+
+impl fmt::Display for Telephone {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Telephone::WindowsMobile => write!(f, "Windows Mobile"),
+            Telephone::PhoneSingleMode => write!(f, "Phone Single Mode"),
+            Telephone::PhoneDualMode => write!(f, "Phone Dual Mode"),
+            Telephone::SmartphoneSingleMode => write!(f, "Smartphone Single Mode"),
+            Telephone::SmartphoneDualMode => write!(f, "Smartphone Dual Mode"),
+        }
+    }
+}
+
+impl fmt::Display for AudioDevices {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AudioDevices::AutioTunerReceiver => write!(f, "Audio Tuner Receiver"),
+            AudioDevices::Speakers => write!(f, "Speakers"),
+            AudioDevices::PortableMusicPlayer => write!(f, "Portable Music Player"),
+            AudioDevices::Headset => write!(f, "Headset"),
+            AudioDevices::Headphones => write!(f, "Headphones"),
+            AudioDevices::Microphone => write!(f, "Microphone"),
+            AudioDevices::HomeTheaterSystems => write!(f, "Home Theater Systems"),
+        }
+    }
+}
+
+impl fmt::Display for DockingDevices {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DockingDevices::ComputerDockingStation => write!(f, "Computer Docking Station"),
+            DockingDevices::MediaKiosk => write!(f, "Media Kiosk"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct VendorSpecificInfo {
     pub element_id: u8,
@@ -166,6 +453,63 @@ impl VendorSpecificInfo {
         bytes.extend(&self.data);
 
         bytes
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct WpsInformation {
+    pub setup_state: WpsSetupState,
+    pub manufacturer: String,
+    pub model: String,
+    pub model_number: String,
+    pub serial_number: String,
+    pub primary_device_type: String,
+    pub device_name: String,
+}
+
+impl WpsInformation {
+    pub fn update_with(&mut self, other: &WpsInformation) {
+        if other.setup_state != WpsSetupState::NotConfigured {
+            self.setup_state = other.setup_state;
+        }
+
+        if !other.manufacturer.is_empty() {
+            self.manufacturer = other.manufacturer.clone();
+        }
+
+        if !other.model.is_empty() {
+            self.model = other.model.clone();
+        }
+        if !other.model_number.is_empty() {
+            self.model_number = other.model_number.clone();
+        }
+        if !other.serial_number.is_empty() {
+            self.serial_number = other.serial_number.clone();
+        }
+
+        if !other.primary_device_type.is_empty() {
+            self.primary_device_type = other.primary_device_type.clone();
+        }
+
+        if !other.device_name.is_empty() {
+            self.device_name = other.device_name.clone();
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum WpsSetupState {
+    #[default]
+    NotConfigured = 0x01,
+    Configured = 0x02,
+}
+
+impl ToString for WpsSetupState {
+    fn to_string(&self) -> String {
+        match self {
+            WpsSetupState::NotConfigured => "Not Configured".to_string(),
+            WpsSetupState::Configured => "Configured".to_string(),
+        }
     }
 }
 

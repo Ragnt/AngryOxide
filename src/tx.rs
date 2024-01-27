@@ -230,6 +230,7 @@ pub fn build_association_request_rg(
                 ocvc: false,
             }),
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: vec![
                 /* RM Enabled Capabilities */
@@ -303,6 +304,7 @@ pub fn build_association_request(
                 ocvc: false,
             }),
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: vec![
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
@@ -444,6 +446,7 @@ pub fn build_reassociation_request(
                 ocvc: false,
             }),
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: vec![
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
@@ -491,6 +494,7 @@ pub fn build_probe_request_undirected(addr_rogue: &MacAddress, sequence: u16) ->
             vht_capabilities: None,
             rsn_information: None,
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: Vec::new(),
         },
@@ -539,6 +543,7 @@ pub fn build_probe_request_target(
             vht_capabilities: None,
             rsn_information: None,
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: Vec::new(),
         },
@@ -588,6 +593,7 @@ pub fn build_probe_request_directed(
             vht_capabilities: None,
             rsn_information: None,
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: Vec::new(),
         },
@@ -654,6 +660,7 @@ pub fn build_probe_response(
                 ocvc: false,
             }),
             wpa_info: None,
+            wps_info: None,
             vendor_specific: Vec::new(),
             data: Vec::new(),
         },
@@ -725,6 +732,7 @@ pub fn build_association_response(
             vht_capabilities: None,
             rsn_information: None,
             wpa_info: None,
+            wps_info: None,
             vendor_specific: vec![],
             data: vec![],
         },
