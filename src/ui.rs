@@ -1,3 +1,6 @@
+use copypasta_ext::osc52::Osc52ClipboardContext;
+use copypasta_ext::prelude::*;
+use copypasta_ext::x11_bin::X11BinClipboardContext;
 use derive_setters::Setters;
 use gpsd_proto::Mode;
 use libwifi::frame::components::MacAddress;
@@ -5,11 +8,19 @@ use rand::Rng;
 use std::{io::Result, time::Instant};
 
 use crate::{
-    advancedtable::{self, advtable::AdvTable}, auth::{FourWayHandshake, HandshakeStorage}, devices::{AccessPoint, Station, WiFiDeviceList}, matrix::MatrixSnowstorm, snowstorm::Snowstorm, status::StatusMessage, tabbedblock::{
+    advancedtable::{self, advtable::AdvTable},
+    auth::{FourWayHandshake, HandshakeStorage},
+    devices::{AccessPoint, Station, WiFiDeviceList},
+    matrix::MatrixSnowstorm,
+    snowstorm::Snowstorm,
+    status::StatusMessage,
+    tabbedblock::{
         tab::{Position, Tab},
         tabbedblock::TabbedBlock,
         tabbedblock::{BorderType, TabType},
-    }, util::epoch_to_string, OxideRuntime
+    },
+    util::epoch_to_string,
+    OxideRuntime,
 };
 
 use nl80211_ng::get_interface_info_idx;
@@ -600,13 +611,17 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     if oxide.ui_state.copy_short {
         if let Some(ap) = selected_object {
-            terminal_clipboard::set_string(ap.mac_address.to_string()).unwrap();
+            let mut ctx =
+                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
+            ctx.set_contents(ap.mac_address.to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(ap) = selected_object {
-            terminal_clipboard::set_string(ap.to_json_str()).unwrap();
+            let mut ctx =
+                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
+            ctx.set_contents(ap.to_json_str()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
@@ -694,60 +709,78 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
                 height: area.height,
             };
 
-            let block = Block::default().borders(Borders::LEFT | Borders::BOTTOM | Borders::RIGHT );
+            let block = Block::default().borders(Borders::LEFT | Borders::BOTTOM | Borders::RIGHT);
             let block_inner = block.inner(block_area);
             frame.render_widget(block, block_area);
 
             let block_layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints(vec![
-                    Constraint::Length(3),
-                    Constraint::Min(0),
-                ])
+                .constraints(vec![Constraint::Length(3), Constraint::Min(0)])
                 .split(block_inner);
-            
+
             let top_layout = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints(vec![
-                    Constraint::Length(50),
-                    Constraint::Length(50),
-                ])
+                .constraints(vec![Constraint::Length(50), Constraint::Length(50)])
                 .split(block_layout[0]);
-            
+
             let left_side = Paragraph::new(vec![
-                Line::from(vec![Span::from("WPS Status: "), Span::from(ap.wps_data.as_ref().map_or("Not Present".to_string(), |f| f.setup_state.to_string()))]),
-                Line::from(vec![Span::from("OUI Lookup: "), Span::from(ap.oui_data.as_ref().map_or("Unknown".to_string(), |f| f.long_name()))]),
-                Line::from(vec![Span::from("WPA Mode: "), Span::from(ap.information.get_rsn_akm_true())]),
-                    ],
-            );
+                Line::from(vec![
+                    Span::from("WPS Status: "),
+                    Span::from(
+                        ap.wps_data
+                            .as_ref()
+                            .map_or("Not Present".to_string(), |f| f.setup_state.to_string()),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::from("OUI Lookup: "),
+                    Span::from(
+                        ap.oui_data
+                            .as_ref()
+                            .map_or("Unknown".to_string(), |f| f.long_name()),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::from("WPA Mode: "),
+                    Span::from(ap.information.get_rsn_akm_true()),
+                ]),
+            ]);
 
             let right_side = Paragraph::new(vec![
-                Line::from(vec![Span::from("Make: "), Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
-                    let str = format!("{}", f.manufacturer);
-                    if str.is_empty() {
-                        "Unknown".to_string()
-                    } else {
-                        str
-                    }
-                }))]),
-                Line::from(vec![Span::from("Device Name: "), Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
-                    let str = format!("{}", f.device_name);
-                    if str.is_empty() {
-                        "Unknown".to_string()
-                    } else {
-                        str
-                    }
-                }))]),
-                Line::from(vec![Span::from("Device Type: "), Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
-                    let str = format!("{}", f.primary_device_type);
-                    if str.is_empty() {
-                        "Unknown".to_string()
-                    } else {
-                        str
-                    }
-                }))]),
-                    ],
-            );
+                Line::from(vec![
+                    Span::from("Make: "),
+                    Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
+                        let str = format!("{}", f.manufacturer);
+                        if str.is_empty() {
+                            "Unknown".to_string()
+                        } else {
+                            str
+                        }
+                    })),
+                ]),
+                Line::from(vec![
+                    Span::from("Device Name: "),
+                    Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
+                        let str = format!("{}", f.device_name);
+                        if str.is_empty() {
+                            "Unknown".to_string()
+                        } else {
+                            str
+                        }
+                    })),
+                ]),
+                Line::from(vec![
+                    Span::from("Device Type: "),
+                    Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
+                        let str = format!("{}", f.primary_device_type);
+                        if str.is_empty() {
+                            "Unknown".to_string()
+                        } else {
+                            str
+                        }
+                    })),
+                ]),
+            ]);
 
             frame.render_widget(left_side, top_layout[0]);
             frame.render_widget(right_side, top_layout[1]);
@@ -756,18 +789,23 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
                 // Draw header
                 let mut current_y = 0;
                 let row_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints(vec![
-                    Constraint::Min(20),
-                    Constraint::Min(10),
-                    Constraint::Min(10),
-                    Constraint::Min(10),
-                ])
-                .split(Rect { x: block_layout[1].x, y: block_layout[1].y+current_y, width: block_layout[1].width, height: 1 });
+                    .direction(Direction::Horizontal)
+                    .constraints(vec![
+                        Constraint::Min(20),
+                        Constraint::Min(10),
+                        Constraint::Min(10),
+                        Constraint::Min(10),
+                    ])
+                    .split(Rect {
+                        x: block_layout[1].x,
+                        y: block_layout[1].y + current_y,
+                        width: block_layout[1].width,
+                        height: 1,
+                    });
                 let cl = Paragraph::new("Clients");
                 let last = Paragraph::new("Last");
                 let rssi = Paragraph::new("RSSI");
-                let tx= Paragraph::new("Tx");
+                let tx = Paragraph::new("Tx");
                 frame.render_widget(cl, row_layout[0]);
                 frame.render_widget(last, row_layout[1]);
                 frame.render_widget(rssi, row_layout[2]);
@@ -780,21 +818,29 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
                     current_y += 1;
                     let row_layout = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints(vec![
-                        Constraint::Min(20),
-                        Constraint::Min(10),
-                        Constraint::Min(10),
-                        Constraint::Min(10),
-                    ])
-                    .split(Rect { x: block_layout[1].x, y: block_layout[1].y+current_y, width: block_layout[1].width, height: 1 });
+                        .direction(Direction::Horizontal)
+                        .constraints(vec![
+                            Constraint::Min(20),
+                            Constraint::Min(10),
+                            Constraint::Min(10),
+                            Constraint::Min(10),
+                        ])
+                        .split(Rect {
+                            x: block_layout[1].x,
+                            y: block_layout[1].y + current_y,
+                            width: block_layout[1].width,
+                            height: 1,
+                        });
                     let cl = Paragraph::new(format!(" {}{}", icon, client.mac_address));
                     let last = Paragraph::new(format!("{}", epoch_to_string(client.last_recv)));
-                    let rssi = Paragraph::new(format!("{}", match client.last_signal_strength.value {
-                        0 => "".to_string(),
-                        _ => client.last_signal_strength.value.to_string(),
-                    }));
-                    let tx= Paragraph::new(format!("{}", client.interactions));
+                    let rssi = Paragraph::new(format!(
+                        "{}",
+                        match client.last_signal_strength.value {
+                            0 => "".to_string(),
+                            _ => client.last_signal_strength.value.to_string(),
+                        }
+                    ));
+                    let tx = Paragraph::new(format!("{}", client.interactions));
                     frame.render_widget(cl, row_layout[0]);
                     frame.render_widget(last, row_layout[1]);
                     frame.render_widget(rssi, row_layout[2]);
@@ -803,7 +849,7 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
             }
 
             /*
-            
+
 
             let make_model_block =
                 Paragraph::new(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
@@ -854,13 +900,17 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
 
     if oxide.ui_state.copy_short {
         if let Some(station) = selected_object {
-            terminal_clipboard::set_string(station.mac_address.to_string()).unwrap();
+            let mut ctx =
+                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
+            ctx.set_contents(station.mac_address.to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(station) = selected_object {
-            terminal_clipboard::set_string(station.to_json_str()).unwrap();
+            let mut ctx =
+                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
+            ctx.set_contents(station.to_json_str()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
@@ -950,13 +1000,17 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     if oxide.ui_state.copy_short {
         if let Some(hs) = selected_object {
-            terminal_clipboard::set_string(hs.json_summary()).unwrap();
+            let mut ctx =
+                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
+            ctx.set_contents(hs.json_summary()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(hs) = selected_object {
-            terminal_clipboard::set_string(hs.json_detail()).unwrap();
+            let mut ctx =
+                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
+            ctx.set_contents(hs.json_detail()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
