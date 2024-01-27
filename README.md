@@ -6,7 +6,7 @@
 
 [![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Ragnt/AngryOxide) [![Discord](https://img.shields.io/discord/1194365883099922643)](https://discord.gg/QsEgaFndsQ)
 
-
+**This tool is for research purposes only. I am not responsible for anything you do or damage you cause while using AngryOxide**
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
