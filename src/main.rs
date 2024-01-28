@@ -687,8 +687,8 @@ impl OxideRuntime {
         println!("💲 OUI Records Imported: {}", oui_db.record_count());
 
         // Open sockets
-        let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
-        let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
+        let rx_socket = open_socket_rx(idx.try_into().unwrap()).expect("Failed to open RX Socket.");
+        let tx_socket = open_socket_tx(idx.try_into().unwrap()).expect("Failed to open TX Socket.");
         thread::sleep(Duration::from_millis(500));
 
         println!(
@@ -1056,9 +1056,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         rsn_akm_pskft: station_info.rsn_information.as_ref().map(
                                             |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
                                         ),
-                                        rsn_akm_sae: station_info.rsn_information.as_ref().map(
-                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE),
-                                        ),
+                                        rsn_akm_sae: station_info
+                                            .rsn_information
+                                            .as_ref()
+                                            .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
                                         wpa_akm_psk: station_info
                                             .wpa_info
                                             .as_ref()
@@ -1268,9 +1269,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         rsn_akm_pskft: station_info.rsn_information.as_ref().map(
                                             |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
                                         ),
-                                        rsn_akm_sae: station_info.rsn_information.as_ref().map(
-                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE),
-                                        ),
+                                        rsn_akm_sae: station_info
+                                            .rsn_information
+                                            .as_ref()
+                                            .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
                                         wpa_akm_psk: station_info
                                             .wpa_info
                                             .as_ref()
@@ -1671,9 +1673,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     .as_ref()
                                     .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT)),
                                 rsn_akm_sae: station_info
-                                        .rsn_information
-                                        .as_ref()
-                                        .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
+                                    .rsn_information
+                                    .as_ref()
+                                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
                                 wpa_akm_psk: station_info
                                     .wpa_info
                                     .as_ref()
