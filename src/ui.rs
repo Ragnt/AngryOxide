@@ -703,13 +703,13 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
     if let Some(area) = select_area {
         if let Some(ap) = selected_object {
             let block_area = Rect {
-                x: area.x + 9,
+                x: area.x + 2,
                 y: area.y,
-                width: area.width - 18,
+                width: area.width - 4,
                 height: area.height,
             };
 
-            let block = Block::default().borders(Borders::LEFT | Borders::BOTTOM | Borders::RIGHT);
+            let block = Block::default().borders(Borders::ALL).title(" Details ");
             let block_inner = block.inner(block_area);
             frame.render_widget(block, block_area);
 

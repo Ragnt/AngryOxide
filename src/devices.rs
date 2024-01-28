@@ -806,24 +806,12 @@ impl WiFiDeviceList<AccessPoint> {
             ];
             let mut height = 1;
             if selected_row.is_some() && idx == selected_row.unwrap() {
-                height = 5;
-                for _ in 0..3 {
-                    for col in &mut ap_row {
-                        col.push('\n');
-                    }
-                }
+                height = 6;
                 if ap.client_list.size() >= 1 {
                     height += 1; // Add 1 for the "Clients" text
-                    //ap_row = add_client_header(ap_row);
-                    for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
+                    for _ in ap.client_list.clone().get_devices().values() {
                         height += 1; // add 1 for each client
                     }
-                    /*for (idx, client) in ap.client_list.clone().get_devices().values().enumerate() {
-                        let last = idx == ap.client_list.size() - 1;
-                        let merged = add_client_rows(ap_row, client, last);
-                        ap_row = merged;
-                        height += 1;
-                    }*/
                 }
             }
             rows.push((ap_row, height));

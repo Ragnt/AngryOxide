@@ -2452,11 +2452,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Duration::from_millis(50)
     };
 
-    /*
-    let mut last_interactions_clear = Instant::now();
-    let interactions_interval = Duration::from_secs(120);
-    */
-
     // Setup hop data
     let mut last_hop_time = Instant::now();
     let mut first_channel = (0u8, 0u8);
@@ -2590,11 +2585,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if (band, channel) == first_channel {
                     hop_cycle += 1;
                 }
-                if let Err(e) = oxide
-                    .if_hardware
-                    .netlink
-                    .set_interface_chan(idx, channel, band)
-                {
+                if let Err(e) = set_interface_chan(idx, channel, band) {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Channel Switch Error: {e:?}"),
