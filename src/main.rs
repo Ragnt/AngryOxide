@@ -667,23 +667,16 @@ impl OxideRuntime {
             netlink.set_interface_monitor(false, idx).ok();
         }
 
-        iface = if let Some(interface) = netlink
-            .get_interfaces()
-            .iter()
-            .find(|&(_, iface)| iface.name_as_string() == interface_name)
-            .map(|(_, iface)| iface.clone())
-        {
-            interface
-        } else {
-            println!("{}", get_art("Interface not found"));
-            exit(EXIT_FAILURE);
-        };
-
-        if let Some(iftype) = iface.current_iftype {
-            if iftype != Nl80211Iftype::IftypeMonitor {
-                println!("{}", get_art("Interface did not go into Monitor mode"));
-                exit(EXIT_FAILURE);
+        if let Ok(after) = get_interface_info_idx(idx) {
+            if let Some(iftype) = after.current_iftype {
+                if iftype != Nl80211Iftype::IftypeMonitor {
+                    println!("{}", get_art("Interface did not go into Monitor mode"));
+                    exit(EXIT_FAILURE);
+                }
             }
+        } else {
+            println!("{}", get_art("Couldn't re-retrieve interface info."));
+            exit(EXIT_FAILURE);
         }
 
         // Set interface up
