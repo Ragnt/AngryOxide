@@ -335,7 +335,7 @@ impl OxideRuntime {
 
         let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
 
-        let iface = if let Some(interface) = netlink
+        let mut iface = if let Some(interface) = netlink
             .get_interfaces()
             .iter()
             .find(|&(_, iface)| iface.name_as_string() == interface_name)
@@ -666,6 +666,18 @@ impl OxideRuntime {
         } else {
             netlink.set_interface_monitor(false, idx).ok();
         }
+
+        iface = if let Some(interface) = netlink
+            .get_interfaces()
+            .iter()
+            .find(|&(_, iface)| iface.name_as_string() == interface_name)
+            .map(|(_, iface)| iface.clone())
+        {
+            interface
+        } else {
+            println!("{}", get_art("Interface not found"));
+            exit(EXIT_FAILURE);
+        };
 
         if let Some(iftype) = iface.current_iftype {
             if iftype != Nl80211Iftype::IftypeMonitor {
