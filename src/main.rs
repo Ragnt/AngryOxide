@@ -667,10 +667,8 @@ impl OxideRuntime {
             netlink.set_interface_monitor(false, idx).ok();
         }
 
-        if let Some(ref phy) = iface.phy {
-            if phy.current_iftype.clone().is_some()
-                && phy.current_iftype.unwrap() != Nl80211Iftype::IftypeMonitor
-            {
+        if let Some(iftype) = iface.current_iftype {
+            if iftype != Nl80211Iftype::IftypeMonitor {
                 println!("{}", get_art("Interface did not go into Monitor mode"));
                 exit(EXIT_FAILURE);
             }
