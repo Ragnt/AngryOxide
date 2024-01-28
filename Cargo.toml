@@ -59,7 +59,7 @@ uuid = { version = "1.6.1", features = ["v4"] }
 crc32fast = "1.3.2"
 flate2 = { version = "1.0.28", features = ["zlib"] }
 tar = "0.4.40"
-nl80211-ng = "0.2.4"
+nl80211-ng = "0.2.5"
 procfs = "0.16.0"
 uname = "0.1.1"
 globset = "0.4.14"
