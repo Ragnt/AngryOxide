@@ -2585,7 +2585,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if (band, channel) == first_channel {
                     hop_cycle += 1;
                 }
-                if let Err(e) = set_interface_chan(idx, channel, band) {
+                if let Err(e) = oxide
+                    .if_hardware
+                    .netlink
+                    .set_interface_chan(idx, channel, band)
+                {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Channel Switch Error: {e:?}"),
