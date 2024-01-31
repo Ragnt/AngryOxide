@@ -76,7 +76,7 @@ impl AuthSequence {
 // Trait to restrict WiFiDeviceList
 pub trait WiFiDeviceType {}
 
-trait HasSSID {
+pub trait HasSSID {
     fn ssid(&self) -> &Option<String>;
 }
 
