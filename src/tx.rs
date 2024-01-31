@@ -354,7 +354,7 @@ pub fn build_disassocation_from_ap(
     ap_mac: &MacAddress,
     client_mac: &MacAddress,
     sequence: u16,
-    reason_code: DeauthenticationReason,
+    _reason_code: DeauthenticationReason,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 

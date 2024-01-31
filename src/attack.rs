@@ -2,7 +2,6 @@
 
 use std::{
     os::fd::AsRawFd,
-    sync::mpsc::channel,
     time::{Duration, SystemTime},
 };
 
@@ -13,8 +12,7 @@ use libwifi::{
     },
     parse_frame, Addresses, Frame,
 };
-use nl80211_ng::channels::{WiFiBand, WiFiChannel};
-use rand::seq::SliceRandom;
+use nl80211_ng::channels::WiFiBand;
 
 use crate::{
     status::{MessageType, StatusMessage},
@@ -22,7 +20,7 @@ use crate::{
         build_association_request_rg, build_authentication_frame_noack, build_csa_beacon,
         build_deauthentication_fm_ap, build_deauthentication_fm_client,
         build_disassocation_from_ap, build_disassocation_from_client,
-        build_probe_request_undirected, build_probe_response, build_reassociation_request,
+        build_probe_response, build_reassociation_request,
     },
     write_packet, OxideRuntime,
 };

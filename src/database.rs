@@ -1,11 +1,7 @@
-use byteorder::{ByteOrder, LE};
-use libwifi::frame::components::MacAddress;
 use nl80211_ng::Interface;
 
 use rusqlite::{params, Connection, Result};
-use std::borrow::Cow;
-use std::fs::File;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 use std::{
     sync::{
         self,
@@ -14,11 +10,8 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::SystemTime,
 };
-use uuid::{uuid, Uuid};
 
-use crate::gps::{self, GpsData};
 use crate::pcapng::FrameData;
 
 pub struct DatabaseWriter {
@@ -156,7 +149,7 @@ pub fn setup_database(conn: &Connection, datasource: String, interface: Interfac
 
 fn add_frame(conn: &Connection, frx: &FrameData) {
     let packet_data = PacketData::new(frx);
-    let result = conn.execute(
+    let _result = conn.execute(
         "INSERT INTO packets (ts_sec, ts_usec, phyname, sourcemac, destmac, transmac, frequency, devkey, lat, lon, alt, speed, heading, packet_len, signal, datasource, dlt, packet, error, tags, datarate, hash, packetid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         params![
             packet_data.ts_sec, 

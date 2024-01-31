@@ -2,7 +2,7 @@
 use std::iter;
 
 use itertools::Itertools;
-use ratatui::{layout::Constraint, style::Style, text::Text, widgets::Paragraph};
+use ratatui::{layout::Constraint, style::Style, text::Text};
 use strum::{Display, EnumString};
 use unicode_width::UnicodeWidthStr;
 

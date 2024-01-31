@@ -1,18 +1,16 @@
-use byteorder::{ByteOrder, LE};
+
 use crossterm::event::{poll, Event, KeyCode, KeyEventKind, MouseEventKind};
 
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 use std::{
     sync::{
         self,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex,
+        Arc,
     },
     thread,
-    time::SystemTime,
 };
-use uuid::Uuid;
 
 pub enum EventType {
     Key(Event),
@@ -60,7 +58,7 @@ impl EventHandler {
                     let event = crossterm::event::read().unwrap();
                     if let Event::Key(key) = event {
                         if key.kind == KeyEventKind::Press {
-                            match key.code {
+                            let _ = match key.code {
                                 KeyCode::Char('d') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('a') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('W') => tx.send(EventType::Key(event)),
@@ -88,14 +86,14 @@ impl EventHandler {
                             };
                         }
                     } else if let Event::Mouse(mouse) = event {
-                        match mouse.kind {
+                        let _ = match mouse.kind {
                             MouseEventKind::ScrollDown => tx.send(EventType::Key(event)),
                             MouseEventKind::ScrollUp => tx.send(EventType::Key(event)),
                             _ => Ok({}),
                         };
                     }
                 }
-                tx.send(EventType::Tick);
+                let _ = tx.send(EventType::Tick);
             }
         }));
     }

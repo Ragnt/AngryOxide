@@ -2,9 +2,7 @@ use copypasta_ext::osc52::Osc52ClipboardContext;
 use copypasta_ext::prelude::*;
 use copypasta_ext::x11_bin::X11BinClipboardContext;
 use derive_setters::Setters;
-use gpsd_proto::Mode;
 use libwifi::frame::components::MacAddress;
-use rand::Rng;
 use std::{io::Result, time::Instant};
 
 use crate::{
@@ -23,7 +21,6 @@ use crate::{
     OxideRuntime,
 };
 
-use nl80211_ng::get_interface_info_idx;
 
 // Ratatui imports:
 use ratatui::{

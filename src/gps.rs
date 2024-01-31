@@ -1,10 +1,7 @@
 use chrono::prelude::*;
-use gpsd_proto::{get_data, handshake, GpsdError, ResponseData};
-use itertools::Itertools;
-
-use std::io::{self, BufReader, BufWriter};
+use gpsd_proto::{get_data, handshake, ResponseData};
+use std::io::{self, BufReader};
 use std::net::TcpStream;
-use std::os::unix::thread::JoinHandleExt;
 
 use std::time::{Duration, UNIX_EPOCH};
 use std::{
@@ -383,7 +380,7 @@ impl Fixed3_7 {
         if self.value > 3600000000 {
             panic!("Value too much");
         }
-        let remapped = (self.value as i64 - (180 * 10000000));
+        let remapped = self.value as i64 - (180 * 10000000);
         remapped as f64 / 10000000.0
     }
 }

@@ -1,4 +1,4 @@
-use byteorder::{ByteOrder, LE};
+use byteorder::LE;
 use crc32fast::Hasher;
 use libwifi::frame::components::MacAddress;
 use nl80211_ng::Interface;
@@ -8,7 +8,7 @@ use pcap_file::pcapng::blocks::interface_description::{
 };
 use pcap_file::pcapng::blocks::opt_common::CustomBinaryOption;
 use pcap_file::pcapng::blocks::section_header::{SectionHeaderBlock, SectionHeaderOption};
-use pcap_file::pcapng::{PcapNgBlock, PcapNgWriter};
+use pcap_file::pcapng::PcapNgWriter;
 use pcap_file::{DataLink, Endianness};
 use std::borrow::Cow;
 use std::fs::File;
@@ -26,8 +26,7 @@ use std::{
 use uname::uname;
 use uuid::Uuid;
 
-use crate::gps::{self, GpsData};
-use crate::status::{self, MessageType, StatusMessage};
+use crate::gps::GpsData;
 
 #[derive(Clone, Debug)]
 pub struct FrameData {

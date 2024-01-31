@@ -1,20 +1,17 @@
 use std::{
     collections::HashMap,
     fmt,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 
 use chrono::{DateTime, Local};
 
-use libwifi::frame::{components::MacAddress, EapolKey, KeyInformation, MessageType, Pmkid};
+use libwifi::frame::{components::MacAddress, EapolKey, MessageType, Pmkid};
 
-use crate::{
-    util::{
-        eapol_to_json_str, epoch_to_iso_string, epoch_to_string, key_info_to_json_str,
+use crate::util::{
+        eapol_to_json_str,
         slice_to_hex_string, system_time_to_iso8601,
-    },
-    OxideRuntime,
-};
+    };
 
 #[derive(Clone, Debug, Default)]
 pub struct FourWayHandshake {

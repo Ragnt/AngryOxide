@@ -13,9 +13,9 @@ use super::tab::{Position, Tab};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Color, Style, Styled},
+    style::{Style, Styled},
     symbols::line,
-    text::{Line, Span},
+    text::Line,
     widgets::{Borders, Clear, Widget},
 };
 

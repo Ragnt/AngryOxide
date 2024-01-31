@@ -1,7 +1,6 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use nom::AsBytes;
 use rand::{thread_rng, Rng, RngCore};
 
 /// This is our representation of a MAC-address

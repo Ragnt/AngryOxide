@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod advancedtable;
 mod ascii;
 mod attack;
@@ -109,8 +110,8 @@ struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
     interface: String,
-    #[arg(short, long)]
-    /// Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified.
+    #[arg(short, long, use_value_delimiter = true, value_parser, num_args = 1, action = clap::ArgAction::Append)]
+    /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
     channel: Vec<String>,
     #[arg(short, long)]
     /// Optional - Entire band to scan - will include all channels interface can support.
@@ -335,7 +336,7 @@ impl OxideRuntime {
 
         let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
 
-        let mut iface = if let Some(interface) = netlink
+        let iface = if let Some(interface) = netlink
             .get_interfaces()
             .iter()
             .find(|&(_, iface)| iface.name_as_string() == interface_name)
@@ -985,7 +986,6 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
         .unwrap();
     oxide.if_hardware.current_channel = current_channel.clone();
     let band: WiFiBand = current_channel.get_band();
-    let channel_u8: u8 = current_channel.get_channel_number();
 
     let payload = &packet[radiotap.header.length..];
 

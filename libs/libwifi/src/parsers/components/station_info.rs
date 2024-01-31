@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use nom::bytes::complete::take;
 use nom::number::complete::u8 as get_u8;
 use nom::sequence::tuple;
@@ -9,6 +10,8 @@ use crate::frame::components::{
     RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone, VendorSpecificInfo,
     WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
 };
+
+
 
 /// Parse variable length and variable field information.
 /// The general structure of the data looks like this:

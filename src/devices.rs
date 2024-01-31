@@ -16,6 +16,7 @@ const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change stat
 const CONST_T2_TIMEOUT: Duration = Duration::from_millis(200); // Still need a purpose for this.
 
 //////////////////////////////////////////////////////////////////////
+/// 
 #[derive(Clone, Debug)]
 pub struct AuthSequence {
     pub t1: SystemTime,
@@ -76,7 +77,7 @@ impl AuthSequence {
 // Trait to restrict WiFiDeviceList
 pub trait WiFiDeviceType {}
 
-trait HasSSID {
+pub trait HasSSID {
     fn ssid(&self) -> &Option<String>;
 }
 
@@ -767,7 +768,7 @@ impl WiFiDeviceList<AccessPoint> {
 
         let mut rows: Vec<(Vec<String>, u16)> = Vec::new();
         for (idx, ap) in access_points.iter().enumerate() {
-            let mut ap_row = vec![
+            let ap_row = vec![
                 format!(
                     "{}",
                     if ap.is_target() {
