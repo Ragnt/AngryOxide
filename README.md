@@ -61,6 +61,8 @@ All of these attacks are rate-controlled both to prevent erroneous EAPOL timer r
 
 ```bash
 ❯ angryoxide --help
+Does awesome things... with wifi.
+
 Usage: angryoxide [OPTIONS] --interface <INTERFACE>
 
 Options:
@@ -70,9 +72,9 @@ Options:
   -t, --target <TARGET>        Optional - Target (MAC or SSID) to attack - will attack everything if none specified
   -w, --whitelist <WHITELIST>  Optional - Whitelist (MAC or SSID) to NOT attack
   -r, --rate <RATE>            Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
-      --noactive               Optional - Disable Active Monitor mode
   -o, --output <OUTPUT>        Optional - Output filename
       --combine                Optional - Combine all hc22000 files into one large file for bulk processing
+      --noactive               Optional - Disable Active Monitor mode
       --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
       --autohunt               Optional - AO will auto-hunt all channels then lock in on the ones targets are on
@@ -129,5 +131,5 @@ I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-c
 
 ## Screenshots!
 
-![AccessPoints Page](screenshots/ap_tab.png)
+![Access Points Page](screenshots/ap_tab.png)
 ![Handshakes Page](screenshots/handshakes_tab.png)

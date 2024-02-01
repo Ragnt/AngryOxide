@@ -126,15 +126,15 @@ struct Arguments {
     #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
-    #[arg(long)]
-    /// Optional - Disable Active Monitor mode.
-    noactive: bool,
     #[arg(short, long)]
     /// Optional - Output filename.
     output: Option<String>,
     #[arg(long)]
     /// Optional - Combine all hc22000 files into one large file for bulk processing.
     combine: bool,
+    #[arg(long)]
+    /// Optional - Disable Active Monitor mode.
+    noactive: bool,
     #[arg(long)]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
