@@ -127,8 +127,7 @@ I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-c
 
 
 
-## (old) Screenshots!
+## Screenshots!
 
-![AccessPoints Page](screenshots/angry_oxide_demo.png)
-![Handshakes Page](screenshots/handshakes.png)
-![Status Page](screenshots/status_page.png)
+![AccessPoints Page](screenshots/ap_tab.png)
+![Handshakes Page](screenshots/handshakes_tab.png)
