@@ -6,7 +6,7 @@
 
 [![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Ragnt/AngryOxide) [![Discord](https://img.shields.io/discord/1194365883099922643)](https://discord.gg/QsEgaFndsQ)
 
-**This tool is for research purposes only. I am not responsible for anything you do or damage you cause while using AngryOxide**
+**This tool is for research purposes only. I am not responsible for anything you do or damage you cause while using AngryOxide. Only use against networks that you have permission.**
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
@@ -18,7 +18,7 @@ The overall goal of this tool is to provide a single-interface survey capability
 
 This tool is heavily inspired by [hcxdumptool](https://github.com/ZerBea/hcxdumptool) and development wouldn't have been possible without help from ZerBea.
 
-If you have questions or any issues, you can reach me in [<img src='https://wearline.co/wp-content/uploads/2022/11/discord-button.png' width='100'>](https://discord.gg/QsEgaFndsQ)
+If you have questions or any issues, you can reach me on the [AngryOxide Discord](https://discord.gg/QsEgaFndsQ)
 
 ## I wanna use it!
 
@@ -127,7 +127,7 @@ I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-c
 
 
 
-## Screenshots!
+## (old) Screenshots!
 
 ![AccessPoints Page](screenshots/angry_oxide_demo.png)
 ![Handshakes Page](screenshots/handshakes.png)
