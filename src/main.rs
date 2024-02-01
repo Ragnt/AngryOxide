@@ -79,7 +79,7 @@ use crate::matrix::MatrixSnowstorm;
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
-use crate::util::{format_row, max_column_widths, parse_ip_address_port};
+use crate::util::parse_ip_address_port;
 use crate::whitelist::{White, WhiteMAC, WhiteSSID};
 
 use libwifi::{Addresses, Frame};
@@ -87,11 +87,12 @@ use libwifi::{Addresses, Frame};
 use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{remove_file, File};
+use std::fs::{remove_file, File, OpenOptions};
 use std::io;
 use std::io::stdout;
 use std::io::Write;
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::path::Path;
 use std::process::exit;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -110,8 +111,8 @@ struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
     interface: String,
-    #[arg(short, long, use_value_delimiter = true, value_parser, num_args = 1, action = clap::ArgAction::Append)]
-    /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
+    #[arg(short, long)]
+    /// Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified.
     channel: Vec<String>,
     #[arg(short, long)]
     /// Optional - Entire band to scan - will include all channels interface can support.
@@ -131,6 +132,9 @@ struct Arguments {
     #[arg(short, long)]
     /// Optional - Output filename.
     output: Option<String>,
+    #[arg(long)]
+    /// Optional - Combine all hc22000 files into one large file for bulk processing.
+    combine: bool,
     #[arg(long)]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
@@ -270,6 +274,7 @@ pub struct Config {
     headless: bool,
     notar: bool,
     autohunt: bool,
+    combine: bool,
 }
 
 pub struct IfHardware {
@@ -295,10 +300,12 @@ pub struct TargetData {
 pub struct FileData {
     oui_database: OuiDatabase,
     file_prefix: String,
+    start_time: String,
     current_pcap: PcapWriter,
     db_writer: DatabaseWriter,
     output_files: Vec<String>,
     gps_source: GPSDSource,
+    hashlines: HashMap<String, (usize, usize)>,
 }
 
 pub struct OxideRuntime {
@@ -796,10 +803,12 @@ impl OxideRuntime {
         let file_data: FileData = FileData {
             oui_database: oui_db,
             file_prefix,
+            start_time: date_time,
             current_pcap: pcap_file,
             db_writer: database,
             output_files: vec![pcap_filename, kismetdb_filename],
             gps_source,
+            hashlines: HashMap::new(),
         };
 
         // Setup Rogue_ESSID's tracker
@@ -828,6 +837,7 @@ impl OxideRuntime {
             headless: cli_args.headless,
             notar: cli_args.notar,
             autohunt: cli_args.autohunt,
+            combine: cli_args.combine,
         };
 
         let if_hardware = IfHardware {
@@ -1286,7 +1296,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     }),
                                     oxide.target_data.rogue_client,
                                     station_info.wps_info.clone(),
-                                    oxide.file_data.oui_database.search(&bssid),
+                                    oxide.file_data.oui_database.search(bssid),
                                 ),
                             );
 
@@ -2503,7 +2513,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()) {
                 Ok(interface) => interface,
                 Err(e) => {
-                    // Uh oh... no interface
+                    // Uh oh... no interfacee
                     err = Some(e);
                     running.store(false, Ordering::SeqCst);
                     break;
@@ -2569,7 +2579,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Make sure our pcap isn't too big, replace if it is.
         if oxide.file_data.current_pcap.check_size() >= 100000000u64 {
-            oxide.file_data.current_pcap.stop(true);
+            oxide.file_data.current_pcap.stop();
             let now: chrono::prelude::DateTime<Local> = Local::now();
             let date_time = now.format("-%Y-%m-%d_%H-%M-%S").to_string();
             let pcap_filename = format!("{}{}.pcapng", oxide.file_data.file_prefix, date_time);
@@ -2766,6 +2776,77 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             running.store(false, Ordering::SeqCst);
             exit_on_succ = true;
         }
+
+        // Handshake writing
+        for handshakes in oxide.handshake_storage.get_handshakes().values_mut() {
+            if !handshakes.is_empty() {
+                for hs in handshakes {
+                    if hs.complete() && !hs.written() {
+                        if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
+                            let essid = hs.essid_to_string();
+                            let hashline = hashcat_string;
+
+                            // Determine filename to use
+                            let file_name = if oxide.config.combine {
+                                if oxide.file_data.file_prefix == "oxide" {
+                                    format!(
+                                        "{}{}.hc22000",
+                                        oxide.file_data.file_prefix, oxide.file_data.start_time
+                                    )
+                                } else {
+                                    format!("{}.hc22000", oxide.file_data.file_prefix)
+                                }
+                            } else {
+                                format!("{}.hc22000", essid)
+                            };
+
+                            let path = Path::new(&file_name);
+
+                            let mut file = OpenOptions::new()
+                                .write(true)
+                                .create(true)
+                                .append(true)
+                                .open(path)
+                                .unwrap_or_else(|_| {
+                                    panic!("Could not open hashfile for writing. ({file_name}).")
+                                });
+
+                            writeln!(file, "{}", hashline).unwrap_or_else(|_| {
+                                panic!("Could write to hashfile. ({file_name}).")
+                            });
+
+                            if !oxide.file_data.output_files.contains(&file_name) {
+                                oxide.file_data.output_files.push(file_name);
+                            }
+
+                            // mark this handshake as written
+                            hs.written = true;
+
+                            // fill the hashlines data (for reference later)
+                            oxide
+                                .file_data
+                                .hashlines
+                                .entry(essid)
+                                .and_modify(|e| {
+                                    if hs.has_4whs() {
+                                        e.0 += 1;
+                                    }
+                                    if hs.has_pmkid() {
+                                        e.1 += 1;
+                                    }
+                                })
+                                .or_insert_with(|| {
+                                    (
+                                        if hs.has_4whs() { 1 } else { 0 },
+                                        if hs.has_pmkid() { 1 } else { 0 },
+                                    )
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
         // Save those precious CPU cycles when we can. Any more of a wait and we can't process fast enough.
         thread::sleep(Duration::from_micros(1));
     }
@@ -2807,134 +2888,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("💲 Stopping Threads");
-    oxide.file_data.current_pcap.stop(false);
+    oxide.file_data.current_pcap.stop();
     oxide.file_data.gps_source.stop();
     oxide.file_data.db_writer.stop();
 
     println!();
 
-    // Hashmap<SSID, Vec<hashline>>
-    let mut handshakes_map: HashMap<String, Vec<String>> = HashMap::new();
-
-    // Write handshakes to their respective files.
-    for (_, handshakes) in oxide.handshake_storage.get_handshakes() {
-        if !handshakes.is_empty() {
-            for hs in handshakes {
-                if hs.complete() {
-                    if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
-                        let essid = hs.essid_to_string();
-                        let hashline = hashcat_string;
-                        handshakes_map.entry(essid).or_default().push(hashline);
-                    }
-                }
-            }
-        }
-    }
-
-    let hashfiles = write_handshakes(&handshakes_map).expect("Error writing handshakes");
-    print_handshake_summary(&handshakes_map);
-    oxide.file_data.output_files.extend(hashfiles);
-
-    let mut file = oxide.file_data.file_prefix.to_owned();
-    if file == "oxide" {
-        let now: chrono::prelude::DateTime<Local> = Local::now();
-        let date_time = now.format("-%Y-%m-%d_%H-%M-%S").to_string();
-        file = format!("oxide{}", date_time);
-    }
-
-    if !oxide.config.notar {
-        println!("📦 Creating Output Tarball ({}.tar.gz).", file);
-        println!("Please wait...");
-        let _ = tar_and_compress_files(oxide.file_data.output_files, &file);
-    }
-    println!();
-    println!("Complete! Happy Cracking! 🤙");
-
-    Ok(())
-}
-
-fn print_handshakes_headless(oxide: &mut OxideRuntime) {
-    // Planning on rewworking this in the future so it isn't so intrusive (and potentially not giving useless data)
-    let headers = ["[HS] Timestamp", "AP MAC", "SSID", "PM", "OK", "NC"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>();
-
-    let indices_to_remove = [2, 4, 5, 6, 7];
-
-    let (_, mut rows) = oxide.handshake_storage.get_table(None, false, false);
-
-    for tuple in &mut rows {
-        let row = &mut tuple.0;
-        for &index in indices_to_remove.iter().rev() {
-            if index < row.len() {
-                row.remove(index);
-            }
-        }
-    }
-
-    let column_widths = max_column_widths(&headers, &rows);
-    let header_string = format_row(&headers, &column_widths);
-
-    let mut row_strings = Vec::new();
-
-    for (row_data, _) in rows {
-        let mut modified_row_data = row_data.clone();
-        if let Some(timestamp) = modified_row_data.get_mut(0) {
-            *timestamp = format!("[HS] {}", timestamp);
-        }
-        row_strings.push(format_row(&modified_row_data, &column_widths));
-    }
-
-    //let rows_string = row_strings.join("\n");
-    //let handshakes_table = format!("{}\n{}", header_string, rows_string);
-
-    oxide
-        .status_log
-        .add_message(StatusMessage::new(MessageType::Status, header_string));
-
-    for row in row_strings {
-        oxide
-            .status_log
-            .add_message(StatusMessage::new(MessageType::Status, row));
-    }
-}
-
-fn write_handshakes(handshakes_map: &HashMap<String, Vec<String>>) -> Result<Vec<String>, ()> {
-    let mut hashfiles = Vec::new();
-    for (key, values) in handshakes_map {
-        let file_name = format!("{}.hc22000", key);
-        let mut file = File::create(&file_name).expect("Could not open hashfile for writing.");
-
-        for value in values {
-            let _ = writeln!(file, "{}", value);
-        }
-        hashfiles.push(file_name);
-    }
-    Ok(hashfiles)
-}
-
-fn print_handshake_summary(handshakes_map: &HashMap<String, Vec<String>>) {
-    if !handshakes_map.is_empty() {
+    if !oxide.file_data.hashlines.is_empty() {
         println!("😈 Results:");
-        for (key, values) in handshakes_map {
-            let (handshake_count, pmkid_count) =
-                values
-                    .iter()
-                    .fold((0, 0), |(mut handshake_acc, mut pmkid_acc), value| {
-                        if value.contains("WPA*02*") {
-                            handshake_acc += 1;
-                        }
-                        if value.contains("WPA*01") {
-                            pmkid_acc += 1;
-                        }
-                        (handshake_acc, pmkid_acc)
-                    });
-
-            println!(
-                "[{}] : 4wHS: {} | PMKID: {}",
-                key, handshake_count, pmkid_count
-            );
+        for (key, (handshake_acc, pmkid_acc)) in oxide.file_data.hashlines {
+            println!("[{}] : 4wHS: {} | PMKID: {}", key, handshake_acc, pmkid_acc);
         }
         println!();
     } else {
@@ -2942,6 +2905,21 @@ fn print_handshake_summary(handshakes_map: &HashMap<String, Vec<String>>) {
             "AngryOxide did not collect any results. 😔 Try running longer, or check your interface?"
         );
     }
+
+    let mut tarfile = oxide.file_data.file_prefix.to_owned();
+    if tarfile == "oxide" {
+        tarfile = format!("oxide{}", oxide.file_data.start_time);
+    }
+
+    if !oxide.config.notar {
+        println!("📦 Creating Output Tarball ({}.tar.gz).", tarfile);
+        println!("Please wait...");
+        let _ = tar_and_compress_files(oxide.file_data.output_files, &tarfile);
+    }
+    println!();
+    println!("Complete! Happy Cracking! 🤙");
+
+    Ok(())
 }
 
 fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Result<()> {

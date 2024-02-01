@@ -75,7 +75,6 @@ impl DatabaseWriter {
             .expect("Called stop on non-running thread")
             .join()
             .expect("Could not join spawned thread");
-        println!("Stopped Database Thread");
     }
 }
 

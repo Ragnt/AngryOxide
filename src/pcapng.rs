@@ -212,15 +212,12 @@ impl PcapWriter {
         }));
     }
 
-    pub fn stop(&mut self, split: bool) {
+    pub fn stop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
         self.handle
             .take()
             .expect("Called stop on non-running thread")
             .join()
             .expect("Could not join spawned thread");
-        if !split {
-            println!("Stopped PCAPNG Thread");
-        }
     }
 }

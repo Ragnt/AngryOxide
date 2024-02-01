@@ -488,7 +488,7 @@ impl Station {
             .as_ref()
             .unwrap_or(&Vec::new())
             .iter()
-            .map(|ssid| format!("\"{}\"", ssid.to_string()))
+            .map(|ssid| format!("\"{}\"", ssid))
             .collect::<Vec<String>>()
             .join(",")
     }
@@ -496,9 +496,9 @@ impl Station {
     pub fn to_json_str(&self) -> String {
         format!(
             "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {},\"probes\": [{}],\"has_rogue_m2\": {}}}",
-            self.mac_address.to_string(),
-            self.last_signal_strength.value.to_string(),
-            epoch_to_iso_string(self.last_recv).to_string(),
+            self.mac_address,
+            self.last_signal_strength.value,
+            epoch_to_iso_string(self.last_recv),
             self.interactions,
             self.probes_to_string_list_json(),
             self.has_rogue_m2
@@ -508,9 +508,9 @@ impl Station {
     pub fn to_json_str_client(&self) -> String {
         format!(
             "{{\"mac_address\": \"{}\",\"last_signal_strength\": \"{}\",\"last_recv\": \"{}\",\"interactions\": {}}}",
-            self.mac_address.to_string(),
-            self.last_signal_strength.value.to_string(),
-            epoch_to_iso_string(self.last_recv).to_string(),
+            self.mac_address,
+            self.last_signal_strength.value,
+            epoch_to_iso_string(self.last_recv),
             self.interactions
         )
     }
