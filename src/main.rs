@@ -836,7 +836,7 @@ impl OxideRuntime {
             autoexit: cli_args.autoexit,
             headless: cli_args.headless,
             notar: cli_args.notar,
-            autohunt: cli_args.autohunt,
+            autohunt: can_autohunt,
             combine: cli_args.combine,
         };
 
