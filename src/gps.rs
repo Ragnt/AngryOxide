@@ -298,7 +298,6 @@ impl GPSDSource {
             .expect("Called stop on non-running thread")
             .join()
             .expect("Could not join spawned thread");
-        println!("Stopped GPS Thread");
     }
 }
 

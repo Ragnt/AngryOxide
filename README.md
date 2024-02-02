@@ -6,7 +6,7 @@
 
 [![Builds and Release](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Ragnt/AngryOxide/actions/workflows/ci.yml) ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Ragnt/AngryOxide) [![Discord](https://img.shields.io/discord/1194365883099922643)](https://discord.gg/QsEgaFndsQ)
 
-**This tool is for research purposes only. I am not responsible for anything you do or damage you cause while using AngryOxide**
+**This tool is for research purposes only. I am not responsible for anything you do or damage you cause while using AngryOxide. Only use against networks that you have permission.**
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
@@ -18,7 +18,7 @@ The overall goal of this tool is to provide a single-interface survey capability
 
 This tool is heavily inspired by [hcxdumptool](https://github.com/ZerBea/hcxdumptool) and development wouldn't have been possible without help from ZerBea.
 
-If you have questions or any issues, you can reach me in [<img src='https://wearline.co/wp-content/uploads/2022/11/discord-button.png' width='100'>](https://discord.gg/QsEgaFndsQ)
+If you have questions or any issues, you can reach me on the [AngryOxide Discord](https://discord.gg/QsEgaFndsQ)
 
 ## I wanna use it!
 
@@ -71,8 +71,11 @@ Options:
   -b, --band <BAND>            Optional - Entire band to scan - will include all channels interface can support
   -t, --target <TARGET>        Optional - Target (MAC or SSID) to attack - will attack everything if none specified
   -w, --whitelist <WHITELIST>  Optional - Whitelist (MAC or SSID) to NOT attack
+  -r, --rate <RATE>            Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
   -o, --output <OUTPUT>        Optional - Output filename
-  -r, --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
+      --combine                Optional - Combine all hc22000 files into one large file for bulk processing
+      --noactive               Optional - Disable Active Monitor mode
+      --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
       --autohunt               Optional - AO will auto-hunt all channels then lock in on the ones targets are on
       --headless               Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
@@ -128,6 +131,5 @@ I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-c
 
 ## Screenshots!
 
-![AccessPoints Page](screenshots/angry_oxide_demo.png)
-![Handshakes Page](screenshots/handshakes.png)
-![Status Page](screenshots/status_page.png)
+![Access Points Page](screenshots/ap_tab.png)
+![Handshakes Page](screenshots/handshakes_tab.png)

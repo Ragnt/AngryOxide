@@ -8,10 +8,7 @@ use chrono::{DateTime, Local};
 
 use libwifi::frame::{components::MacAddress, EapolKey, MessageType, Pmkid};
 
-use crate::util::{
-        eapol_to_json_str,
-        slice_to_hex_string, system_time_to_iso8601,
-    };
+use crate::util::{eapol_to_json_str, slice_to_hex_string, system_time_to_iso8601};
 
 #[derive(Clone, Debug, Default)]
 pub struct FourWayHandshake {
@@ -32,6 +29,7 @@ pub struct FourWayHandshake {
     pub mac_ap: Option<MacAddress>,
     pub mac_client: Option<MacAddress>,
     pub essid: Option<String>,
+    pub written: bool,
 }
 
 impl fmt::Display for FourWayHandshake {
@@ -85,6 +83,7 @@ impl FourWayHandshake {
             mac_ap: None,
             mac_client: None,
             essid: None,
+            written: false,
         }
     }
 
@@ -179,12 +178,26 @@ impl FourWayHandshake {
             || self.has_pmkid()
     }
 
+    pub fn written(&self) -> bool {
+        self.written
+    }
+
     pub fn has_m1(&self) -> bool {
         self.msg1.is_some()
     }
 
     pub fn has_pmkid(&self) -> bool {
         self.pmkid.is_some()
+    }
+
+    pub fn has_4whs(&self) -> bool {
+        self.eapol_client.is_some()
+            && self.mic.is_some()
+            && self.anonce.is_some()
+            && self.snonce.is_some()
+            && self.mac_ap.is_some()
+            && self.mac_client.is_some()
+            && self.essid.is_some()
     }
 
     pub fn essid_to_string(&self) -> String {
@@ -250,12 +263,10 @@ impl FourWayHandshake {
             } else {
                 "\u{2705}".to_string()
             }
+        } else if self.apless {
+            "RG".to_string()
         } else {
-            if self.apless {
-                "RG".to_string()
-            } else {
-                "--".to_string()
-            }
+            "--".to_string()
         };
         tuple
     }
@@ -649,8 +660,8 @@ impl HandshakeStorage {
         self.handshakes.values().map(|v| v.len()).sum()
     }
 
-    pub fn get_handshakes(&self) -> HashMap<HandshakeSessionKey, Vec<FourWayHandshake>> {
-        self.handshakes.clone()
+    pub fn get_handshakes(&mut self) -> &mut HashMap<HandshakeSessionKey, Vec<FourWayHandshake>> {
+        &mut self.handshakes
     }
 
     pub fn has_complete_handshake_for_ap(&self, ap_mac: &MacAddress) -> bool {
