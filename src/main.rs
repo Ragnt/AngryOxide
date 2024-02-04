@@ -2259,7 +2259,7 @@ fn handle_data_frame(
             essid,
         );
         match result {
-            Ok(handshake) => {
+            Ok(_) => {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
@@ -2267,16 +2267,6 @@ fn handle_data_frame(
                         eapol.determine_key_type()
                     ),
                 ));
-                if handshake.has_pmkid() && !handshake.is_wpa3() {
-                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
-                        ap.has_pmkid = true;
-                    }
-                }
-                if handshake.has_4whs() && !handshake.is_wpa3() {
-                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
-                        ap.has_hs = true;
-                    }
-                }
             }
             Err(e) => {
                 oxide.status_log.add_message(StatusMessage::new(
@@ -2767,7 +2757,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for handshakes in oxide.handshake_storage.get_handshakes().values_mut() {
             if !handshakes.is_empty() {
                 for hs in handshakes {
-                    if hs.complete() && !hs.written() {
+                    if hs.complete() && !hs.is_wpa3() && !hs.written() {
                         if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
                             let essid = hs.essid_to_string();
                             let hashline = hashcat_string;
@@ -2805,13 +2795,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 oxide.file_data.output_files.push(file_name);
                             }
 
-                            // mark this handshake as written
+                            // Mark this handshake as written
                             hs.written = true;
+
+                            // Mark this AP has having collected HS / PMKID
+                            if let Some(ap) = oxide.access_points.get_device(&hs.mac_ap.unwrap()) {
+                                if ap.information.akm_mask() {
+                                    if hs.has_pmkid() && !hs.is_wpa3() {
+                                        ap.has_pmkid = true;
+                                    }
+                                    if hs.has_4whs() && !hs.is_wpa3() {
+                                        ap.has_hs = true;
+                                    }
+                                }
+                            }
 
                             oxide.status_log.add_message(StatusMessage::new(
                                 MessageType::Priority,
                                 format!(
-                                    "4wHS Written: {} => {} ({})",
+                                    "hc22000 Written: {} => {} ({})",
                                     hs.mac_ap.unwrap_or(MacAddress::zeroed()),
                                     hs.mac_client.unwrap_or(MacAddress::zeroed()),
                                     hs.essid.clone().unwrap_or("".to_string())
