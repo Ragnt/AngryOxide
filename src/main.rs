@@ -1300,6 +1300,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 ),
                             );
 
+                        ap.pr_station = Some(probe_response_frame.station_info.clone());
+
                         // Proliferate whitelist
                         let _ = oxide.target_data.whitelist.get_whitelisted(ap);
 
@@ -2265,30 +2267,14 @@ fn handle_data_frame(
                         eapol.determine_key_type()
                     ),
                 ));
-                if handshake.complete() {
-                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
-                        ap.has_hs = true;
-
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Priority,
-                            format!(
-                                "4wHS Complete: {dest} => {source} ({})",
-                                ap.ssid.clone().unwrap_or("".to_string())
-                            ),
-                        ));
-                    }
-                }
-                if handshake.has_pmkid() {
+                if handshake.has_pmkid() && !handshake.is_wpa3() {
                     if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
                         ap.has_pmkid = true;
-
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Priority,
-                            format!(
-                                "PMKID Caught: {dest} => {source} ({})",
-                                ap.ssid.clone().unwrap_or("".to_string())
-                            ),
-                        ));
+                    }
+                }
+                if handshake.has_4whs() && !handshake.is_wpa3() {
+                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
+                        ap.has_hs = true;
                     }
                 }
             }
@@ -2821,6 +2807,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             // mark this handshake as written
                             hs.written = true;
+
+                            oxide.status_log.add_message(StatusMessage::new(
+                                MessageType::Priority,
+                                format!(
+                                    "4wHS Written: {} => {} ({})",
+                                    hs.mac_ap.unwrap_or(MacAddress::zeroed()),
+                                    hs.mac_client.unwrap_or(MacAddress::zeroed()),
+                                    hs.essid.clone().unwrap_or("".to_string())
+                                ),
+                            ));
 
                             // fill the hashlines data (for reference later)
                             oxide

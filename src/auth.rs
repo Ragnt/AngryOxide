@@ -6,7 +6,12 @@ use std::{
 
 use chrono::{DateTime, Local};
 
-use libwifi::frame::{components::MacAddress, EapolKey, MessageType, Pmkid};
+use libwifi::frame::{
+    components::{MacAddress, RsnAkmSuite, RsnCipherSuite, RsnInformation},
+    EapolKey, MessageType, Pmkid,
+};
+
+use libwifi::parsers::parse_rsn_information;
 
 use crate::util::{eapol_to_json_str, slice_to_hex_string, system_time_to_iso8601};
 
@@ -18,6 +23,7 @@ pub struct FourWayHandshake {
     pub msg4: Option<EapolKey>,
     pub last_msg: Option<EapolKey>,
     pub eapol_client: Option<Vec<u8>>,
+    pub rsn_type: Option<Vec<RsnAkmSuite>>,
     pub mic: Option<[u8; 16]>,
     pub anonce: Option<[u8; 32]>,
     pub snonce: Option<[u8; 32]>,
@@ -72,6 +78,7 @@ impl FourWayHandshake {
             msg4: None,
             last_msg: None,
             eapol_client: None,
+            rsn_type: None,
             mic: None,
             anonce: None,
             snonce: None,
@@ -178,6 +185,12 @@ impl FourWayHandshake {
             || self.has_pmkid()
     }
 
+    pub fn is_wpa3(&self) -> bool {
+        self.rsn_type
+            .clone()
+            .is_some_and(|types| types.contains(&RsnAkmSuite::SAE))
+    }
+
     pub fn written(&self) -> bool {
         self.written
     }
@@ -250,7 +263,11 @@ impl FourWayHandshake {
         };
 
         tuple.5 = if self.complete() {
-            "\u{2705}".to_string()
+            if self.is_wpa3() {
+                "\u{274c}".to_string() // Display a red X if it is SAE
+            } else {
+                "\u{2705}".to_string() // Display a check if we don't knoww if it's SAE
+            }
         } else {
             "--".to_string()
         };
@@ -377,6 +394,12 @@ impl FourWayHandshake {
             {
                 // Mark for Nonce Correction
                 self.nc = true;
+            }
+
+            if let Ok(rsn_info) = parse_rsn_information(&new_key.key_data[2..]) {
+                self.rsn_type = Some(rsn_info.akm_suites);
+            } else {
+                return Err("RSN Not Parsed");
             }
 
             self.snonce = Some(new_key.key_nonce);

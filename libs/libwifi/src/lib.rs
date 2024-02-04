@@ -5,7 +5,7 @@ pub mod frame;
 /// Enums representing frame types and frame subtypes.
 mod frame_types;
 /// [nom] parsers for internal usage.
-mod parsers;
+pub mod parsers;
 /// All traits used or provided by this library.
 mod traits;
 
