@@ -57,18 +57,28 @@ impl StatusMessage {
 pub struct MessageLog {
     messages: Vec<StatusMessage>,
     headless: bool,
+    max_size: usize, // New field to store the maximum number of messages
 }
 
 impl MessageLog {
-    pub fn new(headless: bool) -> Self {
+    // Updated constructor to accept an optional max_size argument
+    pub fn new(headless: bool, max_size: Option<usize>) -> Self {
         MessageLog {
-            messages: Vec::new(), // No capacity needed
+            messages: Vec::new(),
             headless,
+            max_size: max_size.unwrap_or(500), // Default to 500 if no value is provided
         }
     }
 
     pub fn add_message(&mut self, message: StatusMessage) {
+        // Check if adding a new message would exceed the maximum size
+        if self.messages.len() == self.max_size {
+            // Remove the oldest message if the log is full
+            self.messages.remove(0);
+        }
+
         self.messages.push(message.clone());
+
         if self.headless {
             let color = match message.message_type {
                 MessageType::Error => "\x1b[31m",
@@ -89,6 +99,7 @@ impl MessageLog {
         }
     }
 
+    // Other methods remain unchanged
     pub fn get_all_messages(&self) -> Vec<StatusMessage> {
         self.messages.clone()
     }
@@ -97,3 +108,4 @@ impl MessageLog {
         self.messages.len()
     }
 }
+

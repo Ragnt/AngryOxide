@@ -337,7 +337,7 @@ impl OxideRuntime {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
-        let log = status::MessageLog::new(cli_args.headless);
+        let log = status::MessageLog::new(cli_args.headless, Some(500));
 
         // Get + Setup Interface
 
