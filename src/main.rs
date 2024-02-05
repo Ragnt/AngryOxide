@@ -2740,7 +2740,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .set_interface_up(oxide.if_hardware.interface.index.unwrap())
                         .ok();
                 } else {
-                    // This will result in "a serious packet read error" message.
+                    // This will result in error message.
                     err = Some(code.kind().to_string());
                     running.store(false, Ordering::SeqCst);
                 }
