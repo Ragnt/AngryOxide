@@ -343,6 +343,7 @@ impl OxideRuntime {
 
         let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
 
+        // Need to ensure the channels available here are validated
         let iface = if let Some(interface) = netlink
             .get_interfaces()
             .iter()

@@ -7,7 +7,7 @@ use std::{
 use chrono::{DateTime, Local};
 
 use libwifi::frame::{
-    components::{MacAddress, RsnAkmSuite, RsnCipherSuite, RsnInformation},
+    components::{MacAddress, RsnAkmSuite},
     EapolKey, MessageType, Pmkid,
 };
 
