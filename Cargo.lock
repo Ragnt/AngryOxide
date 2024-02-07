@@ -1249,9 +1249,9 @@ dependencies = [
 
 [[package]]
 name = "nl80211-ng"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c5cfe70d4235001a6e661fa186c6c8cc40dfced04bccfa3c42958332f7d7378"
+checksum = "17ffaa24302b13b31c65c604c0b9219e5de7fd3fa4d69df4b34dfd704fe9906e"
 dependencies = [
  "neli",
  "neli-proc-macros",
