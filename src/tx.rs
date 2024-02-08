@@ -592,7 +592,7 @@ pub fn build_probe_response(
     addr_rogue_ap: &MacAddress,
     ssid: &String,
     sequence: u16,
-    channel: u8,
+    channel: u32,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
@@ -621,7 +621,7 @@ pub fn build_probe_response(
             supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
             extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
             ssid: Some(ssid.to_string()),
-            ds_parameter_set: Some(channel),
+            ds_parameter_set: Some(channel.try_into().unwrap()),
             tim: None,
             country_info: None,
             power_constraint: None,
@@ -656,7 +656,7 @@ pub fn build_probe_response(
     rth
 }
 
-pub fn build_csa_beacon(beacon: Beacon, new_channel: u8) -> Vec<u8> {
+pub fn build_csa_beacon(beacon: Beacon, new_channel: u32) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let mut frx = beacon.clone();
@@ -664,7 +664,7 @@ pub fn build_csa_beacon(beacon: Beacon, new_channel: u8) -> Vec<u8> {
         beacon.header.sequence_control.sequence_number + 1;
     frx.station_info
         .data
-        .push((37u8, vec![0u8, new_channel, 3u8]));
+        .push((37u8, vec![0u8, new_channel.try_into().unwrap(), 3u8]));
 
     rth.extend(frx.encode());
     rth

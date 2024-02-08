@@ -186,9 +186,14 @@ impl FourWayHandshake {
     }
 
     pub fn is_wpa3(&self) -> bool {
-        self.rsn_type
-            .clone()
-            .is_some_and(|types| types.contains(&RsnAkmSuite::SAE))
+        if let Some(rsn) = self.rsn_type.clone() {
+            if rsn == vec![RsnAkmSuite::SAE] {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        false
     }
 
     pub fn written(&self) -> bool {
@@ -351,6 +356,7 @@ impl FourWayHandshake {
             if let Ok(pmkid) = new_key.has_pmkid() {
                 self.pmkid = Some(pmkid)
             };
+
             // Only update the anonce if there isn't one, because if we have one we have a msg3 already.
             if self.anonce.is_none() {
                 self.anonce = Some(new_key.key_nonce);
@@ -530,9 +536,9 @@ impl FourWayHandshake {
             }
         }
 
-        if !self.complete() && output.is_empty() {
+        if !self.has_4whs() && output.is_empty() {
             return None;
-        } else if !self.complete() && !output.is_empty() {
+        } else if !self.has_4whs() && !output.is_empty() {
             return Some(output);
         }
 
