@@ -1158,7 +1158,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     } else if (rate) == oxide.target_data.attack_rate.to_rate() / 4 {
                         anon_reassociation_attack(oxide, &bssid)?;
                     } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 2 {
-                        csa_attack(oxide, beacon_frame)?;
+                        //csa_attack(oxide, beacon_frame)?;
                     } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 3 {
                         disassoc_attack(oxide, &bssid)?;
                     }
