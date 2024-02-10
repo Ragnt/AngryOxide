@@ -2755,9 +2755,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if oxide.if_hardware.locked {
                                             oxide.status_log.add_message(StatusMessage::new(
                                                 MessageType::Info,
-                                                format!(
-                                                    "Unlocking Channel",
-                                                ),
+                                                format!("Unlocking Channel",),
                                             ));
 
                                             // Setup channels hops
@@ -2767,11 +2765,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             cycle_iter = channels_binding.iter().cycle();
                                             first_channel = *cycle_iter.next().unwrap();
                                             oxide.if_hardware.locked = !oxide.if_hardware.locked;
-
                                         } else {
                                             // Get target_chans
                                             old_hops = oxide.if_hardware.hop_channels.clone();
-                                            let new_hops: Vec<(u8, u32)> = vec![(oxide.if_hardware.current_band.to_u8(), oxide.if_hardware.current_channel)];
+                                            let new_hops: Vec<(u8, u32)> = vec![(
+                                                oxide.if_hardware.current_band.to_u8(),
+                                                oxide.if_hardware.current_channel,
+                                            )];
 
                                             if !new_hops.is_empty() {
                                                 // Setup channels hops
@@ -2795,9 +2795,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             } else {
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Warning,
-                                                    format!(
-                                                        "Could not lock: No Channel"
-                                                    ),
+                                                    format!("Could not lock: No Channel"),
                                                 ));
                                             }
                                         }
@@ -2813,9 +2811,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                             oxide.status_log.add_message(StatusMessage::new(
                                                 MessageType::Info,
-                                                format!(
-                                                    "Unlocking Channel",
-                                                ),
+                                                format!("Unlocking Channel",),
                                             ));
                                             oxide.if_hardware.locked = !oxide.if_hardware.locked;
                                         } else {
@@ -2854,9 +2850,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             } else {
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Warning,
-                                                    format!(
-                                                        "Could not lock: No Target Channels"
-                                                    ),
+                                                    format!("Could not lock: No Target Channels"),
                                                 ));
                                             }
                                         }
