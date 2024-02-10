@@ -987,15 +987,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let packet_id = oxide.counters.packet_id();
 
     // Get Channel Values
-    let current_freq = oxide
-    .if_hardware
-    .interface
-    .frequency
-    .clone()
-    .unwrap();
-    let current_channel = current_freq
-        .channel
-        .unwrap();
+    let current_freq = oxide.if_hardware.interface.frequency.clone().unwrap();
+    let current_channel = current_freq.channel.unwrap();
     oxide.if_hardware.current_channel = current_channel.clone();
     let band: WiFiBand = freq_to_band(current_freq.frequency.unwrap());
 
@@ -1043,7 +1036,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     bssid,
                                     signal_strength,
                                     ssid.clone(),
-                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch as u32)),
+                                    station_info
+                                        .ds_parameter_set
+                                        .map(|ch| (band.clone(), ch as u32)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1119,10 +1114,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             }
                                         } else {
                                             // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
-                                            oxide
-                                                .if_hardware
-                                                .target_chans
-                                                .insert(target, vec![(band.to_u8(), channel.into())]);
+                                            oxide.if_hardware.target_chans.insert(
+                                                target,
+                                                vec![(band.to_u8(), channel.into())],
+                                            );
                                         }
                                     }
                                 }
@@ -1256,7 +1251,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     *bssid,
                                     signal_strength,
                                     ssid,
-                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch as u32)),
+                                    station_info
+                                        .ds_parameter_set
+                                        .map(|ch| (band.clone(), ch as u32)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1334,10 +1331,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             }
                                         } else {
                                             // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
-                                            oxide
-                                                .if_hardware
-                                                .target_chans
-                                                .insert(target, vec![(band.to_u8(), channel.into())]);
+                                            oxide.if_hardware.target_chans.insert(
+                                                target,
+                                                vec![(band.to_u8(), channel.into())],
+                                            );
                                         }
                                     }
                                 }
