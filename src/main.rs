@@ -111,8 +111,8 @@ struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
     interface: String,
-    #[arg(short, long)]
-    /// Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified.
+    #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
+    /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
     channel: Vec<String>,
     #[arg(short, long)]
     /// Optional - Entire band to scan - will include all channels interface can support.
@@ -129,13 +129,13 @@ struct Arguments {
     #[arg(long)]
     /// Optional - File to load whitelist entries from.
     wlist_file: Option<String>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
+    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options")]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
     #[arg(short, long)]
     /// Optional - Output filename.
     output: Option<String>,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Combine all hc22000 files into one large file for bulk processing.
     combine: bool,
     #[arg(long)]
@@ -144,27 +144,30 @@ struct Arguments {
     #[arg(long)]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
-    #[arg(long, default_value = "127.0.0.1:2947")]
+    #[arg(long, default_value = "127.0.0.1:2947", help_heading = "Advanced Options")]
     /// Optional - Alter default HOST:Port for GPSD connection.
     gpsd: String,
     #[arg(long)]
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
     autohunt: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
     headless: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - AO will auto-exit when all targets have a valid hashline.
     autoexit: bool,
     #[arg(long)]
     /// Optional - Do not transmit - passive only.
     notransmit: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do NOT send deauths (will try other attacks only).
     nodeauth: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do not tar output files.
     notar: bool,
+    #[arg(long, help_heading = "Advanced Options", default_value_t = 2)]
+    /// Optional - Do not tar output files.
+    dwell: u64,
 }
 
 #[derive(Default)]
@@ -339,6 +342,7 @@ impl OxideRuntime {
         let wh_list = cli_args.whitelist.clone();
         let targetsfile = cli_args.target_file.clone();
         let wh_listfile = cli_args.wlist_file.clone();
+        let dwell = cli_args.dwell.clone();
         let mut notransmit = cli_args.notransmit;
 
         // Setup initial lists / logs
@@ -558,7 +562,7 @@ impl OxideRuntime {
         }
 
         let mut hop_channels: Vec<(u8, u32)> = Vec::new();
-        let mut hop_interval: Duration = Duration::from_secs(2);
+        let mut hop_interval: Duration = Duration::from_secs(dwell);
         let mut target_chans: HashMap<Target, Vec<(u8, u32)>> = HashMap::new();
         let mut can_autohunt = cli_args.autohunt;
 
@@ -2611,7 +2615,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Setup channels hops
             oxide.if_hardware.hop_channels = new_hops;
-            oxide.if_hardware.hop_interval = Duration::from_secs(2);
+            oxide.if_hardware.hop_interval = Duration::from_secs(cli.dwell);
             channels_binding = oxide.if_hardware.hop_channels.clone();
             cycle_iter = channels_binding.iter().cycle();
             first_channel = *cycle_iter.next().unwrap();
