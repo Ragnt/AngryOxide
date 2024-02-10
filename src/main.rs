@@ -408,7 +408,9 @@ impl OxideRuntime {
                     }
                 }
                 Err(e) => {
-                    println!("Error opening file: {}", e);
+                    println!("❌ Error opening target file: {}", e);
+                    println!("❌ Exiting...");
+                    exit(EXIT_FAILURE);
                 }
             }
         }
@@ -451,7 +453,7 @@ impl OxideRuntime {
                 .filter_map(|f| match MacAddress::from_str(&f) {
                     Ok(mac) => {
                         if targ_list.is_actual_target_mac(&mac) {
-                            println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
+                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
                             None
                         } else {
                             Some(White::MAC(WhiteMAC::new(mac)))
@@ -459,7 +461,7 @@ impl OxideRuntime {
                     }
                     Err(_) => {
                         if targ_list.is_actual_target_ssid(&f) {
-                            println!("Whitelist {} is a target. Cannot add to whitelist.", f);
+                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", f);
                             None
                         } else {
                             Some(White::SSID(WhiteSSID::new(&f)))
@@ -485,7 +487,7 @@ impl OxideRuntime {
                                 match MacAddress::from_str(&l) {
                                     Ok(mac) => {
                                         if targ_list.is_actual_target_mac(&mac) {
-                                            println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
+                                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
                                             continue
                                         } else {
                                             White::MAC(WhiteMAC::new(mac))
@@ -493,7 +495,7 @@ impl OxideRuntime {
                                     }
                                     Err(_) => {
                                         if targ_list.is_actual_target_ssid(&l) {
-                                            println!("Whitelist {} is a target. Cannot add to whitelist.", l);
+                                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", l);
                                             continue
                                         } else {
                                             White::SSID(WhiteSSID::new(&l))
@@ -509,7 +511,9 @@ impl OxideRuntime {
                     }
                 }
                 Err(e) => {
-                    println!("Error opening file: {}", e);
+                    println!("❌ Error opening whitelist file: {}", e);
+                    println!("❌ Exiting...");
+                    exit(EXIT_FAILURE);
                 }
             }
         }
