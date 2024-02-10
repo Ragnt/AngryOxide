@@ -88,7 +88,7 @@ use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File, OpenOptions};
-use std::io;
+use std::io::{self, BufRead, BufReader};
 use std::io::stdout;
 use std::io::Write;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -104,7 +104,7 @@ use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
-#[command(author = "Ryan Butler (Ragnt)")]
+#[command(author = "Ryan Butler (rage)")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 #[command(version)]
 struct Arguments {
@@ -123,6 +123,12 @@ struct Arguments {
     #[arg(short, long)]
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
     whitelist: Option<Vec<String>>,
+    #[arg(long)]
+    /// Optional - File to load target entries from.
+    target_file: Option<String>,
+    #[arg(long)]
+    /// Optional - File to load whitelist entries from.
+    wlist_file: Option<String>,
     #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
@@ -331,6 +337,8 @@ impl OxideRuntime {
         let interface_name = cli_args.interface.clone();
         let targets = cli_args.target.clone();
         let wh_list = cli_args.whitelist.clone();
+        let targetsfile = cli_args.target_file.clone();
+        let wh_listfile = cli_args.wlist_file.clone();
         let mut notransmit = cli_args.notransmit;
 
         // Setup initial lists / logs
@@ -364,7 +372,7 @@ impl OxideRuntime {
         println!("{}", iface.pretty_print());
 
         // Setup targets
-        let target_vec: Vec<Target> = if let Some(vec_targets) = targets {
+        let mut target_vec: Vec<Target> = if let Some(vec_targets) = targets {
             vec_targets
                 .into_iter()
                 .map(|f| match MacAddress::from_str(&f) {
@@ -375,6 +383,35 @@ impl OxideRuntime {
         } else {
             vec![]
         };
+
+        if let Some(file) = targetsfile {
+            match File::open(&file) {
+                Ok(f) => {
+                    let reader = BufReader::new(f);
+
+                    for line in reader.lines() {
+                        if line.as_ref().is_ok_and(|f| f.is_empty()) {
+                            continue;
+                        }
+                        let target = match line {
+                            Ok(l) => {
+                                match MacAddress::from_str(&l) {
+                                    Ok(mac) => Target::MAC(TargetMAC::new(mac)),
+                                    Err(_) => Target::SSID(TargetSSID::new(&l)),
+                                }
+                            }
+                            Err(_) => {
+                                continue;
+                            }
+                        };
+                        target_vec.push(target);
+                    }
+                }
+                Err(e) => {
+                    println!("Error opening file: {}", e);
+                }
+            }
+        }
 
         if !target_vec.is_empty() {
             println!();
@@ -408,7 +445,7 @@ impl OxideRuntime {
         let targ_list = TargetList::from_vec(target_vec.clone());
 
         // Setup Whitelist
-        let whitelist_vec: Vec<White> = if let Some(vec_whitelist) = wh_list {
+        let mut whitelist_vec: Vec<White> = if let Some(vec_whitelist) = wh_list {
             vec_whitelist
                 .into_iter()
                 .filter_map(|f| match MacAddress::from_str(&f) {
@@ -433,6 +470,49 @@ impl OxideRuntime {
         } else {
             vec![]
         };
+
+        if let Some(file) = wh_listfile {
+            match File::open(&file) {
+                Ok(f) => {
+                    let reader = BufReader::new(f);
+
+                    for line in reader.lines() {
+                        if line.as_ref().is_ok_and(|f| f.is_empty()) {
+                            continue;
+                        }
+                        let white = match line {
+                            Ok(l) => {
+                                match MacAddress::from_str(&l) {
+                                    Ok(mac) => {
+                                        if targ_list.is_actual_target_mac(&mac) {
+                                            println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
+                                            continue
+                                        } else {
+                                            White::MAC(WhiteMAC::new(mac))
+                                        }
+                                    }
+                                    Err(_) => {
+                                        if targ_list.is_actual_target_ssid(&l) {
+                                            println!("Whitelist {} is a target. Cannot add to whitelist.", l);
+                                            continue
+                                        } else {
+                                            White::SSID(WhiteSSID::new(&l))
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                continue;
+                            }
+                        };
+                        whitelist_vec.push(white);
+                    }
+                }
+                Err(e) => {
+                    println!("Error opening file: {}", e);
+                }
+            }
+        }
 
         if !whitelist_vec.is_empty() {
             println!();
