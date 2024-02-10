@@ -346,7 +346,7 @@ impl OxideRuntime {
         let wh_list = cli_args.whitelist.clone();
         let targetsfile = cli_args.target_file.clone();
         let wh_listfile = cli_args.wlist_file.clone();
-        let dwell = cli_args.dwell.clone();
+        let dwell = cli_args.dwell;
         let mut notransmit = cli_args.notransmit;
 
         // Setup initial lists / logs

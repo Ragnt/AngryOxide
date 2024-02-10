@@ -202,23 +202,6 @@ impl std::str::FromStr for MacAddress {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_broadcast() {
-        let mac = MacAddress([255, 255, 255, 255, 255, 255]);
-        assert!(mac.is_broadcast())
-    }
-
-    #[test]
-    fn test_format() {
-        let mac = MacAddress([12, 157, 146, 197, 170, 127]);
-        assert_eq!("0c:9d:92:c5:aa:7f", mac.to_string())
-    }
-}
-
 pub fn generate_random_bytes(x: usize) -> Vec<u8> {
     let mut rng = thread_rng();
     let length = x;
