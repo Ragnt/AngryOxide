@@ -11,7 +11,7 @@ mod station_info;
 pub use frame_control::parse_frame_control;
 pub use header::*;
 pub use sequence_control::parse_sequence_control;
-pub use station_info::parse_station_info;
+pub use station_info::{parse_rsn_information, parse_station_info};
 
 /// Parse mac addresses.
 /// Just take 6 bytes, clone them and create a new MacAddress struct from those bytes.

@@ -6,7 +6,12 @@ use std::{
 
 use chrono::{DateTime, Local};
 
-use libwifi::frame::{components::MacAddress, EapolKey, MessageType, Pmkid};
+use libwifi::frame::{
+    components::{MacAddress, RsnAkmSuite},
+    EapolKey, MessageType, Pmkid,
+};
+
+use libwifi::parsers::parse_rsn_information;
 
 use crate::util::{eapol_to_json_str, slice_to_hex_string, system_time_to_iso8601};
 
@@ -18,6 +23,7 @@ pub struct FourWayHandshake {
     pub msg4: Option<EapolKey>,
     pub last_msg: Option<EapolKey>,
     pub eapol_client: Option<Vec<u8>>,
+    pub rsn_type: Option<Vec<RsnAkmSuite>>,
     pub mic: Option<[u8; 16]>,
     pub anonce: Option<[u8; 32]>,
     pub snonce: Option<[u8; 32]>,
@@ -72,6 +78,7 @@ impl FourWayHandshake {
             msg4: None,
             last_msg: None,
             eapol_client: None,
+            rsn_type: None,
             mic: None,
             anonce: None,
             snonce: None,
@@ -178,6 +185,17 @@ impl FourWayHandshake {
             || self.has_pmkid()
     }
 
+    pub fn is_wpa3(&self) -> bool {
+        if let Some(rsn) = self.rsn_type.clone() {
+            if rsn == vec![RsnAkmSuite::SAE] {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        false
+    }
+
     pub fn written(&self) -> bool {
         self.written
     }
@@ -250,7 +268,11 @@ impl FourWayHandshake {
         };
 
         tuple.5 = if self.complete() {
-            "\u{2705}".to_string()
+            if self.is_wpa3() {
+                "\u{274c}".to_string() // Display a red X if it is SAE
+            } else {
+                "\u{2705}".to_string() // Display a check if we don't knoww if it's SAE
+            }
         } else {
             "--".to_string()
         };
@@ -334,6 +356,7 @@ impl FourWayHandshake {
             if let Ok(pmkid) = new_key.has_pmkid() {
                 self.pmkid = Some(pmkid)
             };
+
             // Only update the anonce if there isn't one, because if we have one we have a msg3 already.
             if self.anonce.is_none() {
                 self.anonce = Some(new_key.key_nonce);
@@ -377,6 +400,12 @@ impl FourWayHandshake {
             {
                 // Mark for Nonce Correction
                 self.nc = true;
+            }
+
+            if let Ok(rsn_info) = parse_rsn_information(&new_key.key_data[2..]) {
+                self.rsn_type = Some(rsn_info.akm_suites);
+            } else {
+                return Err("RSN Not Parsed");
             }
 
             self.snonce = Some(new_key.key_nonce);
@@ -507,9 +536,9 @@ impl FourWayHandshake {
             }
         }
 
-        if !self.complete() && output.is_empty() {
+        if !self.has_4whs() && output.is_empty() {
             return None;
-        } else if !self.complete() && !output.is_empty() {
+        } else if !self.has_4whs() && !output.is_empty() {
             return Some(output);
         }
 

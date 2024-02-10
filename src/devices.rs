@@ -1,6 +1,6 @@
 use globset::Glob;
-use libwifi::frame::components::{MacAddress, WpsInformation};
-use nl80211_ng::channels::{WiFiBand, WiFiChannel};
+use libwifi::frame::components::{MacAddress, StationInfo, WpsInformation};
+use nl80211_ng::channels::{WiFiBand};
 use radiotap::field::{AntennaSignal, Field};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -89,9 +89,10 @@ pub struct AccessPoint {
     pub last_recv: u64,
     pub interactions: u64,
     pub ssid: Option<String>,
-    pub channel: Option<WiFiChannel>,
+    pub channel: Option<(WiFiBand, u32)>,
     pub client_list: WiFiDeviceList<Station>,
     pub information: APFlags,
+    pub pr_station: Option<StationInfo>,
     pub beacon_count: u32,
     pub auth_sequence: AuthSequence,
     pub has_hs: bool,
@@ -121,6 +122,7 @@ impl Default for AccessPoint {
             channel: None,
             client_list: WiFiDeviceList::default(),
             information: APFlags::default(),
+            pr_station: None,
             beacon_count: 0,
             auth_sequence: AuthSequence::new(MacAddress([255, 255, 255, 255, 255, 255])),
             has_hs: false,
@@ -137,7 +139,7 @@ impl AccessPoint {
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
         ssid: Option<String>,
-        channel: Option<(WiFiBand, u8)>,
+        channel: Option<(WiFiBand, u32)>,
         information: Option<APFlags>,
         rogue_mac: MacAddress,
         wps_data: Option<WpsInformation>,
@@ -150,7 +152,7 @@ impl AccessPoint {
             .as_secs();
 
         let chan = if let Some(channel) = channel {
-            WiFiChannel::new(channel.1, channel.0)
+            Some((channel.0, channel.1))
         } else {
             None
         };
@@ -170,6 +172,7 @@ impl AccessPoint {
             } else {
                 APFlags::default()
             },
+            pr_station: None,
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
             has_pmkid: false,
@@ -183,7 +186,7 @@ impl AccessPoint {
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
         ssid: Option<String>,
-        channel: Option<(WiFiBand, u8)>,
+        channel: Option<(WiFiBand, u32)>,
         information: Option<APFlags>,
         client_list: WiFiDeviceList<Station>,
         rogue_mac: MacAddress,
@@ -196,7 +199,7 @@ impl AccessPoint {
             .as_secs();
 
         let chan = if let Some(channel) = channel {
-            WiFiChannel::new(channel.1, channel.0)
+            Some((channel.0, channel.1))
         } else {
             None
         };
@@ -216,6 +219,7 @@ impl AccessPoint {
             } else {
                 APFlags::default()
             },
+            pr_station: None,
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
             has_pmkid: false,
@@ -270,7 +274,7 @@ impl AccessPoint {
             self.ssid.as_ref().unwrap_or(&"".to_string()).clone(),
             self.channel
                 .as_ref()
-                .map_or("".to_string(), |ch| ch.short_string().to_string()),
+                .map_or("".to_string(), |ch| ch.1.to_string()),
             self.client_list.get_all_json(),
             self.information.to_json_str(),
             wps_to_json(&self.wps_data),
@@ -641,7 +645,7 @@ impl WiFiDeviceList<AccessPoint> {
                     _ => std::cmp::Ordering::Equal,
                 }
             }),
-            1 => access_points.sort_by(|a, b| b.channel.cmp(&a.channel)), // CH
+            1 => access_points.sort_by(|a, b| b.channel.clone().unwrap_or((WiFiBand::Unknown, 0)).1.cmp(&a.channel.clone().unwrap_or((WiFiBand::Unknown, 0)).1)), // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI
                 let a_val = a.last_signal_strength.value;
@@ -782,7 +786,7 @@ impl WiFiDeviceList<AccessPoint> {
                 format!("{}", ap.mac_address), // MAC Address
                 ap.channel
                     .as_ref()
-                    .map_or("".to_string(), |ch| ch.short_string().to_string()), // CH
+                    .map_or("".to_string(), |ch| ch.1.to_string()), // CH
                 format!(
                     "{}",
                     match ap.last_signal_strength.value {

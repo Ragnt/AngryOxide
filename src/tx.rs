@@ -390,8 +390,7 @@ pub fn build_reassociation_request(
     client_mac: &MacAddress,
     ssid: Option<String>,
     sequence: u16,
-    group_cipher_suite: RsnCipherSuite,
-    pairwise_cipher_suites: Vec<RsnCipherSuite>,
+    rsn: RsnInformation,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
@@ -429,22 +428,7 @@ pub fn build_reassociation_request(
             power_constraint: None,
             ht_capabilities: None,
             vht_capabilities: None,
-            rsn_information: Some(RsnInformation {
-                version: 1,
-                group_cipher_suite,
-                pairwise_cipher_suites,
-                akm_suites: vec![RsnAkmSuite::PSK],
-                mfp_required: false,
-                pre_auth: false,
-                no_pairwise: false,
-                ptksa_replay_counter: 0,
-                gtksa_replay_counter: 0,
-                mfp_capable: true,
-                joint_multi_band_rsna: false,
-                peerkey_enabled: false,
-                extended_key_id: false,
-                ocvc: false,
-            }),
+            rsn_information: Some(rsn),
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
@@ -608,7 +592,7 @@ pub fn build_probe_response(
     addr_rogue_ap: &MacAddress,
     ssid: &String,
     sequence: u16,
-    channel: u8,
+    channel: u32,
 ) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
@@ -672,7 +656,7 @@ pub fn build_probe_response(
     rth
 }
 
-pub fn build_csa_beacon(beacon: Beacon, new_channel: u8) -> Vec<u8> {
+pub fn build_csa_beacon(beacon: Beacon, new_channel: u32) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let mut frx = beacon.clone();
@@ -680,7 +664,7 @@ pub fn build_csa_beacon(beacon: Beacon, new_channel: u8) -> Vec<u8> {
         beacon.header.sequence_control.sequence_number + 1;
     frx.station_info
         .data
-        .push((37u8, vec![0u8, new_channel, 3u8]));
+        .push((37u8, vec![0u8, new_channel.try_into().unwrap(), 3u8]));
 
     rth.extend(frx.encode());
     rth

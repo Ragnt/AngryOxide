@@ -25,7 +25,7 @@ extern crate nix;
 
 use anyhow::Result;
 use attack::{
-    anon_reassociation_attack, csa_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
+    anon_reassociation_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
     m1_retrieval_attack_phase_2, rogue_m2_attack_directed, rogue_m2_attack_undirected,
 };
 
@@ -45,7 +45,7 @@ use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
 use nix::unistd::geteuid;
 
 use nl80211_ng::attr::Nl80211Iftype;
-use nl80211_ng::channels::{map_str_to_band_and_channel, WiFiBand, WiFiChannel};
+use nl80211_ng::channels::{freq_to_band, map_str_to_band_and_channel, WiFiBand};
 use nl80211_ng::{get_interface_info_idx, set_interface_chan, Interface, Nl80211};
 
 use flate2::write::GzEncoder;
@@ -280,9 +280,9 @@ pub struct Config {
 pub struct IfHardware {
     netlink: Nl80211,
     original_address: MacAddress,
-    current_channel: WiFiChannel,
-    hop_channels: Vec<(u8, u8)>,
-    target_chans: HashMap<Target, Vec<(u8, u8)>>,
+    current_channel: u32,
+    hop_channels: Vec<(u8, u32)>,
+    target_chans: HashMap<Target, Vec<(u8, u32)>>,
     hop_interval: Duration,
     interface: Interface,
     interface_uuid: Uuid,
@@ -337,12 +337,13 @@ impl OxideRuntime {
         let access_points = WiFiDeviceList::new();
         let unassoc_clients = WiFiDeviceList::new();
         let handshake_storage = HandshakeStorage::new();
-        let log = status::MessageLog::new(cli_args.headless);
+        let log = status::MessageLog::new(cli_args.headless, Some(500));
 
         // Get + Setup Interface
 
         let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
 
+        // Need to ensure the channels available here are validated
         let iface = if let Some(interface) = netlink
             .get_interfaces()
             .iter()
@@ -463,7 +464,7 @@ impl OxideRuntime {
 
         //// Setup Channels ////
 
-        let mut iface_bands: BTreeMap<u8, Vec<u8>> = iface
+        let mut iface_bands: BTreeMap<u8, Vec<u32>> = iface
             .get_frequency_list_simple()
             .unwrap()
             .into_iter()
@@ -472,9 +473,9 @@ impl OxideRuntime {
             value.sort(); // This sorts each vector in place
         }
 
-        let mut hop_channels: Vec<(u8, u8)> = Vec::new();
+        let mut hop_channels: Vec<(u8, u32)> = Vec::new();
         let mut hop_interval: Duration = Duration::from_secs(2);
-        let mut target_chans: HashMap<Target, Vec<(u8, u8)>> = HashMap::new();
+        let mut target_chans: HashMap<Target, Vec<(u8, u32)>> = HashMap::new();
         let mut can_autohunt = cli_args.autohunt;
 
         if can_autohunt && targ_list.empty() {
@@ -568,7 +569,7 @@ impl OxideRuntime {
             }
 
             // Organize channels by band
-            let mut channels_by_band: HashMap<u8, Vec<u8>> = HashMap::new();
+            let mut channels_by_band: HashMap<u8, Vec<u32>> = HashMap::new();
             for (band, channel) in hop_channels.clone() {
                 channels_by_band.entry(band).or_default().push(channel);
             }
@@ -843,7 +844,7 @@ impl OxideRuntime {
         let if_hardware = IfHardware {
             netlink,
             original_address,
-            current_channel: WiFiChannel::Channel2GHz(1),
+            current_channel: 0,
             hop_channels,
             hop_interval,
             target_chans,
@@ -885,13 +886,13 @@ impl OxideRuntime {
         }
     }
 
-    pub fn get_adjacent_channel(&self) -> Option<u8> {
+    pub fn get_adjacent_channel(&self) -> Option<u32> {
         let band_channels = self
             .if_hardware
             .interface
             .get_frequency_list_simple()
             .unwrap();
-        let current_channel = self.if_hardware.current_channel.get_channel_number();
+        let current_channel = self.if_hardware.current_channel;
         let mut band: u8 = 0;
 
         // Get our band
@@ -907,7 +908,7 @@ impl OxideRuntime {
 
         // Get the adjacent channel
         if let Some(channels) = band_channels.get(&band) {
-            let mut closest_distance = u8::MAX;
+            let mut closest_distance = u32::MAX;
             let mut closest_channel = None;
 
             for &channel in channels {
@@ -986,16 +987,17 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let packet_id = oxide.counters.packet_id();
 
     // Get Channel Values
-    let current_channel: WiFiChannel = oxide
-        .if_hardware
-        .interface
-        .frequency
-        .clone()
-        .unwrap()
+    let current_freq = oxide
+    .if_hardware
+    .interface
+    .frequency
+    .clone()
+    .unwrap();
+    let current_channel = current_freq
         .channel
         .unwrap();
     oxide.if_hardware.current_channel = current_channel.clone();
-    let band: WiFiBand = current_channel.get_band();
+    let band: WiFiBand = freq_to_band(current_freq.frequency.unwrap());
 
     let payload = &packet[radiotap.header.length..];
 
@@ -1041,7 +1043,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     bssid,
                                     signal_strength,
                                     ssid.clone(),
-                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch)),
+                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch as u32)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1102,7 +1104,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     && oxide
                                         .if_hardware
                                         .hop_channels
-                                        .contains(&(band.to_u8(), channel))
+                                        .contains(&(band.to_u8(), channel.into()))
                                 {
                                     // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
@@ -1112,15 +1114,15 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         {
                                             // This target is inside hop_chans
                                             // Update the target with this band/channel (if it isn't already there)
-                                            if !vec.contains(&(band.to_u8(), channel)) {
-                                                vec.push((band.to_u8(), channel));
+                                            if !vec.contains(&(band.to_u8(), channel.into())) {
+                                                vec.push((band.to_u8(), channel.into()));
                                             }
                                         } else {
                                             // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
                                             oxide
                                                 .if_hardware
                                                 .target_chans
-                                                .insert(target, vec![(band.to_u8(), channel)]);
+                                                .insert(target, vec![(band.to_u8(), channel.into())]);
                                         }
                                     }
                                 }
@@ -1157,7 +1159,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     } else if (rate) == oxide.target_data.attack_rate.to_rate() / 4 {
                         anon_reassociation_attack(oxide, &bssid)?;
                     } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 2 {
-                        csa_attack(oxide, beacon_frame)?;
+                        //csa_attack(oxide, beacon_frame)?;
                     } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 3 {
                         disassoc_attack(oxide, &bssid)?;
                     }
@@ -1254,7 +1256,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     *bssid,
                                     signal_strength,
                                     ssid,
-                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch)),
+                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch as u32)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1300,6 +1302,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 ),
                             );
 
+                        ap.pr_station = Some(probe_response_frame.station_info.clone());
+
                         // Proliferate whitelist
                         let _ = oxide.target_data.whitelist.get_whitelisted(ap);
 
@@ -1315,7 +1319,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     && oxide
                                         .if_hardware
                                         .hop_channels
-                                        .contains(&(band.to_u8(), channel))
+                                        .contains(&(band.to_u8(), channel.into()))
                                 {
                                     // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
@@ -1325,15 +1329,15 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                         {
                                             // This target is inside hop_chans
                                             // Update the target with this band/channel (if it isn't already there)
-                                            if !vec.contains(&(band.to_u8(), channel)) {
-                                                vec.push((band.to_u8(), channel));
+                                            if !vec.contains(&(band.to_u8(), channel.into())) {
+                                                vec.push((band.to_u8(), channel.into()));
                                             }
                                         } else {
                                             // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
                                             oxide
                                                 .if_hardware
                                                 .target_chans
-                                                .insert(target, vec![(band.to_u8(), channel)]);
+                                                .insert(target, vec![(band.to_u8(), channel.into())]);
                                         }
                                     }
                                 }
@@ -2073,7 +2077,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
         None
     };
 
-    let freq = current_channel.to_frequency().map(|freq| freq as f64);
+    let freq = Some(current_freq.frequency.unwrap() as f64);
     let signal = radiotap.antenna_signal.map(|signal| signal.value as i32);
     let rate = radiotap.rate.map(|rate| rate.value as f64);
 
@@ -2257,7 +2261,7 @@ fn handle_data_frame(
             essid,
         );
         match result {
-            Ok(handshake) => {
+            Ok(_) => {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
                     format!(
@@ -2265,32 +2269,6 @@ fn handle_data_frame(
                         eapol.determine_key_type()
                     ),
                 ));
-                if handshake.complete() {
-                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
-                        ap.has_hs = true;
-
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Priority,
-                            format!(
-                                "4wHS Complete: {dest} => {source} ({})",
-                                ap.ssid.clone().unwrap_or("".to_string())
-                            ),
-                        ));
-                    }
-                }
-                if handshake.has_pmkid() {
-                    if let Some(ap) = oxide.access_points.get_device(&ap_addr) {
-                        ap.has_pmkid = true;
-
-                        oxide.status_log.add_message(StatusMessage::new(
-                            MessageType::Priority,
-                            format!(
-                                "PMKID Caught: {dest} => {source} ({})",
-                                ap.ssid.clone().unwrap_or("".to_string())
-                            ),
-                        ));
-                    }
-                }
             }
             Err(e) => {
                 oxide.status_log.add_message(StatusMessage::new(
@@ -2464,7 +2442,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Setup hop data
     let mut last_hop_time = Instant::now();
-    let mut first_channel = (0u8, 0u8);
+    let mut first_channel = (0u8, 0u32);
     let mut hop_cycle: u32 = 0;
 
     // Set starting channel and create the hopper cycle.
@@ -2541,7 +2519,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            let mut new_hops: Vec<(u8, u8)> = Vec::new();
+            let mut new_hops: Vec<(u8, u32)> = Vec::new();
             for (_, chan) in target_chans {
                 for ch in chan {
                     if !new_hops.contains(&ch) {
@@ -2605,8 +2583,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         format!("Channel Switch Error: {e:?}"),
                     ));
                 }
-                oxide.if_hardware.current_channel =
-                    WiFiChannel::new(channel, WiFiBand::from_u8(band).unwrap()).unwrap();
+                oxide.if_hardware.current_channel = channel;
                 last_hop_time = Instant::now();
             }
         }
@@ -2764,7 +2741,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .set_interface_up(oxide.if_hardware.interface.index.unwrap())
                         .ok();
                 } else {
-                    // This will result in "a serious packet read error" message.
+                    // This will result in error message.
                     err = Some(code.kind().to_string());
                     running.store(false, Ordering::SeqCst);
                 }
@@ -2781,7 +2758,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for handshakes in oxide.handshake_storage.get_handshakes().values_mut() {
             if !handshakes.is_empty() {
                 for hs in handshakes {
-                    if hs.complete() && !hs.written() {
+                    if hs.complete() && !hs.is_wpa3() && !hs.written() {
                         if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
                             let essid = hs.essid_to_string();
                             let hashline = hashcat_string;
@@ -2819,8 +2796,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 oxide.file_data.output_files.push(file_name);
                             }
 
-                            // mark this handshake as written
+                            // Mark this handshake as written
                             hs.written = true;
+
+                            // Mark this AP has having collected HS / PMKID
+                            if let Some(ap) = oxide.access_points.get_device(&hs.mac_ap.unwrap()) {
+                                if hs.has_pmkid() && ap.information.akm_mask() {
+                                    ap.has_pmkid = true;
+                                }
+                                if hs.has_4whs() && !hs.is_wpa3() {
+                                    ap.has_hs = true;
+                                }
+                            }
+
+                            oxide.status_log.add_message(StatusMessage::new(
+                                MessageType::Priority,
+                                format!(
+                                    "hc22000 Written: {} => {} ({})",
+                                    hs.mac_ap.unwrap_or(MacAddress::zeroed()),
+                                    hs.mac_client.unwrap_or(MacAddress::zeroed()),
+                                    hs.essid.clone().unwrap_or("".to_string())
+                                ),
+                            ));
 
                             // fill the hashlines data (for reference later)
                             oxide
@@ -2959,8 +2956,8 @@ fn reset_terminal() {
     disable_raw_mode().expect("Could not disable raw mode.");
 }
 
-fn format_channels(channels: &Vec<(u8, u8)>) -> String {
-    let mut band_map: HashMap<u8, Vec<u8>> = HashMap::new();
+fn format_channels(channels: &Vec<(u8, u32)>) -> String {
+    let mut band_map: HashMap<u8, Vec<u32>> = HashMap::new();
 
     // Group by band
     for &(band, channel) in channels {

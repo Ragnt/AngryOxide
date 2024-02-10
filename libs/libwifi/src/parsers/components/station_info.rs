@@ -11,8 +11,6 @@ use crate::frame::components::{
     WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
 };
 
-
-
 /// Parse variable length and variable field information.
 /// The general structure of the data looks like this:
 ///
@@ -379,7 +377,7 @@ fn parse_string_from_bytes(data: &[u8]) -> Result<String, &'static str> {
     }
 }
 
-fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {
+pub fn parse_rsn_information(data: &[u8]) -> Result<RsnInformation, &'static str> {
     if data.len() < 10 {
         return Err("RSN Information data too short");
     }
