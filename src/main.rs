@@ -299,9 +299,11 @@ pub struct Config {
 pub struct IfHardware {
     netlink: Nl80211,
     original_address: MacAddress,
+    current_band: WiFiBand,
     current_channel: u32,
     hop_channels: Vec<(u8, u32)>,
     target_chans: HashMap<Target, Vec<(u8, u32)>>,
+    locked: bool,
     hop_interval: Duration,
     interface: Interface,
     interface_uuid: Uuid,
@@ -703,6 +705,9 @@ impl OxideRuntime {
             println!();
         }
 
+        // Print Dwell Time
+        println!("💲 Dwell Time: {}", cli_args.dwell);
+
         // Print attack Rate
 
         if notransmit && !can_autohunt {
@@ -916,6 +921,7 @@ impl OxideRuntime {
             eventhandler.start();
         }
 
+        println!();
         println!("🎩 KICKING UP THE 4D3D3D3 🎩");
         println!();
         println!("======================================================================");
@@ -940,10 +946,12 @@ impl OxideRuntime {
         let if_hardware = IfHardware {
             netlink,
             original_address,
+            current_band: WiFiBand::Unknown,
             current_channel: 0,
             hop_channels,
             hop_interval,
             target_chans,
+            locked: false,
             interface: iface,
             interface_uuid,
         };
@@ -1085,9 +1093,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     // Get Channel Values
     let current_freq = oxide.if_hardware.interface.frequency.clone().unwrap();
     let current_channel = current_freq.channel.unwrap();
-    oxide.if_hardware.current_channel = current_channel;
-    let band: WiFiBand = freq_to_band(current_freq.frequency.unwrap());
-
+    oxide.if_hardware.current_channel = current_channel.clone();
+    oxide.if_hardware.current_band = freq_to_band(current_freq.frequency.unwrap());
+    let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
 
     let fcs = radiotap.flags.map_or(false, |flags| flags.fcs);
@@ -1191,11 +1199,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             // This is a target_data target
                             if let Some(channel) = station_info.ds_parameter_set {
                                 // We have a channel in the broadcast (real channel)
-                                if oxide.config.autohunt
-                                    && oxide
-                                        .if_hardware
-                                        .hop_channels
-                                        .contains(&(band.to_u8(), channel.into()))
+                                if oxide
+                                    .if_hardware
+                                    .hop_channels
+                                    .contains(&(band.to_u8(), channel.into()))
                                 {
                                     // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
@@ -1408,11 +1415,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             // This is a target_data target
                             if let Some(channel) = station_info.ds_parameter_set {
                                 // We have a channel in the broadcast (real channel)
-                                if oxide.config.autohunt
-                                    && oxide
-                                        .if_hardware
-                                        .hop_channels
-                                        .contains(&(band.to_u8(), channel.into()))
+                                if oxide
+                                    .if_hardware
+                                    .hop_channels
+                                    .contains(&(band.to_u8(), channel.into()))
                                 {
                                     // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
@@ -2539,6 +2545,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut hop_cycle: u32 = 0;
 
     // Set starting channel and create the hopper cycle.
+    let mut old_hops = oxide.if_hardware.hop_channels.clone();
     let mut channels_binding = oxide.if_hardware.hop_channels.clone();
     let mut cycle_iter = channels_binding.iter().cycle();
     if let Some(&(band, channel)) = cycle_iter.next() {
@@ -2623,6 +2630,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Setup channels hops
             oxide.if_hardware.hop_channels = new_hops;
+            old_hops = oxide.if_hardware.hop_channels.clone();
             oxide.if_hardware.hop_interval = Duration::from_secs(cli.dwell);
             channels_binding = oxide.if_hardware.hop_channels.clone();
             cycle_iter = channels_binding.iter().cycle();
@@ -2742,6 +2750,116 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     KeyCode::Char('k') => {
                                         oxide.ui_state.show_keybinds =
                                             !oxide.ui_state.show_keybinds;
+                                    }
+                                    KeyCode::Char('l') => {
+                                        if oxide.if_hardware.locked {
+                                            oxide.status_log.add_message(StatusMessage::new(
+                                                MessageType::Info,
+                                                format!(
+                                                    "Unlocking Channel",
+                                                ),
+                                            ));
+
+                                            // Setup channels hops
+                                            oxide.if_hardware.hop_channels = old_hops.clone();
+                                            channels_binding =
+                                                oxide.if_hardware.hop_channels.clone();
+                                            cycle_iter = channels_binding.iter().cycle();
+                                            first_channel = *cycle_iter.next().unwrap();
+                                            oxide.if_hardware.locked = !oxide.if_hardware.locked;
+
+                                        } else {
+                                            // Get target_chans
+                                            old_hops = oxide.if_hardware.hop_channels.clone();
+                                            let new_hops: Vec<(u8, u32)> = vec![(oxide.if_hardware.current_band.to_u8(), oxide.if_hardware.current_channel)];
+
+                                            if !new_hops.is_empty() {
+                                                // Setup channels hops
+                                                oxide.if_hardware.hop_channels = new_hops;
+                                                channels_binding =
+                                                    oxide.if_hardware.hop_channels.clone();
+                                                cycle_iter = channels_binding.iter().cycle();
+                                                first_channel = *cycle_iter.next().unwrap();
+
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Info,
+                                                    format!(
+                                                        "Locking to Channel {} ({:?})",
+                                                        oxide.if_hardware.current_channel,
+                                                        oxide.if_hardware.current_band,
+                                                    ),
+                                                ));
+
+                                                oxide.if_hardware.locked =
+                                                    !oxide.if_hardware.locked;
+                                            } else {
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Warning,
+                                                    format!(
+                                                        "Could not lock: No Channel"
+                                                    ),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    KeyCode::Char('L') => {
+                                        if oxide.if_hardware.locked {
+                                            // Setup channels hops
+                                            oxide.if_hardware.hop_channels = old_hops.clone();
+                                            channels_binding =
+                                                oxide.if_hardware.hop_channels.clone();
+                                            cycle_iter = channels_binding.iter().cycle();
+                                            first_channel = *cycle_iter.next().unwrap();
+
+                                            oxide.status_log.add_message(StatusMessage::new(
+                                                MessageType::Info,
+                                                format!(
+                                                    "Unlocking Channel",
+                                                ),
+                                            ));
+                                            oxide.if_hardware.locked = !oxide.if_hardware.locked;
+                                        } else {
+                                            // Get target_chans
+                                            old_hops = oxide.if_hardware.hop_channels.clone();
+                                            let target_chans =
+                                                oxide.if_hardware.target_chans.clone();
+                                            let mut new_hops: Vec<(u8, u32)> = Vec::new();
+
+                                            for (_, chan) in target_chans {
+                                                for ch in chan {
+                                                    if !new_hops.contains(&ch) {
+                                                        new_hops.push(ch);
+                                                    }
+                                                }
+                                            }
+
+                                            if !new_hops.is_empty() {
+                                                // Setup channels hops
+                                                oxide.if_hardware.hop_channels = new_hops;
+                                                channels_binding =
+                                                    oxide.if_hardware.hop_channels.clone();
+                                                cycle_iter = channels_binding.iter().cycle();
+                                                first_channel = *cycle_iter.next().unwrap();
+
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Info,
+                                                    format!(
+                                                        "Locking to Target Channels! {:?}",
+                                                        oxide.if_hardware.hop_channels,
+                                                    ),
+                                                ));
+
+                                                oxide.if_hardware.locked =
+                                                    !oxide.if_hardware.locked;
+                                            } else {
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Warning,
+                                                    format!(
+                                                        "Could not lock: No Target Channels"
+                                                    ),
+                                                ));
+                                            }
+                                        }
                                     }
                                     _ => {}
                                 }

@@ -385,7 +385,7 @@ fn create_keybind_popup(frame: &mut Frame<'_>, area: Rect) {
         x: (area.width / 2) - 25,
         y: (area.height / 2) - 9,
         width: 50,
-        height: 16,
+        height: 18,
     };
 
     frame.render_widget(Clear, window_area);
@@ -443,6 +443,16 @@ fn create_keybind_popup(frame: &mut Frame<'_>, area: Rect) {
             Span::raw("Copy Selected (LONG JSON)").style(Style::new()),
             Span::raw(repeat_dot(18)).style(Style::new()),
             Span::styled("[C]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Toggle Channel Lock").style(Style::new()),
+            Span::raw(repeat_dot(24)).style(Style::new()),
+            Span::styled("[l]", Style::default().reversed()),
+        ]),
+        Line::from(vec![
+            Span::raw("Toggle Target Channel Lock").style(Style::new()),
+            Span::raw(repeat_dot(17)).style(Style::new()),
+            Span::styled("[L]", Style::default().reversed()),
         ]),
         Line::from(vec![Span::styled("", Style::default().bold())]),
     ];
@@ -568,6 +578,8 @@ fn create_status_bar(
             .print(),
         if oxide.config.autohunt {
             "(Hunting)"
+        } else if oxide.if_hardware.locked {
+            "(Locked)"
         } else {
             ""
         }
