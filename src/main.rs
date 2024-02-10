@@ -114,44 +114,45 @@ struct Arguments {
     #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
     /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
     channel: Vec<String>,
-    #[arg(short, long)]
+    #[arg(short, long, name = "2 | 5 | 6 | 60")]
     /// Optional - Entire band to scan - will include all channels interface can support.
     band: Vec<u8>,
-    #[arg(short, long)]
+    #[arg(short, help_heading = "Targeting", name = "MAC Address or SSID")]
     /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
-    target: Option<Vec<String>>,
-    #[arg(short, long)]
+    target_entry: Option<Vec<String>>,
+    #[arg(short, help_heading = "Targeting", name = "MAC Address or SSID")]
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
-    whitelist: Option<Vec<String>>,
-    #[arg(long)]
+    whitelist_entry: Option<Vec<String>>,
+    #[arg(long, help_heading = "Targeting", name = "Targets File")]
     /// Optional - File to load target entries from.
-    target_file: Option<String>,
-    #[arg(long)]
+    targetlist: Option<String>,
+    #[arg(long, help_heading = "Targeting", name = "Whitelist File")]
     /// Optional - File to load whitelist entries from.
-    wlist_file: Option<String>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options")]
+    whitelist: Option<String>,
+    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options", name = "1 | 2 | 3")]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
-    #[arg(short, long)]
+    #[arg(short, long, name = "Output Filename")]
     /// Optional - Output filename.
     output: Option<String>,
     #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Combine all hc22000 files into one large file for bulk processing.
     combine: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Disable Active Monitor mode.
     noactive: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options", name = "MAC Address")]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
     #[arg(
         long,
         default_value = "127.0.0.1:2947",
-        help_heading = "Advanced Options"
+        help_heading = "Advanced Options",
+        name = "IP:PORT"
     )]
     /// Optional - Alter default HOST:Port for GPSD connection.
     gpsd: String,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
     autohunt: bool,
     #[arg(long, help_heading = "Advanced Options")]
@@ -160,7 +161,7 @@ struct Arguments {
     #[arg(long, help_heading = "Advanced Options")]
     /// Optional - AO will auto-exit when all targets have a valid hashline.
     autoexit: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do not transmit - passive only.
     notransmit: bool,
     #[arg(long, help_heading = "Advanced Options")]
@@ -169,7 +170,12 @@ struct Arguments {
     #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do not tar output files.
     notar: bool,
-    #[arg(long, help_heading = "Advanced Options", default_value_t = 2)]
+    #[arg(
+        long,
+        help_heading = "Advanced Options",
+        default_value_t = 2,
+        name = "Dwell Time (seconds)"
+    )]
     /// Optional - Do not tar output files.
     dwell: u64,
 }
@@ -342,10 +348,10 @@ impl OxideRuntime {
 
         let rogue = cli_args.rogue.clone();
         let interface_name = cli_args.interface.clone();
-        let targets = cli_args.target.clone();
-        let wh_list = cli_args.whitelist.clone();
-        let targetsfile = cli_args.target_file.clone();
-        let wh_listfile = cli_args.wlist_file.clone();
+        let targets = cli_args.target_entry.clone();
+        let wh_list = cli_args.whitelist_entry.clone();
+        let targetsfile = cli_args.targetlist.clone();
+        let wh_listfile = cli_args.whitelist.clone();
         let dwell = cli_args.dwell;
         let mut notransmit = cli_args.notransmit;
 
@@ -393,7 +399,7 @@ impl OxideRuntime {
         };
 
         if let Some(file) = targetsfile {
-            match File::open(&file) {
+            match File::open(file) {
                 Ok(f) => {
                     let reader = BufReader::new(f);
 
@@ -480,7 +486,7 @@ impl OxideRuntime {
         };
 
         if let Some(file) = wh_listfile {
-            match File::open(&file) {
+            match File::open(file) {
                 Ok(f) => {
                     let reader = BufReader::new(f);
 
@@ -1079,7 +1085,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     // Get Channel Values
     let current_freq = oxide.if_hardware.interface.frequency.clone().unwrap();
     let current_channel = current_freq.channel.unwrap();
-    oxide.if_hardware.current_channel = current_channel.clone();
+    oxide.if_hardware.current_channel = current_channel;
     let band: WiFiBand = freq_to_band(current_freq.frequency.unwrap());
 
     let payload = &packet[radiotap.header.length..];
