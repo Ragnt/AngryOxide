@@ -129,7 +129,7 @@ struct Arguments {
     #[arg(long)]
     /// Optional - File to load whitelist entries from.
     wlist_file: Option<String>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
+    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options")]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
     #[arg(short, long)]
