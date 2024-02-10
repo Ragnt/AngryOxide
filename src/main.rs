@@ -88,9 +88,9 @@ use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File, OpenOptions};
-use std::io::{self, BufRead, BufReader};
 use std::io::stdout;
 use std::io::Write;
+use std::io::{self, BufRead, BufReader};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::path::Path;
 use std::process::exit;
@@ -129,7 +129,7 @@ struct Arguments {
     #[arg(long)]
     /// Optional - File to load whitelist entries from.
     wlist_file: Option<String>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options")]
+    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
     #[arg(short, long)]
@@ -144,7 +144,11 @@ struct Arguments {
     #[arg(long)]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
-    #[arg(long, default_value = "127.0.0.1:2947", help_heading = "Advanced Options")]
+    #[arg(
+        long,
+        default_value = "127.0.0.1:2947",
+        help_heading = "Advanced Options"
+    )]
     /// Optional - Alter default HOST:Port for GPSD connection.
     gpsd: String,
     #[arg(long)]
@@ -398,12 +402,10 @@ impl OxideRuntime {
                             continue;
                         }
                         let target = match line {
-                            Ok(l) => {
-                                match MacAddress::from_str(&l) {
-                                    Ok(mac) => Target::MAC(TargetMAC::new(mac)),
-                                    Err(_) => Target::SSID(TargetSSID::new(&l)),
-                                }
-                            }
+                            Ok(l) => match MacAddress::from_str(&l) {
+                                Ok(mac) => Target::MAC(TargetMAC::new(mac)),
+                                Err(_) => Target::SSID(TargetSSID::new(&l)),
+                            },
                             Err(_) => {
                                 continue;
                             }
@@ -492,7 +494,7 @@ impl OxideRuntime {
                                     Ok(mac) => {
                                         if targ_list.is_actual_target_mac(&mac) {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
-                                            continue
+                                            continue;
                                         } else {
                                             White::MAC(WhiteMAC::new(mac))
                                         }
@@ -500,7 +502,7 @@ impl OxideRuntime {
                                     Err(_) => {
                                         if targ_list.is_actual_target_ssid(&l) {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", l);
-                                            continue
+                                            continue;
                                         } else {
                                             White::SSID(WhiteSSID::new(&l))
                                         }
