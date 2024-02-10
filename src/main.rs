@@ -2755,7 +2755,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if oxide.if_hardware.locked {
                                             oxide.status_log.add_message(StatusMessage::new(
                                                 MessageType::Info,
-                                                format!("Unlocking Channel",),
+                                                "Unlocking Channel".to_string(),
                                             ));
 
                                             // Setup channels hops
@@ -2795,7 +2795,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             } else {
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Warning,
-                                                    format!("Could not lock: No Channel"),
+                                                    "Could not lock: No Channel".to_string(),
                                                 ));
                                             }
                                         }
@@ -2811,7 +2811,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                             oxide.status_log.add_message(StatusMessage::new(
                                                 MessageType::Info,
-                                                format!("Unlocking Channel",),
+                                                "Unlocking Channel".to_string(),
                                             ));
                                             oxide.if_hardware.locked = !oxide.if_hardware.locked;
                                         } else {
@@ -2850,7 +2850,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             } else {
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Warning,
-                                                    format!("Could not lock: No Target Channels"),
+                                                    "Could not lock: No Target Channels"
+                                                        .to_string(),
                                                 ));
                                             }
                                         }
