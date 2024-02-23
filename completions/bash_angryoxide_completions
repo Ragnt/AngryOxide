@@ -1,0 +1,31 @@
+# angryoxide completion                                      -*- shell-script -*-
+
+_available_interfaces() {
+    COMPREPLY=($(iw dev | grep Interface | awk '{print $2}'))
+}
+
+_angryoxide()
+{
+    local cur prev words cword
+    _init_completion || return
+
+    case $prev in
+        -i|--interface)
+            _available_interfaces
+            return 0
+            ;;
+        --targetlist|--whitelist)
+            _filedir
+            return 0
+            ;;
+    esac
+
+    if [[ $cword -eq 1 ]]; then
+        if [[ $cur == --* ]]; then
+            COMPREPLY=( $( compgen -W '--interface --channel --band --output --help --version --target --whitelist --targetlist --rate --combine --noactive --rogue --gpsd --autohunt --headless --autoexit --notransmit --nodeauth --notar --dwell' -- "$cur" ) )
+        elif [[ $cur == -* ]]; then
+            COMPREPLY=( $( compgen -W '-i -c -b -o -h -V -t -w -r' -- "$cur" ) )
+        fi
+    fi
+} &&
+complete -F _angryoxide angryoxide

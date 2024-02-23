@@ -1,0 +1,55 @@
+#compdef angryoxide
+
+_list_wireless_interfaces() {
+    local -a interfaces
+    interfaces=($(iw dev | grep Interface | awk '{print $2}'))
+    _describe 'interface' interfaces
+}
+
+_angryoxide() {
+    local -a options
+    local state
+
+    _arguments -C \
+        '1: :->command' \
+        '(-i --interface)'{-i,--interface}'[Interface to use]:interface:_list_wireless_interfaces' \
+        '(-c --channel)'{-c,--channel}'[Optional - Channel to scan]:channel:' \
+        '(-b --band)'{-b,--band}'[Optional - Entire band to scan]:band:(2 5 6 60)' \
+        '(-o --output)'{-o,--output}'[Optional - Output filename]:output file:_files' \
+        '(-h --help)'{-h,--help}'[Print help]' \
+        '(-V --version)'{-V,--version}'[Print version]' \
+        '(-t)'{-t}'[Optional - Target (MAC or SSID) to attack]:target:' \
+        '(-w)'{-w}'[Optional - Whitelist (MAC or SSID) to NOT attack]:whitelist:' \
+        '--targetlist[Optional - File to load target entries from]:targets file:_files' \
+        '--whitelist[Optional - File to load whitelist entries from]:whitelist file:_files' \
+        '(-r --rate)'{-r,--rate}'[Optional - Attack rate]:rate:(1 2 3)' \
+        '--combine[Optional - Combine all hc22000 files into one]' \
+        '--noactive[Optional - Disable Active Monitor mode]' \
+        '--rogue[Optional - Tx MAC for rogue-based attacks]:rogue MAC:' \
+        '--gpsd[Optional - Alter default HOST:Port for GPSD connection]:GPSD HOST:Port:' \
+        '--autohunt[Optional - AO will auto-hunt all channels then lock in]' \
+        '--headless[Optional - Set the tool to headless mode without a UI]' \
+        '--autoexit[Optional - AO will auto-exit when all targets have a valid hashline]' \
+        '--notransmit[Optional - Do not transmit - passive only]' \
+        '--nodeauth[Optional - Do NOT send deauths]' \
+        '--notar[Optional - Do not tar output files]' \
+        '--dwell[Optional - Dwell Time (seconds)]:dwell time:'
+
+    case $state in
+        command)
+            options=(
+                '--interface[Interface to use]'
+                '--channel[Optional - Channel to scan]'
+                '--band[Optional - Entire band to scan]'
+                '--output[Optional - Output filename]'
+                '--help[Print help]'
+                '--version[Print version]'
+                '--target[Optional - Target to attack]'
+                '--whitelist[Optional - Whitelist to NOT attack]'
+                '--targetlist[Optional - File to load target entries from]'
+                '--whitelist[Optional - File to load whitelist entries from]'
+                '--rate[Optional - Attack rate]'
+                '--combine[Combine all hc22000 files into one]'
+                '--noactive[Disable Active Monitor mode]'
+                '--rogue[Tx MAC for rogue-based attacks]'
+                '--gpsd[Alter default
