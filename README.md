@@ -10,7 +10,7 @@
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
-You can get information about how to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
 
 NOTE: This project is under HEAVY development and you can expect a very fast release cycle.
 
@@ -24,7 +24,13 @@ If you have questions or any issues, you can reach me on the [AngryOxide Discord
 
 You can download pre-compiled binaries of AngryOxide in the [releases](https://github.com/Ragnt/AngryOxide/releases/latest).
 
-You can get information about how to use the tool in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+```bash
+tar -xf angryoxide-linux-x86_64.tar.gz # Untar
+chmod +x install.sh # Make executable
+sudo install.sh install # Install (as root, including zsh/bash completions)
+```
+
+You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
 
 
 ## Features
@@ -121,13 +127,9 @@ cross build +nightly --target mips-unknown-linux-musl --release -Zbuild-std
 ```
 
 
-### Bash completion script:
+### Completions script:
 
-You can use `pkg-config --variable=completionsdir bash-completion` to determine where the completions script should be installed.
-
-I use [zsh-bash-completions-fallback plugin](https://github.com/3v1n0/zsh-bash-completions-fallback) to enable the bash autocompletion file zsh.
-
-
+These make using AngryOxide with bash and zsh a bit more fluid, automatically finding your wireless interfaces for you and showing you the arguments in a tab-completable way.
 
 ## Screenshots!
 
