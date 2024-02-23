@@ -61,19 +61,16 @@ pub struct MessageLog {
 }
 
 impl MessageLog {
-    // Updated constructor to accept an optional max_size argument
     pub fn new(headless: bool, max_size: Option<usize>) -> Self {
         MessageLog {
             messages: Vec::new(),
             headless,
-            max_size: max_size.unwrap_or(500), // Default to 500 if no value is provided
+            max_size: max_size.unwrap_or(500),
         }
     }
 
     pub fn add_message(&mut self, message: StatusMessage) {
-        // Check if adding a new message would exceed the maximum size
         if self.messages.len() == self.max_size {
-            // Remove the oldest message if the log is full
             self.messages.remove(0);
         }
 
@@ -108,4 +105,3 @@ impl MessageLog {
         self.messages.len()
     }
 }
-

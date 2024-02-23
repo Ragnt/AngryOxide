@@ -78,6 +78,8 @@ impl EventHandler {
                                 KeyCode::Char('t') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('T') => tx.send(EventType::Key(event)),
                                 KeyCode::Char('k') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('l') => tx.send(EventType::Key(event)),
+                                KeyCode::Char('L') => tx.send(EventType::Key(event)),
                                 KeyCode::Up => tx.send(EventType::Key(event)),
                                 KeyCode::Down => tx.send(EventType::Key(event)),
                                 KeyCode::Left => tx.send(EventType::Key(event)),

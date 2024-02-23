@@ -134,9 +134,9 @@ pub fn open_socket_rx(ifindex: i32) -> Result<OwnedFd, String> {
     };
 
     // New: Ignoring outgoing packets (Linux 4.20 and later)
-    let minimum = KernelVersion::new(4, 20, 0);
-    let kernel = KernelVersion::current().unwrap();
-    if kernel > minimum {
+    if KernelVersion::current().is_ok()
+        && KernelVersion::current().unwrap() > KernelVersion::new(4, 20, 0)
+    {
         let enable = 1;
         let ret = unsafe {
             libc::setsockopt(
@@ -171,22 +171,6 @@ pub fn open_socket_rx(ifindex: i32) -> Result<OwnedFd, String> {
 
     let new_flags = OFlag::from_bits_truncate(socket_rx_flags | OFlag::O_NONBLOCK.bits());
     fcntl(fd_socket_rx.as_raw_fd(), FcntlArg::F_SETFL(new_flags)).map_err(|e| e.to_string())?;
-
-    /* let mut buffer = vec![0u8; 4096];
-    let packet_len = unsafe {
-        libc::read(
-            fd_socket_rx.as_raw_fd(),
-            buffer.as_mut_ptr() as *mut libc::c_void,
-            buffer.len(),
-        )
-    };
-
-    if packet_len < 0 {
-        let error_code = io::Error::last_os_error();
-        println!("{}", error_code);
-    }
-
-    buffer.truncate(packet_len as usize); */
 
     Ok(fd_socket_rx)
 }

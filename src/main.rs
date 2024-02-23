@@ -88,9 +88,9 @@ use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{remove_file, File, OpenOptions};
-use std::io;
 use std::io::stdout;
 use std::io::Write;
+use std::io::{self, BufRead, BufReader};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::path::Path;
 use std::process::exit;
@@ -104,61 +104,80 @@ use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
-#[command(author = "Ryan Butler (Ragnt)")]
+#[command(author = "Ryan Butler (rage)")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 #[command(version)]
 struct Arguments {
     #[arg(short, long)]
     /// Interface to use.
     interface: String,
-    #[arg(short, long)]
-    /// Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified.
+    #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
+    /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
     channel: Vec<String>,
-    #[arg(short, long)]
+    #[arg(short, long, name = "2 | 5 | 6 | 60")]
     /// Optional - Entire band to scan - will include all channels interface can support.
     band: Vec<u8>,
-    #[arg(short, long)]
+    #[arg(short, help_heading = "Targeting", name = "MAC Address or SSID")]
     /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
-    target: Option<Vec<String>>,
-    #[arg(short, long)]
+    target_entry: Option<Vec<String>>,
+    #[arg(short, help_heading = "Targeting", name = "MAC Address or SSID")]
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
-    whitelist: Option<Vec<String>>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1))]
+    whitelist_entry: Option<Vec<String>>,
+    #[arg(long, help_heading = "Targeting", name = "Targets File")]
+    /// Optional - File to load target entries from.
+    targetlist: Option<String>,
+    #[arg(long, help_heading = "Targeting", name = "Whitelist File")]
+    /// Optional - File to load whitelist entries from.
+    whitelist: Option<String>,
+    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options", name = "1 | 2 | 3")]
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
     rate: u8,
-    #[arg(short, long)]
+    #[arg(short, long, name = "Output Filename")]
     /// Optional - Output filename.
     output: Option<String>,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Combine all hc22000 files into one large file for bulk processing.
     combine: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Disable Active Monitor mode.
     noactive: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options", name = "MAC Address")]
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     rogue: Option<String>,
-    #[arg(long, default_value = "127.0.0.1:2947")]
+    #[arg(
+        long,
+        default_value = "127.0.0.1:2947",
+        help_heading = "Advanced Options",
+        name = "IP:PORT"
+    )]
     /// Optional - Alter default HOST:Port for GPSD connection.
     gpsd: String,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
     autohunt: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
     headless: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - AO will auto-exit when all targets have a valid hashline.
     autoexit: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do not transmit - passive only.
     notransmit: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do NOT send deauths (will try other attacks only).
     nodeauth: bool,
-    #[arg(long)]
+    #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do not tar output files.
     notar: bool,
+    #[arg(
+        long,
+        help_heading = "Advanced Options",
+        default_value_t = 2,
+        name = "Dwell Time (seconds)"
+    )]
+    /// Optional - Do not tar output files.
+    dwell: u64,
 }
 
 #[derive(Default)]
@@ -280,9 +299,11 @@ pub struct Config {
 pub struct IfHardware {
     netlink: Nl80211,
     original_address: MacAddress,
+    current_band: WiFiBand,
     current_channel: u32,
     hop_channels: Vec<(u8, u32)>,
     target_chans: HashMap<Target, Vec<(u8, u32)>>,
+    locked: bool,
     hop_interval: Duration,
     interface: Interface,
     interface_uuid: Uuid,
@@ -329,8 +350,11 @@ impl OxideRuntime {
 
         let rogue = cli_args.rogue.clone();
         let interface_name = cli_args.interface.clone();
-        let targets = cli_args.target.clone();
-        let wh_list = cli_args.whitelist.clone();
+        let targets = cli_args.target_entry.clone();
+        let wh_list = cli_args.whitelist_entry.clone();
+        let targetsfile = cli_args.targetlist.clone();
+        let wh_listfile = cli_args.whitelist.clone();
+        let dwell = cli_args.dwell;
         let mut notransmit = cli_args.notransmit;
 
         // Setup initial lists / logs
@@ -364,7 +388,7 @@ impl OxideRuntime {
         println!("{}", iface.pretty_print());
 
         // Setup targets
-        let target_vec: Vec<Target> = if let Some(vec_targets) = targets {
+        let mut target_vec: Vec<Target> = if let Some(vec_targets) = targets {
             vec_targets
                 .into_iter()
                 .map(|f| match MacAddress::from_str(&f) {
@@ -375,6 +399,35 @@ impl OxideRuntime {
         } else {
             vec![]
         };
+
+        if let Some(file) = targetsfile {
+            match File::open(file) {
+                Ok(f) => {
+                    let reader = BufReader::new(f);
+
+                    for line in reader.lines() {
+                        if line.as_ref().is_ok_and(|f| f.is_empty()) {
+                            continue;
+                        }
+                        let target = match line {
+                            Ok(l) => match MacAddress::from_str(&l) {
+                                Ok(mac) => Target::MAC(TargetMAC::new(mac)),
+                                Err(_) => Target::SSID(TargetSSID::new(&l)),
+                            },
+                            Err(_) => {
+                                continue;
+                            }
+                        };
+                        target_vec.push(target);
+                    }
+                }
+                Err(e) => {
+                    println!("❌ Error opening target file: {}", e);
+                    println!("❌ Exiting...");
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
 
         if !target_vec.is_empty() {
             println!();
@@ -408,13 +461,13 @@ impl OxideRuntime {
         let targ_list = TargetList::from_vec(target_vec.clone());
 
         // Setup Whitelist
-        let whitelist_vec: Vec<White> = if let Some(vec_whitelist) = wh_list {
+        let mut whitelist_vec: Vec<White> = if let Some(vec_whitelist) = wh_list {
             vec_whitelist
                 .into_iter()
                 .filter_map(|f| match MacAddress::from_str(&f) {
                     Ok(mac) => {
                         if targ_list.is_actual_target_mac(&mac) {
-                            println!("Whitelist {} is a target. Cannot add to whitelist.", mac);
+                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
                             None
                         } else {
                             Some(White::MAC(WhiteMAC::new(mac)))
@@ -422,7 +475,7 @@ impl OxideRuntime {
                     }
                     Err(_) => {
                         if targ_list.is_actual_target_ssid(&f) {
-                            println!("Whitelist {} is a target. Cannot add to whitelist.", f);
+                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", f);
                             None
                         } else {
                             Some(White::SSID(WhiteSSID::new(&f)))
@@ -433,6 +486,51 @@ impl OxideRuntime {
         } else {
             vec![]
         };
+
+        if let Some(file) = wh_listfile {
+            match File::open(file) {
+                Ok(f) => {
+                    let reader = BufReader::new(f);
+
+                    for line in reader.lines() {
+                        if line.as_ref().is_ok_and(|f| f.is_empty()) {
+                            continue;
+                        }
+                        let white = match line {
+                            Ok(l) => {
+                                match MacAddress::from_str(&l) {
+                                    Ok(mac) => {
+                                        if targ_list.is_actual_target_mac(&mac) {
+                                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
+                                            continue;
+                                        } else {
+                                            White::MAC(WhiteMAC::new(mac))
+                                        }
+                                    }
+                                    Err(_) => {
+                                        if targ_list.is_actual_target_ssid(&l) {
+                                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", l);
+                                            continue;
+                                        } else {
+                                            White::SSID(WhiteSSID::new(&l))
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                continue;
+                            }
+                        };
+                        whitelist_vec.push(white);
+                    }
+                }
+                Err(e) => {
+                    println!("❌ Error opening whitelist file: {}", e);
+                    println!("❌ Exiting...");
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
 
         if !whitelist_vec.is_empty() {
             println!();
@@ -474,7 +572,7 @@ impl OxideRuntime {
         }
 
         let mut hop_channels: Vec<(u8, u32)> = Vec::new();
-        let mut hop_interval: Duration = Duration::from_secs(2);
+        let mut hop_interval: Duration = Duration::from_secs(dwell);
         let mut target_chans: HashMap<Target, Vec<(u8, u32)>> = HashMap::new();
         let mut can_autohunt = cli_args.autohunt;
 
@@ -606,6 +704,9 @@ impl OxideRuntime {
             println!("==============================");
             println!();
         }
+
+        // Print Dwell Time
+        println!("💲 Dwell Time: {}", cli_args.dwell);
 
         // Print attack Rate
 
@@ -820,6 +921,7 @@ impl OxideRuntime {
             eventhandler.start();
         }
 
+        println!();
         println!("🎩 KICKING UP THE 4D3D3D3 🎩");
         println!();
         println!("======================================================================");
@@ -844,10 +946,12 @@ impl OxideRuntime {
         let if_hardware = IfHardware {
             netlink,
             original_address,
+            current_band: WiFiBand::Unknown,
             current_channel: 0,
             hop_channels,
             hop_interval,
             target_chans,
+            locked: false,
             interface: iface,
             interface_uuid,
         };
@@ -987,18 +1091,11 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let packet_id = oxide.counters.packet_id();
 
     // Get Channel Values
-    let current_freq = oxide
-    .if_hardware
-    .interface
-    .frequency
-    .clone()
-    .unwrap();
-    let current_channel = current_freq
-        .channel
-        .unwrap();
+    let current_freq = oxide.if_hardware.interface.frequency.clone().unwrap();
+    let current_channel = current_freq.channel.unwrap();
     oxide.if_hardware.current_channel = current_channel.clone();
-    let band: WiFiBand = freq_to_band(current_freq.frequency.unwrap());
-
+    oxide.if_hardware.current_band = freq_to_band(current_freq.frequency.unwrap());
+    let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
 
     let fcs = radiotap.flags.map_or(false, |flags| flags.fcs);
@@ -1043,7 +1140,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     bssid,
                                     signal_strength,
                                     ssid.clone(),
-                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch as u32)),
+                                    station_info
+                                        .ds_parameter_set
+                                        .map(|ch| (band.clone(), ch as u32)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1100,11 +1199,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             // This is a target_data target
                             if let Some(channel) = station_info.ds_parameter_set {
                                 // We have a channel in the broadcast (real channel)
-                                if oxide.config.autohunt
-                                    && oxide
-                                        .if_hardware
-                                        .hop_channels
-                                        .contains(&(band.to_u8(), channel.into()))
+                                if oxide
+                                    .if_hardware
+                                    .hop_channels
+                                    .contains(&(band.to_u8(), channel.into()))
                                 {
                                     // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
@@ -1119,10 +1217,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             }
                                         } else {
                                             // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
-                                            oxide
-                                                .if_hardware
-                                                .target_chans
-                                                .insert(target, vec![(band.to_u8(), channel.into())]);
+                                            oxide.if_hardware.target_chans.insert(
+                                                target,
+                                                vec![(band.to_u8(), channel.into())],
+                                            );
                                         }
                                     }
                                 }
@@ -1256,7 +1354,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     *bssid,
                                     signal_strength,
                                     ssid,
-                                    station_info.ds_parameter_set.map(|ch| (band.clone(), ch as u32)),
+                                    station_info
+                                        .ds_parameter_set
+                                        .map(|ch| (band.clone(), ch as u32)),
                                     Some(APFlags {
                                         apie_essid: station_info.ssid.as_ref().map(|_| true),
                                         gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
@@ -1315,11 +1415,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             // This is a target_data target
                             if let Some(channel) = station_info.ds_parameter_set {
                                 // We have a channel in the broadcast (real channel)
-                                if oxide.config.autohunt
-                                    && oxide
-                                        .if_hardware
-                                        .hop_channels
-                                        .contains(&(band.to_u8(), channel.into()))
+                                if oxide
+                                    .if_hardware
+                                    .hop_channels
+                                    .contains(&(band.to_u8(), channel.into()))
                                 {
                                     // We are autohunting and our current channel is real (band/channel match)
                                     for target in targets {
@@ -1334,10 +1433,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                             }
                                         } else {
                                             // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
-                                            oxide
-                                                .if_hardware
-                                                .target_chans
-                                                .insert(target, vec![(band.to_u8(), channel.into())]);
+                                            oxide.if_hardware.target_chans.insert(
+                                                target,
+                                                vec![(band.to_u8(), channel.into())],
+                                            );
                                         }
                                     }
                                 }
@@ -2446,6 +2545,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut hop_cycle: u32 = 0;
 
     // Set starting channel and create the hopper cycle.
+    let mut old_hops = oxide.if_hardware.hop_channels.clone();
     let mut channels_binding = oxide.if_hardware.hop_channels.clone();
     let mut cycle_iter = channels_binding.iter().cycle();
     if let Some(&(band, channel)) = cycle_iter.next() {
@@ -2530,7 +2630,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Setup channels hops
             oxide.if_hardware.hop_channels = new_hops;
-            oxide.if_hardware.hop_interval = Duration::from_secs(2);
+            old_hops = oxide.if_hardware.hop_channels.clone();
+            oxide.if_hardware.hop_interval = Duration::from_secs(cli.dwell);
             channels_binding = oxide.if_hardware.hop_channels.clone();
             cycle_iter = channels_binding.iter().cycle();
             first_channel = *cycle_iter.next().unwrap();
@@ -2649,6 +2750,111 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     KeyCode::Char('k') => {
                                         oxide.ui_state.show_keybinds =
                                             !oxide.ui_state.show_keybinds;
+                                    }
+                                    KeyCode::Char('l') => {
+                                        if oxide.if_hardware.locked {
+                                            oxide.status_log.add_message(StatusMessage::new(
+                                                MessageType::Info,
+                                                "Unlocking Channel".to_string(),
+                                            ));
+
+                                            // Setup channels hops
+                                            oxide.if_hardware.hop_channels = old_hops.clone();
+                                            channels_binding =
+                                                oxide.if_hardware.hop_channels.clone();
+                                            cycle_iter = channels_binding.iter().cycle();
+                                            first_channel = *cycle_iter.next().unwrap();
+                                            oxide.if_hardware.locked = !oxide.if_hardware.locked;
+                                        } else {
+                                            // Get target_chans
+                                            old_hops = oxide.if_hardware.hop_channels.clone();
+                                            let new_hops: Vec<(u8, u32)> = vec![(
+                                                oxide.if_hardware.current_band.to_u8(),
+                                                oxide.if_hardware.current_channel,
+                                            )];
+
+                                            if !new_hops.is_empty() {
+                                                // Setup channels hops
+                                                oxide.if_hardware.hop_channels = new_hops;
+                                                channels_binding =
+                                                    oxide.if_hardware.hop_channels.clone();
+                                                cycle_iter = channels_binding.iter().cycle();
+                                                first_channel = *cycle_iter.next().unwrap();
+
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Info,
+                                                    format!(
+                                                        "Locking to Channel {} ({:?})",
+                                                        oxide.if_hardware.current_channel,
+                                                        oxide.if_hardware.current_band,
+                                                    ),
+                                                ));
+
+                                                oxide.if_hardware.locked =
+                                                    !oxide.if_hardware.locked;
+                                            } else {
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Warning,
+                                                    "Could not lock: No Channel".to_string(),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    KeyCode::Char('L') => {
+                                        if oxide.if_hardware.locked {
+                                            // Setup channels hops
+                                            oxide.if_hardware.hop_channels = old_hops.clone();
+                                            channels_binding =
+                                                oxide.if_hardware.hop_channels.clone();
+                                            cycle_iter = channels_binding.iter().cycle();
+                                            first_channel = *cycle_iter.next().unwrap();
+
+                                            oxide.status_log.add_message(StatusMessage::new(
+                                                MessageType::Info,
+                                                "Unlocking Channel".to_string(),
+                                            ));
+                                            oxide.if_hardware.locked = !oxide.if_hardware.locked;
+                                        } else {
+                                            // Get target_chans
+                                            old_hops = oxide.if_hardware.hop_channels.clone();
+                                            let target_chans =
+                                                oxide.if_hardware.target_chans.clone();
+                                            let mut new_hops: Vec<(u8, u32)> = Vec::new();
+
+                                            for (_, chan) in target_chans {
+                                                for ch in chan {
+                                                    if !new_hops.contains(&ch) {
+                                                        new_hops.push(ch);
+                                                    }
+                                                }
+                                            }
+
+                                            if !new_hops.is_empty() {
+                                                // Setup channels hops
+                                                oxide.if_hardware.hop_channels = new_hops;
+                                                channels_binding =
+                                                    oxide.if_hardware.hop_channels.clone();
+                                                cycle_iter = channels_binding.iter().cycle();
+                                                first_channel = *cycle_iter.next().unwrap();
+
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Info,
+                                                    format!(
+                                                        "Locking to Target Channels! {:?}",
+                                                        oxide.if_hardware.hop_channels,
+                                                    ),
+                                                ));
+
+                                                oxide.if_hardware.locked =
+                                                    !oxide.if_hardware.locked;
+                                            } else {
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Warning,
+                                                    "Could not lock: No Target Channels"
+                                                        .to_string(),
+                                                ));
+                                            }
+                                        }
                                     }
                                     _ => {}
                                 }
