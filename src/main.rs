@@ -176,7 +176,7 @@ struct Arguments {
         default_value_t = 2,
         name = "Dwell Time (seconds)"
     )]
-    /// Optional - Do not tar output files.
+    /// Optional - Adjust channel hop dwell time.
     dwell: u64,
 }
 
