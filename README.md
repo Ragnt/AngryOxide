@@ -65,32 +65,39 @@ All of these attacks are rate-controlled both to prevent erroneous EAPOL timer r
 
 ## Help
 
-```bash
+```
 ❯ angryoxide --help
 Does awesome things... with wifi.
 
 Usage: angryoxide [OPTIONS] --interface <INTERFACE>
 
 Options:
-  -i, --interface <INTERFACE>  Interface to use
-  -c, --channel <CHANNEL>      Optional - Channel to scan. Will use "-c 1 -c 6 -c 11" if none specified
-  -b, --band <BAND>            Optional - Entire band to scan - will include all channels interface can support
-  -t, --target <TARGET>        Optional - Target (MAC or SSID) to attack - will attack everything if none specified
-  -w, --whitelist <WHITELIST>  Optional - Whitelist (MAC or SSID) to NOT attack
-  -r, --rate <RATE>            Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
-  -o, --output <OUTPUT>        Optional - Output filename
-      --combine                Optional - Combine all hc22000 files into one large file for bulk processing
-      --noactive               Optional - Disable Active Monitor mode
-      --rogue <ROGUE>          Optional - Tx MAC for rogue-based attacks - will randomize if excluded
-      --gpsd <GPSD>            Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
-      --autohunt               Optional - AO will auto-hunt all channels then lock in on the ones targets are on
-      --headless               Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
-      --autoexit               Optional - AO will auto-exit when all targets have a valid hashline
-      --notransmit             Optional - Do not transmit - passive only
-      --nodeauth               Optional - Do NOT send deauths (will try other attacks only)
-      --notar                  Optional - Do not tar output files
-  -h, --help                   Print help
-  -V, --version                Print version
+  -i, --interface <INTERFACE>     Interface to use
+  -c, --channel <CHANNEL>         Optional - Channel to scan. Will use "-c 1,6,11" if none specified
+  -b, --band <2 | 5 | 6 | 60>     Optional - Entire band to scan - will include all channels interface can support
+  -o, --output <Output Filename>  Optional - Output filename
+  -h, --help                      Print help
+  -V, --version                   Print version
+
+Targeting:
+  -t <MAC Address or SSID>          Optional - Target (MAC or SSID) to attack - will attack everything if none specified
+  -w <MAC Address or SSID>          Optional - Whitelist (MAC or SSID) to NOT attack
+      --targetlist <Targets File>   Optional - File to load target entries from
+      --whitelist <Whitelist File>  Optional - File to load whitelist entries from
+
+Advanced Options:
+  -r, --rate <1 | 2 | 3>              Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
+      --combine                       Optional - Combine all hc22000 files into one large file for bulk processing
+      --noactive                      Optional - Disable Active Monitor mode
+      --rogue <MAC Address>           Optional - Tx MAC for rogue-based attacks - will randomize if excluded
+      --gpsd <IP:PORT>                Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
+      --autohunt                      Optional - AO will auto-hunt all channels then lock in on the ones targets are on
+      --headless                      Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
+      --autoexit                      Optional - AO will auto-exit when all targets have a valid hashline
+      --notransmit                    Optional - Do not transmit - passive only
+      --nodeauth                      Optional - Do NOT send deauths (will try other attacks only)
+      --notar                         Optional - Do not tar output files
+      --dwell <Dwell Time (seconds)>  Optional - Adjust channel hop dwell time [default: 2]
 ```
 
 ## Building from source
