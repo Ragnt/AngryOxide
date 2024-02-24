@@ -10,7 +10,7 @@
 
 AngryOxide was developed as a way to learn Rust, netlink, kernel sockets, and WiFi exploitation all at once.
 
-You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/1.-User-Guide).
 
 NOTE: This project is under HEAVY development and you can expect a very fast release cycle.
 
@@ -30,7 +30,7 @@ chmod +x install.sh # Make executable
 sudo install.sh install # Install (as root, including zsh/bash completions)
 ```
 
-You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/User-Guide).
+You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/1.-User-Guide).
 
 
 ## Features
