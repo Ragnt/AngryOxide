@@ -83,7 +83,7 @@ jobs:
           command: "build"
           target: ${{ matrix.platform.target }}
           toolchain: ${{ matrix.toolchain }}
-          args: "--locked --release"
+          args: "--release"
           strip: true
         if: ${{ !contains(matrix.platform.target, 'mips') }}
   
