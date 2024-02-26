@@ -117,10 +117,10 @@ struct Arguments {
     #[arg(short, long, name = "2 | 5 | 6 | 60")]
     /// Optional - Entire band to scan - will include all channels interface can support.
     band: Vec<u8>,
-    #[arg(short, help_heading = "Targeting", name = "MAC Address or SSID")]
+    #[arg(short, help_heading = "Targeting", name = "Target MAC/SSID")]
     /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
     target_entry: Option<Vec<String>>,
-    #[arg(short, help_heading = "Targeting", name = "MAC Address or SSID")]
+    #[arg(short, help_heading = "Targeting", name = "WhiteList MAC/SSID")]
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
     whitelist_entry: Option<Vec<String>>,
     #[arg(long, help_heading = "Targeting", name = "Targets File")]
@@ -2995,7 +2995,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 });
 
                             writeln!(file, "{}", hashline).unwrap_or_else(|_| {
-                                panic!("Could write to hashfile. ({file_name}).")
+                                panic!("Couldn't  write to hashfile. ({file_name}).")
                             });
 
                             if !oxide.file_data.output_files.contains(&file_name) {
