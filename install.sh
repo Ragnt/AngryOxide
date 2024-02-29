@@ -16,7 +16,7 @@ check_root() {
 install_binary() {
     check_root
     echo "Installing $prog binary..."
-    cp "../$prog" "/usr/bin/$prog"
+    cp "$prog*" "/usr/bin/$prog"
 }
 
 install_bash() {
