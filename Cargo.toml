@@ -67,3 +67,6 @@ terminal-clipboard = "0.4.1"
 unicode-width = "0.1.11"
 stability = "0.1.1"
 copypasta-ext = { version = "0.4.4", features = ["osc52"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"

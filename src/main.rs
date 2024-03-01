@@ -63,6 +63,11 @@ use ratatui::Terminal;
 use rawsocks::{open_socket_rx, open_socket_tx};
 use tar::Builder;
 use targets::{Target, TargetList, TargetMAC, TargetSSID};
+use tracing::instrument;
+use tracing_appender::rolling;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Registry};
 use tx::{
     build_association_response, build_authentication_response, build_disassocation_from_client,
     build_eapol_m1, build_probe_request_target, build_probe_request_undirected,
@@ -108,75 +113,123 @@ use clap::Parser;
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 #[command(version)]
 struct Arguments {
-    #[arg(short, long)]
     /// Interface to use.
+    #[arg(short, long)]
     interface: String,
-    #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
+
     /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
+    #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
     channel: Vec<String>,
-    #[arg(short, long, name = "2 | 5 | 6 | 60")]
+
     /// Optional - Entire band to scan - will include all channels interface can support.
+    #[arg(short = 'b', long, name = "band", help = "2 | 5 | 6 | 60")]
     band: Vec<u8>,
-    #[arg(short, help_heading = "Targeting", name = "Target MAC/SSID")]
+
     /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
+    #[arg(
+        short = 't',
+        long,
+        name = "target_entry",
+        help_heading = "Targeting",
+        help = "Target MAC/SSID"
+    )]
     target_entry: Option<Vec<String>>,
-    #[arg(short, help_heading = "Targeting", name = "WhiteList MAC/SSID")]
+
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
+    #[arg(
+        short = 'w',
+        long,
+        name = "whitelist_entry",
+        help_heading = "Targeting",
+        help = "Whitelist MAC/SSID"
+    )]
     whitelist_entry: Option<Vec<String>>,
-    #[arg(long, help_heading = "Targeting", name = "Targets File")]
+
     /// Optional - File to load target entries from.
+    #[arg(
+        long,
+        help_heading = "Targeting",
+        name = "targetlist",
+        help = "Targets File"
+    )]
     targetlist: Option<String>,
-    #[arg(long, help_heading = "Targeting", name = "Whitelist File")]
+
     /// Optional - File to load whitelist entries from.
+    #[arg(
+        long,
+        help_heading = "Targeting",
+        name = "whitelist",
+        help = "Whitelist File"
+    )]
     whitelist: Option<String>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options", name = "1 | 2 | 3")]
+
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
+    #[arg(short = 'r', long, default_value_t = 2, value_parser = clap::value_parser!(u8).range(1..=3), num_args = 1, help_heading = "Advanced Options", name = "rate", help = "1 | 2 | 3")]
     rate: u8,
-    #[arg(short, long, name = "Output Filename")]
+
     /// Optional - Output filename.
+    #[arg(short = 'o', long, name = "output", help = "Output Filename")]
     output: Option<String>,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Combine all hc22000 files into one large file for bulk processing.
+    #[arg(long, help_heading = "Advanced Options", name = "combine")]
     combine: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Disable Active Monitor mode.
+    #[arg(long, help_heading = "Advanced Options", name = "noactive")]
     noactive: bool,
-    #[arg(long, help_heading = "Advanced Options", name = "MAC Address")]
+
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
+    #[arg(
+        long,
+        help_heading = "Advanced Options",
+        name = "rogue",
+        help = "MAC Address"
+    )]
     rogue: Option<String>,
+
+    /// Optional - Alter default HOST:Port for GPSD connection.
     #[arg(
         long,
         default_value = "127.0.0.1:2947",
         help_heading = "Advanced Options",
-        name = "IP:PORT"
+        name = "gpsd",
+        help = "IP:PORT"
     )]
-    /// Optional - Alter default HOST:Port for GPSD connection.
     gpsd: String,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
+    #[arg(long, help_heading = "Advanced Options", name = "autohunt")]
     autohunt: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
+    #[arg(long, help_heading = "Advanced Options", name = "headless")]
     headless: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - AO will auto-exit when all targets have a valid hashline.
+    #[arg(long, help_heading = "Advanced Options", name = "autoexit")]
     autoexit: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Do not transmit - passive only.
+    #[arg(long, help_heading = "Advanced Options", name = "notransmit")]
     notransmit: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Do NOT send deauths (will try other attacks only).
+    #[arg(long, help_heading = "Advanced Options", name = "nodeauth")]
     nodeauth: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Do not tar output files.
+    #[arg(long, help_heading = "Advanced Options", name = "notar")]
     notar: bool,
+
+    /// Optional - Adjust channel hop dwell time.
     #[arg(
         long,
         help_heading = "Advanced Options",
         default_value_t = 2,
-        name = "Dwell Time (seconds)"
+        name = "dwell",
+        help = "Dwell Time (seconds)"
     )]
-    /// Optional - Adjust channel hop dwell time.
     dwell: u64,
 }
 
@@ -345,6 +398,7 @@ pub struct OxideRuntime {
 }
 
 impl OxideRuntime {
+    #[tracing::instrument(skip(cli_args))]
     fn new(cli_args: &Arguments) -> Self {
         println!("Starting AngryOxide... 😈");
 
@@ -367,15 +421,18 @@ impl OxideRuntime {
 
         let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
 
-        // Need to ensure the channels available here are validated
+        tracing::debug!(%interface_name, "Searching for network interface");
+
         let iface = if let Some(interface) = netlink
             .get_interfaces()
             .iter()
             .find(|&(_, iface)| iface.name_as_string() == interface_name)
             .map(|(_, iface)| iface.clone())
         {
+            tracing::info!(%interface_name, "Network interface found");
             interface
         } else {
+            tracing::error!(%interface_name, "Interface not found");
             println!("{}", get_art("Interface not found"));
             exit(EXIT_FAILURE);
         };
@@ -422,6 +479,7 @@ impl OxideRuntime {
                     }
                 }
                 Err(e) => {
+                    tracing::error!(%e, "Error opening target file");
                     println!("❌ Error opening target file: {}", e);
                     println!("❌ Exiting...");
                     exit(EXIT_FAILURE);
@@ -525,6 +583,7 @@ impl OxideRuntime {
                     }
                 }
                 Err(e) => {
+                    tracing::error!(%e, "Error opening whitelist file:");
                     println!("❌ Error opening whitelist file: {}", e);
                     println!("❌ Exiting...");
                     exit(EXIT_FAILURE);
@@ -734,6 +793,7 @@ impl OxideRuntime {
                     "{}",
                     get_art("Monitor Mode not available for this interface.")
                 );
+                tracing::error!("Monitor Mode not available for this interface");
                 exit(EXIT_FAILURE);
             }
         }
@@ -780,11 +840,13 @@ impl OxideRuntime {
         if let Ok(after) = get_interface_info_idx(idx) {
             if let Some(iftype) = after.current_iftype {
                 if iftype != Nl80211Iftype::IftypeMonitor {
+                    tracing::error!("Interface did not go into Monitor mode");
                     println!("{}", get_art("Interface did not go into Monitor mode"));
                     exit(EXIT_FAILURE);
                 }
             }
         } else {
+            tracing::error!("Couldn't re-retrieve interface info.");
             println!("{}", get_art("Couldn't re-retrieve interface info."));
             exit(EXIT_FAILURE);
         }
@@ -894,6 +956,7 @@ impl OxideRuntime {
         let (host, port) = if let Ok((host, port)) = parse_ip_address_port(&cli_args.gpsd) {
             (host, port)
         } else {
+            tracing::warn!(%cli_args.gpsd, "GPSD argument not valid, using default.");
             println!("GPSD argument {} not valid... ignoring.", cli_args.gpsd);
             parse_ip_address_port("127.0.0.1:2974").unwrap()
         };
@@ -1074,6 +1137,7 @@ impl OxideRuntime {
     }
 }
 
+#[instrument(skip(oxide))]
 fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> {
     let radiotap = match Radiotap::from_bytes(packet) {
         Ok(radiotap) => radiotap,
@@ -2150,6 +2214,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
             // Post Processing
         }
         Err(err) => {
+            tracing::info!(%err, "An error occured while parsing the data:");
             match err {
                 libwifi::error::Error::Failure(message, _data) => match &message[..] {
                     "An error occured while parsing the data: nom::ErrorKind is Eof" => {}
@@ -2201,6 +2266,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     Ok(())
 }
 
+#[tracing::instrument(skip(data_frame, rthdr, oxide))]
 fn handle_data_frame(
     data_frame: &impl DataFrame,
     rthdr: &Radiotap,
@@ -2501,6 +2567,16 @@ fn read_frame(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let env_filter = EnvFilter::from_env("AO_LOG_LEVEL");
+    let file_appender = rolling::minutely("./logs", "angryoxide.log");
+
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    Registry::default()
+        .with(env_filter)
+        .with(tracing_subscriber::fmt::layer().with_writer(non_blocking))
+        .init();
+
     let cli = Arguments::parse();
 
     if !geteuid().is_root() {
