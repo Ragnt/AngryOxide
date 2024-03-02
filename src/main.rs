@@ -1092,6 +1092,9 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
 
     // Get Channel Values
     let current_freq = oxide.if_hardware.interface.frequency.clone().unwrap();
+    if current_freq.channel.is_none() {
+        panic!("Channel is None. Current Frequency: {current_freq:?}");
+    }
     let current_channel = current_freq.channel.unwrap();
     oxide.if_hardware.current_channel = current_channel.clone();
     oxide.if_hardware.current_band = freq_to_band(current_freq.frequency.unwrap());

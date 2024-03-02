@@ -58,8 +58,6 @@ install-zsh: check-root
 	fi
 
 install: install-binary install-bash install-zsh
-
-all: build install
  
 help:
 	@echo "usage: make [debug=1]"
