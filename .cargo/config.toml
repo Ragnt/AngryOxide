@@ -1,0 +1,9 @@
+[target.mips-unknown-linux-musl]
+linker = "/home/rage/dev/Checkpoint/toolchains/mips-linux-muslsf-cross/bin/mips-linux-muslsf-gcc"
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "relocation-model=static",
+    "-C", "strip=symbols", "-C", "link-args=-lgcc",
+    "-L/home/rage/dev/Checkpoint/toolchains/mips-linux-muslsf-cross/mips-linux-muslsf/lib",
+    "-L/home/rage/dev/Checkpoint//toolchains/mips-linux-muslsf-cross/lib/gcc/mips-linux-muslsf/11.2.1",
+]
