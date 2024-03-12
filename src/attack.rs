@@ -187,6 +187,10 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
 
 /// M1 Retrieval Attack Phase 1
 pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
+    if oxide.config.notx {
+        return Ok(());
+    }
+    
     // get AP object, if there isn't one, return (this shouldn't happen).
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
@@ -262,6 +266,10 @@ pub fn m1_retrieval_attack_phase_2(
     client_mac: &MacAddress,
     oxide: &mut OxideRuntime,
 ) -> Result<(), String> {
+    if oxide.config.notx {
+        return Ok(());
+    }
+
     // Get our AP
     let ap_data = if let Some(ap) = oxide.access_points.get_device(ap_mac) {
         ap
