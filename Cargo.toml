@@ -2,7 +2,7 @@
 members = ["libs/libwifi", "libs/libwifi_macros", "libs/pcap-file"]
 
 [workspace.package]
-version = "0.8.8"
+version = "0.8.9"
 authors = ["Ryan Butler"]
 description = "80211 Attack Tool"
 license = "GPL"
@@ -24,7 +24,7 @@ path = "src/main.rs"
 [dependencies]
 libwifi = { version = "0.3.1", path = "libs/libwifi" }
 pcap-file = { version = "2.0.0", path = "libs/pcap-file" }
-nl80211-ng = ">=0.3.1"
+nl80211-ng = ">=0.5.1"
 byteorder = "1.5.0"
 libc = "0.2.149"
 nix = { version = "0.27.1", features = [

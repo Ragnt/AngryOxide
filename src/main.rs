@@ -793,6 +793,7 @@ impl OxideRuntime {
         thread::sleep(Duration::from_millis(500));
         println!("💲 Setting {} up.", interface_name);
         netlink.set_interface_up(idx).ok();
+        netlink.set_powersave_off(idx).ok();
 
         // Setup OUI Database
         let oui_db = OuiDatabase::new();
@@ -1091,7 +1092,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let packet_id = oxide.counters.packet_id();
 
     // Get Channel Values
-    let current_freq = oxide.if_hardware.interface.frequency.clone().unwrap();
+    let current_freq = oxide.if_hardware.interface.frequency.clone();
     if current_freq.channel.is_none() {
         panic!("Channel is None. Current Frequency: {current_freq:?}");
     }

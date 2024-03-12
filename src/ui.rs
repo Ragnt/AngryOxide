@@ -574,7 +574,6 @@ fn create_status_bar(
             .interface
             .frequency
             .clone()
-            .unwrap_or_default()
             .print(),
         if oxide.config.autohunt {
             "(Hunting)"
