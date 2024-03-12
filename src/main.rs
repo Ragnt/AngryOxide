@@ -742,6 +742,8 @@ impl OxideRuntime {
             }
         }
 
+        println!("💲 Mouse Capture: {}", !cli_args.disablemouse);
+
         // Put interface into the right mode
         thread::sleep(Duration::from_secs(1));
         println!("💲 Setting {} down.", interface_name);
