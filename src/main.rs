@@ -170,6 +170,9 @@ struct Arguments {
     #[arg(long, help_heading = "Advanced Options")]
     /// Optional - Do not tar output files.
     notar: bool,
+    #[arg(long, help_heading = "Advanced Options")]
+    /// Optional - Disable mouse capture (scroll wheel).
+    disablemouse: bool,
     #[arg(
         long,
         help_heading = "Advanced Options",
@@ -294,6 +297,7 @@ pub struct Config {
     notar: bool,
     autohunt: bool,
     combine: bool,
+    disable_mouse: bool,
 }
 
 pub struct IfHardware {
@@ -946,6 +950,7 @@ impl OxideRuntime {
             notar: cli_args.notar,
             autohunt: can_autohunt,
             combine: cli_args.combine,
+            disable_mouse: cli_args.disablemouse,
         };
 
         let if_hardware = IfHardware {
@@ -2582,9 +2587,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // UI is in normal mode
         execute!(stdout(), Hide)?;
         execute!(stdout(), EnterAlternateScreen)?;
-        execute!(stdout(), EnableMouseCapture)?;
+        if !oxide.config.disable_mouse {
+            execute!(stdout(), EnableMouseCapture)?;
+        }
         enable_raw_mode()?;
-        initialize_panic_handler();
+        initialize_panic_handler(oxide.config.disable_mouse);
     } else {
         // UI is in headless mode
         ctrlc::set_handler(move || {
@@ -3064,7 +3071,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Execute cleanup
     if !oxide.config.headless {
-        reset_terminal();
+        reset_terminal(oxide.config.disable_mouse);
     }
 
     if exit_on_succ {
@@ -3155,18 +3162,20 @@ fn tar_and_compress_files(output_files: Vec<String>, filename: &str) -> io::Resu
     Ok(())
 }
 
-pub fn initialize_panic_handler() {
+pub fn initialize_panic_handler(disable_mouse: bool) {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        reset_terminal();
+        reset_terminal(disable_mouse);
         original_hook(panic_info);
     }));
 }
 
-fn reset_terminal() {
+fn reset_terminal(disable_mouse: bool) {
     execute!(stdout(), Show).expect("Could not show cursor.");
     execute!(io::stdout(), LeaveAlternateScreen).expect("Could not leave alternate screen");
-    execute!(stdout(), DisableMouseCapture).expect("Could not disable mouse capture.");
+    if !disable_mouse {
+        execute!(stdout(), DisableMouseCapture).expect("Could not disable mouse capture.");
+    }
     disable_raw_mode().expect("Could not disable raw mode.");
 }
 
