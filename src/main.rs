@@ -114,7 +114,7 @@ struct Arguments {
     #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
     /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
     channel: Vec<String>,
-    #[arg(short, long, name = "2 | 5 | 6 | 60")]
+    #[arg(short, long, name = "2 | 5 | 6 | 60", use_value_delimiter = true, action = clap::ArgAction::Append)]
     /// Optional - Entire band to scan - will include all channels interface can support.
     band: Vec<u8>,
     #[arg(short, help_heading = "Targeting", name = "Target MAC/SSID")]
@@ -794,6 +794,10 @@ impl OxideRuntime {
         println!("💲 Setting {} up.", interface_name);
         netlink.set_interface_up(idx).ok();
         netlink.set_powersave_off(idx).ok();
+
+        if let Err(e) = set_interface_chan(idx, hop_channels[0].1, hop_channels[0].0) {
+            eprintln!("{}", e);
+        }
 
         // Setup OUI Database
         let oui_db = OuiDatabase::new();
