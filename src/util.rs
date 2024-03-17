@@ -179,3 +179,47 @@ pub fn wps_to_json(wps_info: &Option<WpsInformation>) -> String {
         "{}".to_string()
     }
 }
+
+pub fn sanitize_essid(filename: &str) -> String {
+    filename
+        .replace("<", "_")
+        .replace(">", "_")
+        .replace(":", "_")
+        .replace("\"", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+        .replace("|", "_")
+        .replace("?", "_")
+        .replace("+", "_")
+        .replace("*", "_")
+        .replace(" ", "_")
+        .replace("\0", "_")
+        .chars()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_filename() {
+        let cases = vec![
+            ("<invalid:file/name?>", "_invalid_file_name__"),
+            ("normal_filename.txt", "normal_filename.txt"),
+            ("hidden?.txt", "hidden_.txt"),
+            ("blank space", "blank_space"),
+            ("con", "con"),
+            ("zEQQ3XJPK+30/+aP", "zEQQ3XJPK_30__aP"), // Added your specific case here
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(
+                sanitize_essid(input),
+                expected.to_string(),
+                "Failed on input: {}",
+                input
+            );
+        }
+    }
+}
