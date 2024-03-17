@@ -79,7 +79,7 @@ use crate::matrix::MatrixSnowstorm;
 use crate::snowstorm::Snowstorm;
 use crate::status::*;
 use crate::ui::{print_ui, MenuType};
-use crate::util::parse_ip_address_port;
+use crate::util::{parse_ip_address_port, sanitize_essid};
 use crate::whitelist::{White, WhiteMAC, WhiteSSID};
 
 use libwifi::{Addresses, Frame};
@@ -100,7 +100,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use std::{fmt, thread};
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
@@ -108,78 +108,88 @@ use clap::Parser;
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 #[command(version)]
 struct Arguments {
-    #[arg(short, long)]
     /// Interface to use.
+    #[arg(short, long)]
     interface: String,
-    #[arg(short, long, use_value_delimiter = true, action = clap::ArgAction::Append)]
+    
     /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
+    #[arg(short, long, use_value_delimiter = true, action = ArgAction::Append)]
     channel: Vec<String>,
-    #[arg(short, long, name = "2 | 5 | 6 | 60", use_value_delimiter = true, action = clap::ArgAction::Append)]
+    
     /// Optional - Entire band to scan - will include all channels interface can support.
+    #[arg(short, long, name = "2 | 5 | 6 | 60", use_value_delimiter = true, action = ArgAction::Append)]
     band: Vec<u8>,
-    #[arg(short, help_heading = "Targeting", name = "Target MAC/SSID")]
+
     /// Optional - Target (MAC or SSID) to attack - will attack everything if none specified.
+    #[arg(short, long, help_heading = "Targeting", name = "Target MAC/SSID", action = ArgAction::Append)]
     target_entry: Option<Vec<String>>,
-    #[arg(short, help_heading = "Targeting", name = "WhiteList MAC/SSID")]
+
     /// Optional - Whitelist (MAC or SSID) to NOT attack.
+    #[arg(short, long, help_heading = "Targeting", name = "WhiteList MAC/SSID", action = ArgAction::Append)]
     whitelist_entry: Option<Vec<String>>,
-    #[arg(long, help_heading = "Targeting", name = "Targets File")]
+
     /// Optional - File to load target entries from.
+    #[arg(long, help_heading = "Targeting", name = "Targets File")]
     targetlist: Option<String>,
-    #[arg(long, help_heading = "Targeting", name = "Whitelist File")]
+
     /// Optional - File to load whitelist entries from.
+    #[arg(long, help_heading = "Targeting", name = "Whitelist File")]
     whitelist: Option<String>,
-    #[arg(short, long, default_value_t = 2, value_parser(clap::value_parser!(u8).range(1..=3)), num_args(1), help_heading = "Advanced Options", name = "1 | 2 | 3")]
+
     /// Optional - Attack rate (1, 2, 3 || 3 is most aggressive)
+    #[arg(short, long, default_value_t = 2, value_parser = clap::value_parser!(u8).range(1..=3), help_heading = "Advanced Options", name = "Attack Rate")]
     rate: u8,
-    #[arg(short, long, name = "Output Filename")]
+
     /// Optional - Output filename.
+    #[arg(short, long, name = "Output Filename")]
     output: Option<String>,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Combine all hc22000 files into one large file for bulk processing.
+    #[arg(long, help_heading = "Advanced Options")]
     combine: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Disable Active Monitor mode.
+    #[arg(long, help_heading = "Advanced Options")]
     noactive: bool,
-    #[arg(long, help_heading = "Advanced Options", name = "MAC Address")]
+
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
+    #[arg(long, help_heading = "Advanced Options", name = "MAC Address")]
     rogue: Option<String>,
-    #[arg(
-        long,
-        default_value = "127.0.0.1:2947",
-        help_heading = "Advanced Options",
-        name = "IP:PORT"
-    )]
+
     /// Optional - Alter default HOST:Port for GPSD connection.
+    #[arg(long, default_value = "127.0.0.1:2947", help_heading = "Advanced Options", name = "GPSD Host:Port")]
     gpsd: String,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
+    #[arg(long, help_heading = "Advanced Options")]
     autohunt: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
+    #[arg(long, help_heading = "Advanced Options")]
     headless: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - AO will auto-exit when all targets have a valid hashline.
+    #[arg(long, help_heading = "Advanced Options")]
     autoexit: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Do not transmit - passive only.
+    #[arg(long, help_heading = "Advanced Options")]
     notransmit: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Do NOT send deauths (will try other attacks only).
+    #[arg(long, help_heading = "Advanced Options")]
     nodeauth: bool,
-    #[arg(long, help_heading = "Advanced Options")]
+
     /// Optional - Do not tar output files.
-    notar: bool,
     #[arg(long, help_heading = "Advanced Options")]
+    notar: bool,
+
     /// Optional - Disable mouse capture (scroll wheel).
+    #[arg(long, help_heading = "Advanced Options")]
     disablemouse: bool,
-    #[arg(
-        long,
-        help_heading = "Advanced Options",
-        default_value_t = 2,
-        name = "Dwell Time (seconds)"
-    )]
+
     /// Optional - Adjust channel hop dwell time.
+    #[arg(long, default_value_t = 2, help_heading = "Advanced Options", name = "Dwell Time (seconds)")]
     dwell: u64,
 }
 
@@ -2984,6 +2994,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if hs.complete() && !hs.is_wpa3() && !hs.written() {
                         if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
                             let essid = hs.essid_to_string();
+                            let sanitized_essid = sanitize_essid(&essid);
                             let hashline = hashcat_string;
 
                             // Determine filename to use
@@ -2997,7 +3008,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     format!("{}.hc22000", oxide.file_data.file_prefix)
                                 }
                             } else {
-                                format!("{}.hc22000", essid)
+                                format!("{}.hc22000", sanitized_essid)
                             };
 
                             let path = Path::new(&file_name);
