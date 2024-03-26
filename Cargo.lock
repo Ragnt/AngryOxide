@@ -69,7 +69,7 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "angry_oxide"
-version = "0.8.10"
+version = "0.8.11"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -1249,9 +1249,9 @@ dependencies = [
 
 [[package]]
 name = "nl80211-ng"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6cb28078a726774e855b829598e53294671a619bb9770f23da791afb23b1645"
+checksum = "d04662c10192565a96eddd77ab85f3d0a0bd051972099207ff1e60c894029846"
 dependencies = [
  "neli",
  "neli-proc-macros",

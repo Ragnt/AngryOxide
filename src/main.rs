@@ -3023,7 +3023,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 });
 
                             writeln!(file, "{}", hashline).unwrap_or_else(|_| {
-                                panic!("Couldn't  write to hashfile. ({file_name}).")
+                                panic!("Couldn't write to hashfile. ({file_name}).")
                             });
 
                             if !oxide.file_data.output_files.contains(&file_name) {
