@@ -26,8 +26,8 @@ You can download pre-compiled binaries of AngryOxide in the [releases](https://g
 
 ```bash
 tar -xf angryoxide-linux-x86_64.tar.gz # Untar
-chmod +x install.sh # Make executable
-sudo install.sh install # Install (as root, including zsh/bash completions)
+chmod +x install # Make executable
+sudo install install # Install (as root, including zsh/bash completions)
 ```
 
 You can get information about how to use AngryOxide in the [User Guide](https://github.com/Ragnt/AngryOxide/wiki/1.-User-Guide).
