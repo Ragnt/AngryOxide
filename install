@@ -16,6 +16,7 @@ check_root() {
 install_binary() {
     check_root
     echo "Installing $prog binary..."
+    chmod +x $prog
     cp "$prog" "/usr/bin/$prog"
 }
 
