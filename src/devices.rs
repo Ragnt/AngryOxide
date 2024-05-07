@@ -1,7 +1,10 @@
 use globset::Glob;
-use libwifi::frame::components::{MacAddress, StationInfo, WpsInformation};
+use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, StationInfo, WpaAkmSuite, WpsInformation};
+use libwifi::frame::{Beacon, ProbeResponse};
+use libwifi::Frame;
 use nl80211_ng::channels::{WiFiBand};
 use radiotap::field::{AntennaSignal, Field};
+use radiotap::Radiotap;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
@@ -10,6 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::oui::OuiRecord;
 use crate::util::{epoch_to_iso_string, epoch_to_string, option_bool_to_json_string, wps_to_json};
+use crate::OxideRuntime;
 
 // Constants for timeouts
 const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change state unless five seconds has passed.
@@ -228,6 +232,153 @@ impl AccessPoint {
             wps_data
         }
     }
+
+    pub fn from_beacon(frame: &Beacon, radiotap: &Radiotap, oxide: &OxideRuntime) -> Result<AccessPoint, String>
+    {
+        let band = &oxide.if_hardware.current_band;
+        let bssid = frame.header.address_3;
+        let signal_strength: AntennaSignal = radiotap.antenna_signal.unwrap_or(
+            AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
+        );
+        let station_info = &frame.station_info;
+        let ssid = station_info
+            .ssid
+            .as_ref()
+            .map(|nssid| nssid.replace('\0', ""));
+
+        let channel = if let Some(channel) = station_info.ds_parameter_set {
+            Some((band.clone(), channel as u32))
+        } else {
+            if let Some(ht_info) = &station_info.ht_information {
+                Some((band.clone(), ht_info.primary_channel as u32))
+            } else {
+                None
+            }
+        };
+
+        Ok(AccessPoint::new(
+            bssid,
+            signal_strength,
+            ssid.clone(),
+            channel,
+            Some(APFlags {
+                apie_essid: station_info.ssid.as_ref().map(|_| true),
+                gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.group_cipher_suite == RsnCipherSuite::CCMP
+                }),
+                gs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.group_cipher_suite == RsnCipherSuite::TKIP
+                }),
+                cs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.pairwise_cipher_suites
+                        .contains(&RsnCipherSuite::CCMP)
+                }),
+                cs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.pairwise_cipher_suites
+                        .contains(&RsnCipherSuite::TKIP)
+                }),
+                rsn_akm_psk: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK)),
+                rsn_akm_psk256: station_info.rsn_information.as_ref().map(
+                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256),
+                ),
+                rsn_akm_pskft: station_info.rsn_information.as_ref().map(
+                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
+                ),
+                rsn_akm_sae: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
+                wpa_akm_psk: station_info
+                    .wpa_info
+                    .as_ref()
+                    .map(|wpa| wpa.akm_suites.contains(&WpaAkmSuite::Psk)),
+                ap_mfp: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.mfp_required),
+            }),
+            oxide.target_data.rogue_client,
+            station_info.wps_info.clone(),
+            oxide.file_data.oui_database.search(&bssid),
+        ))
+    }
+
+    pub fn from_probe_response(frame: &ProbeResponse, radiotap: &Radiotap, oxide: &OxideRuntime) -> Result<AccessPoint, String> {
+        let band = &oxide.if_hardware.current_band;
+        let bssid = frame.header.address_3;
+        let signal_strength: AntennaSignal = radiotap.antenna_signal.unwrap_or(
+            AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
+        );
+        let station_info = &frame.station_info;
+        let ssid = station_info
+            .ssid
+            .as_ref()
+            .map(|nssid| nssid.replace('\0', ""));
+
+
+        let channel = if let Some(channel) = station_info.ds_parameter_set {
+            Some((band.clone(), channel as u32))
+        } else {
+            if let Some(ht_info) = &station_info.ht_information {
+                Some((band.clone(), ht_info.primary_channel as u32))
+            } else {
+                None
+            }
+        };
+
+        Ok(AccessPoint::new(
+            bssid,
+            signal_strength,
+            ssid.clone(),
+            channel,
+            Some(APFlags {
+                apie_essid: station_info.ssid.as_ref().map(|_| true),
+                gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.group_cipher_suite == RsnCipherSuite::CCMP
+                }),
+                gs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.group_cipher_suite == RsnCipherSuite::TKIP
+                }),
+                cs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.pairwise_cipher_suites
+                        .contains(&RsnCipherSuite::CCMP)
+                }),
+                cs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
+                    rsn.pairwise_cipher_suites
+                        .contains(&RsnCipherSuite::TKIP)
+                }),
+                rsn_akm_psk: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK)),
+                rsn_akm_psk256: station_info.rsn_information.as_ref().map(
+                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256),
+                ),
+                rsn_akm_pskft: station_info.rsn_information.as_ref().map(
+                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
+                ),
+                rsn_akm_sae: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
+                wpa_akm_psk: station_info
+                    .wpa_info
+                    .as_ref()
+                    .map(|wpa| wpa.akm_suites.contains(&WpaAkmSuite::Psk)),
+                ap_mfp: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.mfp_required),
+            }),
+            oxide.target_data.rogue_client,
+            station_info.wps_info.clone(),
+            oxide.file_data.oui_database.search(&bssid),
+        ))
+    }
+
 
     // Check if the current time is passed the time stored in the t1 value + 5 seconds
     pub fn is_t1_elapsed(&self) -> bool {

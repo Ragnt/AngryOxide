@@ -5,10 +5,7 @@ use nom::sequence::tuple;
 use nom::IResult;
 
 use crate::frame::components::{
-    AudioDevices, Cameras, Category, Computers, Displays, DockingDevices, GamingDevices,
-    InputDevices, MultimediaDevices, NetworkInfrastructure, PrintersEtAl, RsnAkmSuite,
-    RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone, VendorSpecificInfo,
-    WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
+    AudioDevices, Cameras, Category, Computers, Displays, DockingDevices, GamingDevices, HTInformation, InputDevices, MultimediaDevices, NetworkInfrastructure, PrintersEtAl, RsnAkmSuite, RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone, VendorSpecificInfo, WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState
 };
 
 /// Parse variable length and variable field information.
@@ -52,6 +49,11 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
                     }
                 }
                 50 => station_info.extended_supported_rates = Some(parse_supported_rates(data)),
+                61 => {
+                    if let Ok(ht_info) = parse_ht_information(data) {
+                        station_info.ht_information = Some(ht_info)
+                    }
+                }
                 191 => station_info.vht_capabilities = Some(data.to_vec()),
                 221 => {
                     // Vendor-specific tag
@@ -146,6 +148,18 @@ fn parse_wpa_information(data: &[u8]) -> Result<WpaInformation, &'static str> {
         akm_suites,
     })
 }
+
+fn parse_ht_information(data: &[u8]) -> Result<HTInformation, &'static str> {
+    if data.len() < 1 {
+        return Err("WPA Information data too short");
+    }
+
+    Ok(HTInformation{
+        primary_channel: data[0] as u8,
+        other_data: (&data[1..]).to_vec()
+    })
+}
+
 
 fn parse_wps_information(data: &[u8]) -> Result<WpsInformation, &'static str> {
     let mut wps_info = WpsInformation::default();

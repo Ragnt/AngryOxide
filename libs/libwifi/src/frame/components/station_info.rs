@@ -23,7 +23,8 @@ pub struct StationInfo {
     pub tim: Option<Vec<u8>>,
     pub country_info: Option<Vec<u8>>,
     pub power_constraint: Option<u8>,
-    pub ht_capabilities: Option<Vec<u8>>,
+    pub ht_capabilities: Option<Vec<u8>>,    
+    pub ht_information: Option<HTInformation>,
     pub vht_capabilities: Option<Vec<u8>>,
     pub rsn_information: Option<RsnInformation>,
     pub wpa_info: Option<WpaInformation>,
@@ -103,6 +104,14 @@ impl StationInfo {
             bytes.push(45); // HT Capabilities tag number
             bytes.push(ht_capabilities.len() as u8); // Length of HT Capabilities
             bytes.extend(ht_capabilities);
+        }
+
+        // Encode HT Capabilities (if present) - Tag Number: 45
+        if let Some(ht_info) = &self.ht_information {
+            let ht_info_data = ht_info.encode();
+            bytes.push(61); // HT Capabilities tag number
+            bytes.push(ht_info_data.len() as u8); // Length of HT Capabilities
+            bytes.extend(ht_info_data);
         }
 
         // Encode VHT Capabilities (if present) - Tag Number: 191
@@ -701,5 +710,20 @@ impl RsnCipherSuite {
             RsnCipherSuite::WEP104 => vec![0x00, 0x0F, 0xAC, 0x05],
             RsnCipherSuite::Unknown(data) => data.clone(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HTInformation {
+    pub primary_channel: u8,
+    pub other_data: Vec<u8>    // TODO
+}
+
+impl HTInformation {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut data: Vec<u8> = Vec::new();
+        data.push(self.primary_channel);
+        data.extend(self.other_data.clone());
+        data
     }
 }

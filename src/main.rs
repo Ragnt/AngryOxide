@@ -1180,59 +1180,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         .map(|nssid| nssid.replace('\0', ""));
 
                     if bssid.is_real_device() && bssid != oxide.target_data.rogue_client {
-                        let ap =
+                        let ap: &mut AccessPoint =
                             oxide.access_points.add_or_update_device(
                                 bssid,
-                                &AccessPoint::new(
-                                    bssid,
-                                    signal_strength,
-                                    ssid.clone(),
-                                    station_info
-                                        .ds_parameter_set
-                                        .map(|ch| (band.clone(), ch as u32)),
-                                    Some(APFlags {
-                                        apie_essid: station_info.ssid.as_ref().map(|_| true),
-                                        gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.group_cipher_suite == RsnCipherSuite::CCMP
-                                        }),
-                                        gs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.group_cipher_suite == RsnCipherSuite::TKIP
-                                        }),
-                                        cs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.pairwise_cipher_suites
-                                                .contains(&RsnCipherSuite::CCMP)
-                                        }),
-                                        cs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.pairwise_cipher_suites
-                                                .contains(&RsnCipherSuite::TKIP)
-                                        }),
-                                        rsn_akm_psk: station_info
-                                            .rsn_information
-                                            .as_ref()
-                                            .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK)),
-                                        rsn_akm_psk256: station_info.rsn_information.as_ref().map(
-                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256),
-                                        ),
-                                        rsn_akm_pskft: station_info.rsn_information.as_ref().map(
-                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
-                                        ),
-                                        rsn_akm_sae: station_info
-                                            .rsn_information
-                                            .as_ref()
-                                            .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
-                                        wpa_akm_psk: station_info
-                                            .wpa_info
-                                            .as_ref()
-                                            .map(|wpa| wpa.akm_suites.contains(&WpaAkmSuite::Psk)),
-                                        ap_mfp: station_info
-                                            .rsn_information
-                                            .as_ref()
-                                            .map(|rsn| rsn.mfp_required),
-                                    }),
-                                    oxide.target_data.rogue_client,
-                                    station_info.wps_info.clone(),
-                                    oxide.file_data.oui_database.search(&bssid),
-                                ),
+                                &AccessPoint::from_beacon(&beacon_frame, &radiotap, &oxide)?,
                             );
 
                         // Proliferate whitelist
@@ -1397,56 +1348,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         let ap =
                             oxide.access_points.add_or_update_device(
                                 *bssid,
-                                &AccessPoint::new(
-                                    *bssid,
-                                    signal_strength,
-                                    ssid,
-                                    station_info
-                                        .ds_parameter_set
-                                        .map(|ch| (band.clone(), ch as u32)),
-                                    Some(APFlags {
-                                        apie_essid: station_info.ssid.as_ref().map(|_| true),
-                                        gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.group_cipher_suite == RsnCipherSuite::CCMP
-                                        }),
-                                        gs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.group_cipher_suite == RsnCipherSuite::TKIP
-                                        }),
-                                        cs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.pairwise_cipher_suites
-                                                .contains(&RsnCipherSuite::CCMP)
-                                        }),
-                                        cs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                                            rsn.pairwise_cipher_suites
-                                                .contains(&RsnCipherSuite::TKIP)
-                                        }),
-                                        rsn_akm_psk: station_info
-                                            .rsn_information
-                                            .as_ref()
-                                            .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK)),
-                                        rsn_akm_psk256: station_info.rsn_information.as_ref().map(
-                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256),
-                                        ),
-                                        rsn_akm_pskft: station_info.rsn_information.as_ref().map(
-                                            |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
-                                        ),
-                                        rsn_akm_sae: station_info
-                                            .rsn_information
-                                            .as_ref()
-                                            .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::SAE)),
-                                        wpa_akm_psk: station_info
-                                            .wpa_info
-                                            .as_ref()
-                                            .map(|wpa| wpa.akm_suites.contains(&WpaAkmSuite::Psk)),
-                                        ap_mfp: station_info
-                                            .rsn_information
-                                            .as_ref()
-                                            .map(|rsn| rsn.mfp_required),
-                                    }),
-                                    oxide.target_data.rogue_client,
-                                    station_info.wps_info.clone(),
-                                    oxide.file_data.oui_database.search(bssid),
-                                ),
+                                &AccessPoint::from_probe_response(&probe_response_frame, &radiotap, &oxide)?,
                             );
 
                         ap.pr_station = Some(probe_response_frame.station_info.clone());
