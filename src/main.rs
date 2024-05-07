@@ -424,9 +424,19 @@ impl OxideRuntime {
                             continue;
                         }
                         let target = match line {
-                            Ok(l) => match MacAddress::from_str(&l) {
-                                Ok(mac) => Target::MAC(TargetMAC::new(mac)),
-                                Err(_) => Target::SSID(TargetSSID::new(&l)),
+                            Ok(l) => {
+                                // Remove comments
+                                let line = if let Some(index) = l.find('#') {
+                                    let line_without_comment = &l[..index];
+                                    line_without_comment
+                                } else {
+                                    &l
+                                };
+                                let _ = line.trim_end();
+                                match MacAddress::from_str(&line) {
+                                    Ok(mac) => Target::MAC(TargetMAC::new(mac)),
+                                    Err(_) => Target::SSID(TargetSSID::new(&line)),
+                                }
                             },
                             Err(_) => {
                                 continue;
@@ -510,9 +520,18 @@ impl OxideRuntime {
                         if line.as_ref().is_ok_and(|f| f.is_empty()) {
                             continue;
                         }
+
                         let white = match line {
                             Ok(l) => {
-                                match MacAddress::from_str(&l) {
+                                // Remove comments
+                                let line = if let Some(index) = l.find('#') {
+                                    let line_without_comment = &l[..index];
+                                    line_without_comment
+                                } else {
+                                    &l
+                                };
+                                let _ = line.trim_end();
+                                match MacAddress::from_str(&line) {
                                     Ok(mac) => {
                                         if targ_list.is_actual_target_mac(&mac) {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
@@ -522,8 +541,8 @@ impl OxideRuntime {
                                         }
                                     }
                                     Err(_) => {
-                                        if targ_list.is_actual_target_ssid(&l) {
-                                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", l);
+                                        if targ_list.is_actual_target_ssid(&line) {
+                                            println!("❌ Whitelist {} is a target. Cannot add to whitelist.", line);
                                             continue;
                                         } else {
                                             White::SSID(WhiteSSID::new(&l))
@@ -1114,12 +1133,15 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
 
     // Get Channel Values
     let current_freq = oxide.if_hardware.interface.frequency.clone();
+
     if current_freq.channel.is_none() {
         panic!("Channel is None. Current Frequency: {current_freq:?}");
     }
+
     let current_channel = current_freq.channel.unwrap();
     oxide.if_hardware.current_channel = current_channel.clone();
     oxide.if_hardware.current_band = freq_to_band(current_freq.frequency.unwrap());
+
     let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
 
