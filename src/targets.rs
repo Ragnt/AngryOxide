@@ -100,7 +100,7 @@ impl TargetList {
         self.targets.is_empty()
     }
 
-    /// Will check if the AP is a target, but will also mark the
+    /// Will check if the AP is a target
     pub fn is_target(&mut self, ap: &mut AccessPoint) -> bool {
         if self.empty() {
             return true;
