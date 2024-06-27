@@ -9,13 +9,23 @@ pub struct Geofence {
 }
 
 impl Geofence {
-    pub fn new(target_grid: String, target_radius: f64) -> Geofence {
-        let mgrs_string = Mgrs::parse_str(&target_grid).unwrap();
-        let target_coord_latlon = LatLon::from_mgrs(&mgrs_string);
-        Geofence {
-            target_coord: target_coord_latlon,
-            target_radius: target_radius,
-        }
+    pub fn new(target_grid: String, target_radius: f64) -> Result<Geofence, String> {
+        let coord = if is_mgrs(target_grid.clone()) {
+            let mgrs_string = Mgrs::parse_str(&target_grid).unwrap();
+            LatLon::from_mgrs(&mgrs_string)
+        } else {
+            let parts: Vec<&str> = target_grid.split(',').collect();
+            if parts.len() != 2 {
+                return Err("Input should be in 'lat,lng' format".to_string());
+            }
+            let latitude = parts[0].parse::<f64>().map_err(|_| "Invalid latitude")?;
+            let longitude = parts[1].parse::<f64>().map_err(|_| "Invalid longitude")?;
+            LatLon::create(latitude, longitude).map_err(|_| "Invalid coordinates")?
+        };
+        Ok(Geofence {
+            target_coord: coord,
+            target_radius,
+        })
     }
 
     pub fn distance_to_target(&self, current_point: (f64, f64)) -> f64 {
@@ -29,4 +39,8 @@ impl Geofence {
         let current_point = Point::new(current_coord.lon, current_coord.lat);
         current_point.haversine_distance(&target_point) <= self.target_radius
     }
+}
+
+pub fn is_mgrs(grid: String) -> bool {
+    Mgrs::parse_str(&grid).is_ok()
 }
