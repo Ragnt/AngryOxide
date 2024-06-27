@@ -5,7 +5,10 @@ use nom::sequence::tuple;
 use nom::IResult;
 
 use crate::frame::components::{
-    AudioDevices, Cameras, Category, Computers, Displays, DockingDevices, GamingDevices, HTInformation, InputDevices, MultimediaDevices, NetworkInfrastructure, PrintersEtAl, RsnAkmSuite, RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone, VendorSpecificInfo, WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState
+    AudioDevices, Cameras, Category, Computers, Displays, DockingDevices, GamingDevices,
+    HTInformation, InputDevices, MultimediaDevices, NetworkInfrastructure, PrintersEtAl,
+    RsnAkmSuite, RsnCipherSuite, RsnInformation, StationInfo, Storage, Telephone,
+    VendorSpecificInfo, WpaAkmSuite, WpaCipherSuite, WpaInformation, WpsInformation, WpsSetupState,
 };
 
 /// Parse variable length and variable field information.
@@ -31,11 +34,9 @@ pub fn parse_station_info(mut input: &[u8]) -> IResult<&[u8], StationInfo> {
         if !data.is_empty() {
             match element_id {
                 0 => {
-                    let mut ssid = String::from_utf8_lossy(data).to_string();
-                    if length == 0 {
-                        ssid = "".to_string();
-                    }
+                    let ssid = String::from_utf8_lossy(data).to_string();
                     station_info.ssid = Some(ssid);
+                    station_info.ssid_length = Some(length as usize);
                 }
                 1 => station_info.supported_rates = parse_supported_rates(data),
                 3 => station_info.ds_parameter_set = Some(data[0]),
@@ -154,12 +155,11 @@ fn parse_ht_information(data: &[u8]) -> Result<HTInformation, &'static str> {
         return Err("WPA Information data too short");
     }
 
-    Ok(HTInformation{
+    Ok(HTInformation {
         primary_channel: data[0] as u8,
-        other_data: (&data[1..]).to_vec()
+        other_data: (&data[1..]).to_vec(),
     })
 }
-
 
 fn parse_wps_information(data: &[u8]) -> Result<WpsInformation, &'static str> {
     let mut wps_info = WpsInformation::default();
@@ -211,11 +211,11 @@ fn parse_wps_information(data: &[u8]) -> Result<WpsInformation, &'static str> {
                         if let Some(cat) = bytes_to_category(category, subcategory) {
                             wps_info.primary_device_type = cat.to_string();
                         } else {
-                            wps_info.primary_device_type = "".to_owned();
+                            "".clone_into(&mut wps_info.primary_device_type);
                         }
                     }
                 } else {
-                    wps_info.primary_device_type = "".to_owned();
+                    "".clone_into(&mut wps_info.primary_device_type);
                 }
             }
             0x1011 => {

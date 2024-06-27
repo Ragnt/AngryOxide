@@ -6,6 +6,7 @@ mod auth;
 mod database;
 mod devices;
 mod eventhandler;
+mod geofence;
 mod gps;
 mod matrix;
 mod oui;
@@ -38,6 +39,8 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use database::DatabaseWriter;
+use geoconvert::LatLon;
+use geofence::Geofence;
 use gps::GPSDSource;
 use libc::EXIT_FAILURE;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkmSuite};
@@ -111,11 +114,11 @@ struct Arguments {
     /// Interface to use.
     #[arg(short, long)]
     interface: String,
-    
+
     /// Optional - Channel to scan. Will use "-c 1,6,11" if none specified.
     #[arg(short, long, use_value_delimiter = true, action = ArgAction::Append)]
     channel: Vec<String>,
-    
+
     /// Optional - Entire band to scan - will include all channels interface can support.
     #[arg(short, long, name = "2 | 5 | 6 | 60", use_value_delimiter = true, action = ArgAction::Append)]
     band: Vec<u8>,
@@ -157,7 +160,12 @@ struct Arguments {
     rogue: Option<String>,
 
     /// Optional - Alter default HOST:Port for GPSD connection.
-    #[arg(long, default_value = "127.0.0.1:2947", help_heading = "Advanced Options", name = "GPSD Host:Port")]
+    #[arg(
+        long,
+        default_value = "127.0.0.1:2947",
+        help_heading = "Advanced Options",
+        name = "GPSD Host:Port"
+    )]
     gpsd: String,
 
     /// Optional - AO will auto-hunt all channels then lock in on the ones targets are on.
@@ -189,8 +197,25 @@ struct Arguments {
     disablemouse: bool,
 
     /// Optional - Adjust channel hop dwell time.
-    #[arg(long, default_value_t = 2, help_heading = "Advanced Options", name = "Dwell Time (seconds)")]
+    #[arg(
+        long,
+        default_value_t = 2,
+        help_heading = "Advanced Options",
+        name = "Dwell Time (seconds)"
+    )]
     dwell: u64,
+
+    /// Optional - Enable geofencing using a specified grid and distance.
+    #[arg(long, help_heading = "Geofencing")]
+    geofence: bool,
+
+    /// MGRS grid for geofencing (required if geofence is enabled).
+    #[arg(long, help_heading = "Geofencing", requires = "geofence")]
+    grid: Option<String>,
+
+    /// Distance in meters from the grid centerpoint (required if geofence is enabled).
+    #[arg(long, help_heading = "Geofencing", requires = "geofence")]
+    distance: Option<f64>,
 }
 
 #[derive(Default)]
@@ -437,7 +462,7 @@ impl OxideRuntime {
                                     Ok(mac) => Target::MAC(TargetMAC::new(mac)),
                                     Err(_) => Target::SSID(TargetSSID::new(&line)),
                                 }
-                            },
+                            }
                             Err(_) => {
                                 continue;
                             }
@@ -1180,11 +1205,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         .map(|nssid| nssid.replace('\0', ""));
 
                     if bssid.is_real_device() && bssid != oxide.target_data.rogue_client {
-                        let ap: &mut AccessPoint =
-                            oxide.access_points.add_or_update_device(
-                                bssid,
-                                &AccessPoint::from_beacon(&beacon_frame, &radiotap, &oxide)?,
-                            );
+                        let ap: &mut AccessPoint = oxide.access_points.add_or_update_device(
+                            bssid,
+                            &AccessPoint::from_beacon(&beacon_frame, &radiotap, &oxide)?,
+                        );
 
                         // Proliferate whitelist
                         let _ = oxide.target_data.whitelist.get_whitelisted(ap);
@@ -1345,11 +1369,14 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             .ssid
                             .as_ref()
                             .map(|nssid| nssid.replace('\0', ""));
-                        let ap =
-                            oxide.access_points.add_or_update_device(
-                                *bssid,
-                                &AccessPoint::from_probe_response(&probe_response_frame, &radiotap, &oxide)?,
-                            );
+                        let ap = oxide.access_points.add_or_update_device(
+                            *bssid,
+                            &AccessPoint::from_probe_response(
+                                &probe_response_frame,
+                                &radiotap,
+                                &oxide,
+                            )?,
+                        );
 
                         ap.pr_station = Some(probe_response_frame.station_info.clone());
 
@@ -2512,6 +2539,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     ));
 
+    let mut geofence = None;
+
+    if cli.geofence {
+        if let (Some(grid), Some(distance)) = (&cli.grid, cli.distance) {
+            geofence = Some(Geofence::new(grid.clone(), distance));
+        }
+    }
+
+    let mut last_gps_log_time = Instant::now();
+    let mut inside_geo = !cli.geofence;
+
     let start_time = Instant::now();
 
     let mut err: Option<String> = None;
@@ -2883,11 +2921,80 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        let gps_data = oxide.file_data.gps_source.get_gps();
+
+        // This will actually do the check for if we are inside the geo area, and then update the variable. This will also print the status message.
+        if let (Some(lat), Some(lon)) = (gps_data.lat, gps_data.lon) {
+            // Log every 2 seconds
+            let status = if last_gps_log_time.elapsed() >= Duration::from_secs(2) {
+                last_gps_log_time = Instant::now();
+                true
+            } else {
+                false
+            };
+
+            // Check for invalid (0.0, 0.0) coordinates
+            if lat == 0.0 && lon == 0.0 {
+                if status {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Info,
+                        format!("No GPS coordinates received: (0.0, 0.0)."),
+                    ));
+                }
+            } else if let Some(ref gf) = geofence {
+                let current_point = (lat, lon);
+                let distance = gf.distance_to_target(current_point);
+                let rounded_distance = distance.round();
+
+                // Ensure valid coordinates before attempting conversion
+                if let Ok(coord) = LatLon::create(current_point.0, current_point.1) {
+                    let coord_mgrs = coord.to_mgrs(5);
+                    if gf.is_within_area(current_point) {
+                        if status {
+                            oxide.status_log.add_message(StatusMessage::new(
+                                MessageType::Info,
+                                format!(
+                            "Our location ({}) is within the target area! Getting Angry... 😠",
+                            coord_mgrs
+                        ),
+                            ));
+                        }
+
+                        inside_geo = true;
+                    } else {
+                        if status {
+                            oxide.status_log.add_message(StatusMessage::new(
+                                MessageType::Info,
+                                format!(
+                                    "Current location ({}) is {} meters from the target grid.",
+                                    coord_mgrs, rounded_distance
+                                ),
+                            ));
+                        }
+                        inside_geo = false;
+                    }
+                } else if status {
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Error,
+                        format!("Invalid coordinates for MGRS conversion."),
+                    ));
+                }
+            }
+            last_gps_log_time = Instant::now();
+        }
+
         // Read Frame
         match read_frame(&mut oxide) {
             Ok(packet) => {
+                // we got a packet
                 if !packet.is_empty() {
-                    let _ = process_frame(&mut oxide, &packet);
+                    // This variable will be true if:
+                    // - geofence is on and we are inside the geo area
+                    // - geofence is off
+                    if inside_geo {
+                        let _ = process_frame(&mut oxide, &packet);
+                    }
+                    // if we don't process the frame, then we basically just drop it... but we can still do UI stuff.
                 }
             }
             Err(code) => {

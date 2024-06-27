@@ -68,3 +68,7 @@ terminal-clipboard = "0.4.1"
 unicode-width = "0.1.11"
 stability = "0.1.1"
 copypasta-ext = { version = "0.4.4", features = ["osc52"] }
+geo = "0.28.0"
+geo-types = "0.7.13"
+geoconvert = "1.0.2"
+geomorph = "1.1.0"

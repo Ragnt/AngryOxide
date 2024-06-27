@@ -19,11 +19,12 @@ pub struct StationInfo {
     pub supported_rates: Vec<f32>,
     pub extended_supported_rates: Option<Vec<f32>>,
     pub ssid: Option<String>,
+    pub ssid_length: Option<usize>,
     pub ds_parameter_set: Option<u8>,
     pub tim: Option<Vec<u8>>,
     pub country_info: Option<Vec<u8>>,
     pub power_constraint: Option<u8>,
-    pub ht_capabilities: Option<Vec<u8>>,    
+    pub ht_capabilities: Option<Vec<u8>>,
     pub ht_information: Option<HTInformation>,
     pub vht_capabilities: Option<Vec<u8>>,
     pub rsn_information: Option<RsnInformation>,
@@ -155,6 +156,35 @@ impl StationInfo {
         }
 
         bytes
+    }
+
+    // Helper functions!
+    // Function to get the SSID from the station_info
+    pub fn ssid(&self) -> String {
+        match &self.ssid {
+            Some(ssid) if !ssid.is_empty() => ssid.clone(),
+            Some(_) if self.ssid_length.is_some_and(|s| s > 0) => {
+                format!("<hidden: {}>", self.ssid_length.unwrap_or(0))
+            }
+            Some(_) => "<hidden>".to_string(),
+            None => "".to_string(),
+        }
+    }
+
+    // Function to get the channel
+    pub fn channel(&self) -> Option<u8> {
+        if let Some(ds) = self.ds_parameter_set {
+            Some(ds)
+        } else {
+            self.ht_information
+                .as_ref()
+                .map(|ht_info| ht_info.primary_channel)
+        }
+    }
+
+    // Function to get the WPA information
+    pub fn wpa_info(&self) -> Option<&WpaInformation> {
+        self.wpa_info.as_ref()
     }
 }
 
@@ -716,7 +746,7 @@ impl RsnCipherSuite {
 #[derive(Debug, Clone)]
 pub struct HTInformation {
     pub primary_channel: u8,
-    pub other_data: Vec<u8>    // TODO
+    pub other_data: Vec<u8>, // TODO
 }
 
 impl HTInformation {
