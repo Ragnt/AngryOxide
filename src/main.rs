@@ -90,6 +90,7 @@ use libwifi::{Addresses, Frame};
 use crossterm::{cursor::Hide, cursor::Show, execute};
 
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Debug;
 use std::fs::{remove_file, File, OpenOptions};
 use std::io::stdout;
 use std::io::Write;
@@ -2975,12 +2976,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "No GPS coordinates received: (0.0, 0.0).".to_string(),
                             ));
                         } else if let Ok(coord) = LatLon::create(current_point.0, current_point.1) {
-                            let coord_mgrs = coord.to_mgrs(5);
+                            let coord_print = if gf.mgrs {
+                                format!("{}", coord.to_mgrs(5))
+                            } else {
+                                format!("{}", coord)
+                            };
                             if gf.is_within_area(current_point) {
                                 if gps_status {
                                     oxide.status_log.add_message(StatusMessage::new(
                                     MessageType::Info,
-                                    format!("Our location ({}) is within the target area! Getting Angry... 😠", coord_mgrs),
+                                    format!("Our location ({}) is within the target area! Getting Angry... 😠", coord_print),
                                     ));
                                 }
                                 inside_geo = true;
@@ -2989,7 +2994,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     MessageType::Info,
                                     format!(
                                         "Current location ({}) is {} meters from the target grid.",
-                                        coord_mgrs, rounded_distance
+                                        coord_print, rounded_distance
                                     ),
                                 ));
                             }

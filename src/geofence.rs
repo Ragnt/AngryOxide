@@ -6,12 +6,15 @@ use geomorph::coord::Coord;
 pub struct Geofence {
     target_coord: LatLon,
     target_radius: f64,
+    pub mgrs: bool,
 }
 
 impl Geofence {
     pub fn new(target_grid: String, target_radius: f64) -> Result<Geofence, String> {
+        let mut mgrs = false;
         let coord = if is_mgrs(target_grid.clone()) {
             let mgrs_string = Mgrs::parse_str(&target_grid).unwrap();
+            mgrs = true;
             LatLon::from_mgrs(&mgrs_string)
         } else {
             let parts: Vec<&str> = target_grid.split(',').collect();
@@ -25,6 +28,7 @@ impl Geofence {
         Ok(Geofence {
             target_coord: coord,
             target_radius,
+            mgrs,
         })
     }
 
