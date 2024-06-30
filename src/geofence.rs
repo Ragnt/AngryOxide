@@ -4,8 +4,8 @@ use geoconvert::{LatLon, Mgrs};
 use geomorph::coord::Coord;
 
 pub struct Geofence {
-    target_coord: LatLon,
-    target_radius: f64,
+    pub target_coord: LatLon,
+    pub target_radius: f64,
     pub mgrs: bool,
 }
 

@@ -206,7 +206,7 @@ struct Arguments {
     )]
     dwell: u64,
 
-    /// Optional - Enable geofencing using a specified grid and distance.
+    /// Optional - Enable geofencing using a specified latlng and distance.
     #[arg(
         long,
         help_heading = "Geofencing",
@@ -215,11 +215,11 @@ struct Arguments {
     )]
     geofence: bool,
 
-    /// MGRS grid for geofencing (required if geofence is enabled).
+    /// Lat,Lng for geofencing (required if geofence is enabled).
     #[arg(long, help_heading = "Geofencing", requires = "geofence")]
     center: Option<String>,
 
-    /// Distance in meters from the grid centerpoint (required if geofence is enabled).
+    /// Distance in meters from the center (required if geofence is enabled).
     #[arg(long, help_heading = "Geofencing", requires = "geofence")]
     distance: Option<f64>,
 
@@ -924,6 +924,8 @@ impl OxideRuntime {
             add_target: false,
             set_autoexit: false,
             show_keybinds: false,
+            geofenced: false,
+            geofence_distance: 0.0,
             ui_snowstorm: use_snowstorm,
             ap_sort: 0,
             ap_state: TableState::new(),
@@ -2534,6 +2536,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_hop_time = Instant::now();
     let mut first_channel = (0u8, 0u32);
     let mut hop_cycle: u32 = 0;
+    let mut autohunt_success_hop = u32::MAX;
 
     // Set starting channel and create the hopper cycle.
     let mut old_hops = oxide.if_hardware.hop_channels.clone();
@@ -2615,10 +2618,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
         // Handle Hunting
-        let target_chans = oxide.if_hardware.target_chans.clone();
+        let target_chans: HashMap<Target, Vec<(u8, u32)>> = oxide.if_hardware.target_chans.clone();
+        if oxide.config.autohunt && !target_chans.values().any(|value| value.is_empty()) {
+            // We found atleast one target channel.
+            autohunt_success_hop = hop_cycle;
+        }
+
         if oxide.config.autohunt
-            && hop_cycle >= 3
             && !target_chans.values().any(|value| value.is_empty())
+            && hop_cycle >= autohunt_success_hop + 3
+        // if we are autohunting
+        // and target_chans has targets
+        // and we have been hopping for 3 cycles after we found a target
         {
             // We are done auto-hunting.
             oxide.status_log.add_message(StatusMessage::new(
@@ -2775,15 +2786,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             ));
 
                                             // Setup channels hops
-                                            oxide.if_hardware.hop_channels = old_hops.clone();
-                                            channels_binding =
-                                                oxide.if_hardware.hop_channels.clone();
+                                            oxide.if_hardware.hop_channels.clone_from(&old_hops);
+                                            channels_binding
+                                                .clone_from(&oxide.if_hardware.hop_channels);
                                             cycle_iter = channels_binding.iter().cycle();
                                             first_channel = *cycle_iter.next().unwrap();
                                             oxide.if_hardware.locked = !oxide.if_hardware.locked;
                                         } else {
                                             // Get target_chans
-                                            old_hops = oxide.if_hardware.hop_channels.clone();
+                                            old_hops.clone_from(&oxide.if_hardware.hop_channels);
                                             let new_hops: Vec<(u8, u32)> = vec![(
                                                 oxide.if_hardware.current_band.to_u8(),
                                                 oxide.if_hardware.current_channel,
@@ -2792,8 +2803,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             if !new_hops.is_empty() {
                                                 // Setup channels hops
                                                 oxide.if_hardware.hop_channels = new_hops;
-                                                channels_binding =
-                                                    oxide.if_hardware.hop_channels.clone();
+                                                channels_binding
+                                                    .clone_from(&oxide.if_hardware.hop_channels);
                                                 cycle_iter = channels_binding.iter().cycle();
                                                 first_channel = *cycle_iter.next().unwrap();
 
@@ -2819,9 +2830,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     KeyCode::Char('L') => {
                                         if oxide.if_hardware.locked {
                                             // Setup channels hops
-                                            oxide.if_hardware.hop_channels = old_hops.clone();
-                                            channels_binding =
-                                                oxide.if_hardware.hop_channels.clone();
+                                            oxide.if_hardware.hop_channels.clone_from(&old_hops);
+                                            channels_binding
+                                                .clone_from(&oxide.if_hardware.hop_channels);
                                             cycle_iter = channels_binding.iter().cycle();
                                             first_channel = *cycle_iter.next().unwrap();
 
@@ -2832,7 +2843,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             oxide.if_hardware.locked = !oxide.if_hardware.locked;
                                         } else {
                                             // Get target_chans
-                                            old_hops = oxide.if_hardware.hop_channels.clone();
+                                            old_hops.clone_from(&oxide.if_hardware.hop_channels);
                                             let target_chans =
                                                 oxide.if_hardware.target_chans.clone();
                                             let mut new_hops: Vec<(u8, u32)> = Vec::new();
@@ -2848,8 +2859,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             if !new_hops.is_empty() {
                                                 // Setup channels hops
                                                 oxide.if_hardware.hop_channels = new_hops;
-                                                channels_binding =
-                                                    oxide.if_hardware.hop_channels.clone();
+                                                channels_binding
+                                                    .clone_from(&oxide.if_hardware.hop_channels);
                                                 cycle_iter = channels_binding.iter().cycle();
                                                 first_channel = *cycle_iter.next().unwrap();
 
@@ -2969,11 +2980,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let distance = gf.distance_to_target(current_point);
                         let rounded_distance = distance.round();
 
+                        oxide.ui_state.geofence_distance = (distance - gf.target_radius).max(0.0);
+
                         // Check for invalid (0.0, 0.0) coordinates
                         if lat == 0.0 && lon == 0.0 && gps_status {
                             oxide.status_log.add_message(StatusMessage::new(
                                 MessageType::Info,
-                                "No GPS coordinates received: (0.0, 0.0).".to_string(),
+                                "[GeoFence] No GPS coordinates received: (0.0, 0.0).".to_string(),
                             ));
                         } else if let Ok(coord) = LatLon::create(current_point.0, current_point.1) {
                             let coord_print = if gf.mgrs {
@@ -2985,15 +2998,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if gps_status {
                                     oxide.status_log.add_message(StatusMessage::new(
                                     MessageType::Info,
-                                    format!("Our location ({}) is within the target area! Getting Angry... 😠", coord_print),
+                                    format!("[GeoFence] Our location ({}) is within the target area! Getting Angry... 😠", coord_print),
                                     ));
                                 }
                                 inside_geo = true;
+                                oxide.ui_state.geofenced = false;
                             } else if gps_status {
                                 oxide.status_log.add_message(StatusMessage::new(
                                     MessageType::Info,
                                     format!(
-                                        "Current location ({}) is {} meters from the target grid.",
+                                        "[GeoFence] Current location ({}) is {} meters from the target center.",
                                         coord_print, rounded_distance
                                     ),
                                 ));
@@ -3001,7 +3015,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             oxide.status_log.add_message(StatusMessage::new(
                                 MessageType::Error,
-                                "Invalid coordinates for MGRS conversion.".to_string(),
+                                "[GeoFence] Invalid coordinates for MGRS conversion.".to_string(),
                             ));
                         }
                     }
@@ -3009,7 +3023,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!(
-                            "Invalid GPS for geofencing: {:?} {:?}",
+                            "[GeoFence] Invalid GPS for geofencing: {:?} {:?}",
                             gps_data.lat, gps_data.lon
                         ),
                     ));
@@ -3021,7 +3035,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!(
-                            "No GPS Fix for {} sec... turning off.",
+                            "[GeoFence] No GPS Fix for {} sec... turning off.",
                             cli.geofence_timeout
                         ),
                     ));
@@ -3030,10 +3044,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else if gps_status {
                 oxide.status_log.add_message(StatusMessage::new(
                     MessageType::Info,
-                    "No GPS Fix... uh oh.".to_string(),
+                    "[GeoFence] No GPS Fix... uh oh.".to_string(),
                 ));
             }
         }
+
+        oxide.ui_state.geofenced = !inside_geo;
 
         // Read Frame
         match read_frame(&mut oxide) {

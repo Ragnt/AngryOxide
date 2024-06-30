@@ -21,7 +21,6 @@ use crate::{
     OxideRuntime,
 };
 
-
 // Ratatui imports:
 use ratatui::{
     buffer::Buffer,
@@ -85,6 +84,10 @@ pub struct UiState {
     pub add_target: bool,
     pub set_autoexit: bool,
     pub show_keybinds: bool,
+
+    // Geofencing
+    pub geofenced: bool, // True means we are not getting data, false means we are
+    pub geofence_distance: f64, // Distance from geofence center - the radius value. (how much closer you need to get)
 
     // AP Menu Options
     pub ap_sort: u8,
@@ -360,6 +363,33 @@ pub fn print_ui(
 
         if oxide.ui_state.show_keybinds {
             create_keybind_popup(frame, frame.size());
+        } else if oxide.ui_state.geofenced {
+            let area = frame.size();
+
+            let popup_area = Rect {
+                x: area.width / 2 - 25,
+                y: area.height / 2 - 1,
+                width: 50,
+                height: 3,
+            };
+
+            let message = if oxide.ui_state.geofence_distance <= 0.0 {
+                if !oxide.file_data.gps_source.get_gps().has_fix() {
+                    "No GPS for Geofence".to_string()
+                } else {
+                    "Outside Geofence".to_string()
+                }
+            } else {
+                format!(
+                    "Outside Geofence: {:.1}m from border.",
+                    oxide.ui_state.geofence_distance
+                )
+            };
+            let popup = Popup::default()
+                .content(message)
+                .style(Style::new().yellow().bold())
+                .border_style(Style::new().red());
+            frame.render_widget(popup, popup_area);
         }
     })?;
     Ok(())
@@ -569,12 +599,7 @@ fn create_status_bar(
     let mac: String = format!("MacAddr: {}", mac_addr.expect("Cannot get mac address"));
     let channel = format!(
         "Frequency: {} {}",
-        oxide
-            .if_hardware
-            .interface
-            .frequency
-            .clone()
-            .print(),
+        oxide.if_hardware.interface.frequency.clone().print(),
         if oxide.config.autohunt {
             "(Hunting)"
         } else if oxide.if_hardware.locked {
