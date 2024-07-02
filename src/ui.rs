@@ -381,7 +381,7 @@ pub fn print_ui(
                 }
             } else {
                 format!(
-                    "Outside Geofence: {:.1}m from border.",
+                    "Outside Geofence: {:.1}m from border",
                     oxide.ui_state.geofence_distance
                 )
             };
