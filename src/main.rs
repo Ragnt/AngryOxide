@@ -3087,6 +3087,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for hs in handshakes {
                     if hs.complete() && !hs.is_wpa3() && !hs.written() {
                         if let Some(hashcat_string) = hs.to_hashcat_22000_format() {
+                            let mac = hs.mac_ap;
                             let essid = hs.essid_to_string();
                             let sanitized_essid = sanitize_essid(&essid);
                             let hashline = hashcat_string;
@@ -3101,6 +3102,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 } else {
                                     format!("{}.hc22000", oxide.file_data.file_prefix)
                                 }
+                            } else if let Some(mac) = mac {
+                                format!("{}_{}.hc22000", sanitized_essid, mac)
                             } else {
                                 format!("{}.hc22000", sanitized_essid)
                             };
@@ -3108,7 +3111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let path = Path::new(&file_name);
 
                             let mut file = OpenOptions::new()
-                                .write(true)
                                 .create(true)
                                 .append(true)
                                 .open(path)
