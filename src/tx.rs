@@ -60,6 +60,10 @@ pub fn build_authentication_response(
         auth_seq: 2u16,
         status_code: 0u16,
         challenge_text: None,
+        station_info: Some(StationInfo {
+            extended_capabilities: Some(vec![]),
+            ..Default::default()
+        }),
     };
     rth.extend(authreq.encode());
     rth
@@ -96,6 +100,47 @@ pub fn build_authentication_frame_noack(
         auth_seq: 1u16,
         status_code: 0u16,
         challenge_text: None,
+        station_info: None,
+    };
+    rth.extend(authreq.encode());
+    rth
+}
+
+pub fn build_authentication_frame_with_params(
+    destination: &MacAddress,
+    source_rogue: &MacAddress,
+    sequence: u16,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::Authentication,
+        flags: 1u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: 15000u16.to_ne_bytes(),
+        address_1: *destination,
+        address_2: *source_rogue,
+        address_3: *destination,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: sequence,
+        },
+    };
+    let authreq = Authentication {
+        header,
+        auth_algorithm: 0u16,
+        auth_seq: 1u16,
+        status_code: 0u16,
+        challenge_text: None,
+        station_info: Some(StationInfo {
+            extended_capabilities: Some(vec![0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x40]),
+            ..Default::default()
+        }),
     };
     rth.extend(authreq.encode());
     rth
@@ -240,6 +285,7 @@ pub fn build_association_request_rg(
                 /* Supported Operating Classes */
                 (0x3b, vec![0x51, 0x51, 0x53, 0x54]),
             ],
+            extended_capabilities: None,
         },
     };
     rth.extend(frx.encode());
@@ -310,6 +356,7 @@ pub fn build_association_request(
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
+            extended_capabilities: None,
             data: vec![
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
                 (0x3b, vec![0x51, 0x51, 0x53, 0x54]),
@@ -438,6 +485,7 @@ pub fn build_reassociation_request(
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
+            extended_capabilities: None,
             data: vec![
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
                 (0x3b, vec![0x51, 0x51, 0x53, 0x54]),
@@ -488,6 +536,7 @@ pub fn build_probe_request_undirected(addr_rogue: &MacAddress, sequence: u16) ->
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
+            extended_capabilities: None,
             data: Vec::new(),
         },
     };
@@ -539,6 +588,7 @@ pub fn build_probe_request_target(
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
+            extended_capabilities: None,
             data: Vec::new(),
         },
     };
@@ -591,6 +641,7 @@ pub fn build_probe_request_directed(
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
+            extended_capabilities: None,
             data: Vec::new(),
         },
     };
@@ -660,6 +711,7 @@ pub fn build_probe_response(
             wpa_info: None,
             wps_info: None,
             vendor_specific: Vec::new(),
+            extended_capabilities: None,
             data: Vec::new(),
         },
         timestamp: 1,
@@ -734,6 +786,7 @@ pub fn build_association_response(
             wpa_info: None,
             wps_info: None,
             vendor_specific: vec![],
+            extended_capabilities: None,
             data: vec![],
         },
     };

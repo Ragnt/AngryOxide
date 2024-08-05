@@ -59,12 +59,20 @@ pub fn parse_authentication_frame(
         (input, Some(text.to_vec()))
     };
 
+    // Parse station info (extended capabilities) if present
+    let station_info = if let Ok((input, info)) = parse_station_info(input) {
+        Some(info)
+    } else {
+        None
+    };
+
     Ok(Frame::Authentication(Authentication {
         header,
         auth_algorithm,
         auth_seq,
         status_code,
         challenge_text,
+        station_info,
     }))
 }
 

@@ -8,6 +8,7 @@ pub struct Authentication {
     pub auth_seq: u16,
     pub status_code: u16,
     pub challenge_text: Option<Vec<u8>>,
+    pub station_info: Option<StationInfo>,
 }
 
 impl Authentication {
@@ -27,10 +28,11 @@ impl Authentication {
 
         // Serialize challenge_text (if present)
         if let Some(ref text) = self.challenge_text {
-            // Depending on the 802.11 standard, you might need to include the length of the challenge text
-            // For example: bytes.extend_from_slice(&(text.len() as u16).to_be_bytes());
-
             bytes.extend_from_slice(text);
+        }
+
+        if let Some(info) = &self.station_info {
+            bytes.extend_from_slice(&info.encode());
         }
 
         bytes
