@@ -600,7 +600,9 @@ fn create_status_bar(
     let channel = format!(
         "Frequency: {} {}",
         oxide.if_hardware.interface.frequency.clone().print(),
-        if oxide.config.autohunt {
+        if oxide.ui_state.geofenced {
+            "(GeoFenced)"
+        } else if oxide.config.autohunt {
             "(Hunting)"
         } else if oxide.if_hardware.locked {
             "(Locked)"

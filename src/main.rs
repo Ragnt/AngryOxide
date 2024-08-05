@@ -2627,9 +2627,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if oxide.config.autohunt
             && !target_chans.values().any(|value| value.is_empty())
             && hop_cycle >= autohunt_success_hop + 3
+            && inside_geo
         // if we are autohunting
         // and target_chans has targets
         // and we have been hopping for 3 cycles after we found a target
+        // and geofence is good
         {
             // We are done auto-hunting.
             oxide.status_log.add_message(StatusMessage::new(
