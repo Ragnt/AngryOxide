@@ -2536,6 +2536,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_hop_time = Instant::now();
     let mut first_channel = (0u8, 0u32);
     let mut hop_cycle: u32 = 0;
+    let mut old_hop_cycle = u32::MAX;
     let mut autohunt_success_hop = u32::MAX;
 
     // Set starting channel and create the hopper cycle.
@@ -2619,13 +2620,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Handle Hunting
         let target_chans: HashMap<Target, Vec<(u8, u32)>> = oxide.if_hardware.target_chans.clone();
-        if oxide.config.autohunt && !target_chans.values().any(|value| value.is_empty()) {
-            // We found atleast one target channel.
+        // If we found atleast one
+        if oxide.config.autohunt
+            && autohunt_success_hop == u32::MAX
+            && !target_chans.values().any(|value| value.is_empty())
+        {
+            // We found atleast one target channel. Update autohunt_success_hop
             autohunt_success_hop = hop_cycle;
         }
 
         if oxide.config.autohunt
-            && !target_chans.values().any(|value| value.is_empty())
+            && autohunt_success_hop != u32::MAX
             && hop_cycle >= autohunt_success_hop + 3
             && inside_geo
         // if we are autohunting
@@ -2669,6 +2674,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !cli.notransmit {
                 oxide.config.notx = false; // Turn notx back to false unless CLI notransmit is true.
             }
+        } else if oxide.config.autohunt && old_hop_cycle != hop_cycle {
+            old_hop_cycle = hop_cycle;
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Priority,
+                "=== AutoHunting NOT Complete ===".to_string(),
+            ));
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Priority,
+                format!(
+                    "Empty Target Chans: {:?}",
+                    target_chans.values().filter(|value| value.is_empty())
+                ),
+            ));
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Priority,
+                format!(
+                    "Hop Iteration: {} | First Success Hop: {}",
+                    hop_cycle, autohunt_success_hop
+                ),
+            ));
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Priority,
+                format!("Inside Geo: {}", inside_geo),
+            ));
         }
 
         // Calculate status rates
