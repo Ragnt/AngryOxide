@@ -1545,6 +1545,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                     ),
                                 );
                             } else {
+                                // lets print so we know we see it
                                 let _ = m1_retrieval_attack_phase_2(
                                     &ap_addr,
                                     &oxide.target_data.rogue_client.clone(),

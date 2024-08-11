@@ -39,6 +39,7 @@ pub fn parse_association_request(
 /// - Authentication Transaction Sequence Number
 /// - Status Code
 /// - Challenge Text (optional, dynamic length)
+/// - Station Info (optional, dynamic length)
 pub fn parse_authentication_frame(
     frame_control: FrameControl,
     input: &[u8],
@@ -51,19 +52,25 @@ pub fn parse_authentication_frame(
     let (input, status_code) = le_u16(input)?;
 
     // Parse the optional challenge text, if present
-    let (_, challenge_text) = if input.is_empty() {
-        (input, None)
+    let (challenge_text, station_info) = if auth_algorithm == 1 {
+        let (_, challenge_text) = if input.is_empty() {
+            (input, None)
+        } else {
+            let (input, length) = le_u16(input)?;
+            let (input, text) = take(length)(input)?;
+            (input, Some(text.to_vec()))
+        };
+        (challenge_text, None)
     } else {
-        let (input, length) = le_u16(input)?;
-        let (input, text) = take(length)(input)?;
-        (input, Some(text.to_vec()))
-    };
-
-    // Parse station info (extended capabilities) if present
-    let station_info = if let Ok((input, info)) = parse_station_info(input) {
-        Some(info)
-    } else {
-        None
+        // Parse station info (extended capabilities) if present
+        let station_info = if input.is_empty() {
+            None
+        } else if let Ok((_, info)) = parse_station_info(input) {
+            Some(info)
+        } else {
+            None
+        };
+        (None, station_info)
     };
 
     Ok(Frame::Authentication(Authentication {

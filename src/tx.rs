@@ -40,7 +40,7 @@ pub fn build_authentication_response(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::Authentication,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {
@@ -80,7 +80,7 @@ pub fn build_authentication_frame_noack(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::Authentication,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {
@@ -117,7 +117,7 @@ pub fn build_authentication_frame_with_params(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::Authentication,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {
@@ -229,7 +229,7 @@ pub fn build_association_request_rg(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::AssociationRequest,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {
@@ -306,7 +306,7 @@ pub fn build_association_request(
         protocol_version: 0,
         frame_type: libwifi::FrameType::Management,
         frame_subtype: libwifi::FrameSubType::AssociationRequest,
-        flags: 1u8,
+        flags: 0u8,
     };
 
     let header: ManagementHeader = ManagementHeader {

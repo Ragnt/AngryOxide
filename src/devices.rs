@@ -9,7 +9,7 @@ use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::oui::OuiRecord;
 use crate::util::{epoch_to_iso_string, epoch_to_string, option_bool_to_json_string, wps_to_json};
@@ -17,14 +17,14 @@ use crate::OxideRuntime;
 
 // Constants for timeouts
 const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change state unless five seconds has passed.
-const CONST_T2_TIMEOUT: Duration = Duration::from_millis(200); // Still need a purpose for this.
+const CONST_T2_TIMEOUT: Duration = Duration::from_millis(2); // Still need a purpose for this.
 
 //////////////////////////////////////////////////////////////////////
 /// 
 #[derive(Clone, Debug)]
 pub struct AuthSequence {
-    pub t1: SystemTime,
-    pub t2: SystemTime,
+    pub t1: Instant,
+    pub t2: Instant,
     pub rogue_mac: MacAddress,
     pub state: u8,
 }
@@ -32,8 +32,8 @@ pub struct AuthSequence {
 impl AuthSequence {
     fn new(rogue_mac: MacAddress) -> Self {
         AuthSequence {
-            t1: SystemTime::UNIX_EPOCH,
-            t2: SystemTime::now(),
+            t1: Instant::now(),
+            t2: Instant::now(),
             rogue_mac: MacAddress::random_with_oui(&rogue_mac),
             state: 0,
         }
@@ -43,27 +43,36 @@ impl AuthSequence {
     // Timer 1 is an interaction timer - elapsed means we have passed 1 second
     pub fn is_t1_timeout(&self) -> bool {
         self.t1
-            .elapsed()
-            .map_or(false, |elapsed| elapsed > CONST_T1_TIMEOUT)
+            .elapsed() > CONST_T1_TIMEOUT
     }
 
     // Checks if CONST_T2_TIMEOUT has elapsed since t2
     // Timer 2 is a timer of WHEN state last changed.
     pub fn is_t2_timeout(&self) -> bool {
         self.t2
-            .elapsed()
-            .map_or(false, |elapsed| elapsed > CONST_T2_TIMEOUT)
+            .elapsed()> CONST_T2_TIMEOUT
+    }
+
+    // Checks if CONST_T2_TIMEOUT has elapsed since t2
+    // Timer 2 is a timer of WHEN state last changed.
+    pub fn cts(&mut self) -> bool {
+        if self.t2.elapsed() > CONST_T2_TIMEOUT {
+            self.reset_t2();
+            true
+        } else {
+            false
+        }
     }
 
     // Reset t1
-    pub fn reset_t1(&mut self) -> SystemTime {
-        self.t1 = SystemTime::now();
+    pub fn reset_t1(&mut self) -> Instant {
+        self.t1 = Instant::now();
         self.t1
     }
 
     // Reset t2
-    pub fn reset_t2(&mut self) -> SystemTime {
-        self.t2 = SystemTime::now();
+    pub fn reset_t2(&mut self) -> Instant {
+        self.t2 = Instant::now();
         self.t2
     }
 

@@ -37,7 +37,18 @@ pub struct StationInfo {
 
 impl StationInfo {
     pub fn encode(&self) -> Vec<u8> {
+        let mandatory_rates = [6.0f32, 12.0, 24.0];
         let mut bytes = Vec::new();
+
+        // Encode SSID (if present)
+        if let Some(ssid) = &self.ssid {
+            bytes.push(0); // ID
+            bytes.push(ssid.len() as u8); // Length of SSID
+            bytes.extend_from_slice(ssid.as_bytes()); // SSID as bytes
+        } else {
+            bytes.push(0);
+            bytes.push(0);
+        }
 
         if !self.supported_rates.is_empty() {
             // Encode Supported Rates
@@ -47,7 +58,11 @@ impl StationInfo {
                 // Convert rate from Mbps to 500 kbps units and then to a byte
                 let rate_byte = (rate_mbps * 2.0) as u8;
                 let rate_byte_with_flag = rate_byte | 0x80; // Setting MSB
-                bytes.push(rate_byte_with_flag);
+                if mandatory_rates.contains(&rate_mbps) {
+                    bytes.push(rate_byte_with_flag);
+                } else {
+                    bytes.push(rate_byte);
+                }
             }
         }
 
@@ -59,18 +74,12 @@ impl StationInfo {
                 // Convert rate from Mbps to 500 kbps units and then to a byte
                 let rate_byte = (rate_mbps * 2.0) as u8;
                 let rate_byte_with_flag = rate_byte | 0x80; // Setting MSB
-                bytes.push(rate_byte_with_flag);
+                if mandatory_rates.contains(&rate_mbps) {
+                    bytes.push(rate_byte_with_flag);
+                } else {
+                    bytes.push(rate_byte);
+                }
             }
-        }
-
-        // Encode SSID (if present)
-        if let Some(ssid) = &self.ssid {
-            bytes.push(0); // ID
-            bytes.push(ssid.len() as u8); // Length of SSID
-            bytes.extend_from_slice(ssid.as_bytes()); // SSID as bytes
-        } else {
-            bytes.push(0);
-            bytes.push(0);
         }
 
         // Encode DS Parameter Set (if present)

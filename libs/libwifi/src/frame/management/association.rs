@@ -19,11 +19,11 @@ impl AssociationRequest {
         // Encode the ManagementHeader
         bytes.extend(self.header.encode());
 
-        // Encode Beacon Interval
-        bytes.extend_from_slice(&self.beacon_interval.to_le_bytes());
-
         // Encode Capability Info
         bytes.extend_from_slice(&self.capability_info.to_le_bytes());
+
+        // Encode Beacon Interval
+        bytes.extend_from_slice(&self.beacon_interval.to_le_bytes());
 
         // Encode Station Info
         bytes.extend(self.station_info.encode());

