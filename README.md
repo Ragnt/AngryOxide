@@ -45,10 +45,12 @@ sudo ./install.sh uninstall # Uninstall
 - Whitelist option to protect specific networks from attacks. Useful if not using targets.
 - Auto Hunt capability to find all target channels and hop between them.
 - A Terminal-UI that presents all relevent data while still living in the terminal for easy usage over SSH.
+- A grepable "Headless" operation mode that simply prints status output, ready to be redirected to a log file.
 - Limits DEAUTHENTICATION frames that can cause more damage than good to the authentication sequence.
 - EAPOL 4-Way-Handshake validation using Nonce Correction, Replay Counter validation, and Temporal validation.
 - Automatically elicits PMKID from access points where available.
 - Utilizes GPSD with ability to set remote GPSD service address.
+- Ability to enable geo-fencing to force AO to only run when inside a geometric area specified by a latitude, longitude, and radius.
 - Provides pcapng files with embedded GPS using the [Kismet Format](https://www.kismetwireless.net/docs/dev/pcapng_gps/).
 - Provides a kismetdb file with all frames (with GPS) for post-processing.
 - Wraps all output files in a gzipped tarball.
@@ -59,14 +61,15 @@ sudo ./install.sh uninstall # Uninstall
 Will by default attack ALL access points in range, unless atleast one target is supplied, at which point the tool will only transmit against defined targets. (But will still passively collect on other access points).
 
 - Attempts authentication/association sequence to produce EAPOL Message 1 (PMKID Collection)
-- Attempts to retrieve hidden SSID's with undirected probe requests.
+- Attempts to retrieve hidden SSID's with direct probe requests.
 - Utilizes Anonymous Reassociation to force Access Points to deauthenticate their own clients (MFP Bypass)
 - Will attempt to send Channel Switch Announcement to send clients to adjacent channels.
-- Attempts to downgrade RSN modes to WPA2-CCMP (Probe Response Injection)
-- Attempts to collect EAPOL M2 from stations based solely on Probe Requests (Rogue AP)
-- Will send controlled deauthentication frames unless told not to (--nodeauth)
+- Attempts to downgrade RSN modes to WPA2-CCMP (Probe Response Injection via RogueM2)
+- Attempts to collect EAPOL M2 from stations based solely on Probe Requests (RogueM2)
+- Attempts to disassociate clients using WiFi 6e codes that prevent blacklisting
+- All attacks can be manually disabled.
 
-All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of OPSEC.
+All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of operational security.
 
 ## Help
 
