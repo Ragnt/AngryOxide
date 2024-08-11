@@ -4,7 +4,7 @@ mod authentication;
 mod beacon;
 mod probe;
 
-pub use action::Action;
+pub use action::{Action, ActionCategory};
 pub use association::{
     AssociationRequest, AssociationResponse, Disassociation, ReassociationRequest,
     ReassociationResponse,

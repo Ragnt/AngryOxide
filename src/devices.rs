@@ -241,19 +241,16 @@ impl AccessPoint {
             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
         );
         let station_info = &frame.station_info;
-        let ssid = station_info
-            .ssid
-            .as_ref()
-            .map(|nssid| nssid.replace('\0', ""));
+
+        let ssid = station_info.ssid.as_ref().map(|ssid| ssid.replace('\0', ""));
+
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
             Some((band.clone(), channel as u32))
-        } else {
-            if let Some(ht_info) = &station_info.ht_information {
+        } else if let Some(ht_info) = &station_info.ht_information {
                 Some((band.clone(), ht_info.primary_channel as u32))
-            } else {
-                None
-            }
+        } else {
+            None
         };
 
         Ok(AccessPoint::new(
@@ -313,7 +310,7 @@ impl AccessPoint {
             AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
         );
         let station_info = &frame.station_info;
-        let ssid = station_info
+        let ssid: Option<String> = station_info
             .ssid
             .as_ref()
             .map(|nssid| nssid.replace('\0', ""));
@@ -321,13 +318,7 @@ impl AccessPoint {
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
             Some((band.clone(), channel as u32))
-        } else {
-            if let Some(ht_info) = &station_info.ht_information {
-                Some((band.clone(), ht_info.primary_channel as u32))
-            } else {
-                None
-            }
-        };
+        } else { station_info.ht_information.as_ref().map(|ht_info| (band.clone(), ht_info.primary_channel as u32)) };
 
         Ok(AccessPoint::new(
             bssid,

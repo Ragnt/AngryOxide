@@ -5,8 +5,8 @@ use libwifi::frame::{
         DataHeader, FrameControl, MacAddress, ManagementHeader, RsnAkmSuite, RsnCipherSuite,
         RsnInformation, SequenceControl, StationInfo,
     },
-    Ack, AssociationRequest, AssociationResponse, Authentication, Beacon, Cts, Data,
-    Deauthentication, DeauthenticationReason, Disassociation, EapolKey, ProbeRequest,
+    Ack, Action, ActionCategory, AssociationRequest, AssociationResponse, Authentication, Beacon,
+    Cts, Data, Deauthentication, DeauthenticationReason, Disassociation, EapolKey, ProbeRequest,
     ProbeResponse, ReassociationRequest,
 };
 
@@ -731,6 +731,113 @@ pub fn build_csa_beacon(beacon: Beacon, new_channel: u32) -> Vec<u8> {
     frx.station_info
         .data
         .push((37u8, vec![0u8, new_channel.try_into().unwrap(), 3u8]));
+
+    rth.extend(frx.encode());
+    rth
+}
+
+pub fn build_beacon(
+    addr_rogue_ap: &MacAddress,
+    ssid: &String,
+    sequence: u16,
+    channel: u32,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::ProbeResponse,
+        flags: 0u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: [0x3a, 0x01],
+        address_1: MacAddress::broadcast(),
+        address_2: *addr_rogue_ap,
+        address_3: *addr_rogue_ap,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: sequence,
+        },
+    };
+
+    let frx = Beacon {
+        header,
+        station_info: StationInfo {
+            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
+            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            ssid: Some(ssid.to_string()),
+            ssid_length: None,
+            ds_parameter_set: Some(channel.try_into().unwrap()),
+            tim: None,
+            country_info: None,
+            power_constraint: None,
+            ht_capabilities: None,
+            ht_information: None,
+            vht_capabilities: None,
+            rsn_information: Some(RsnInformation {
+                version: 1,
+                group_cipher_suite: RsnCipherSuite::CCMP,
+                pairwise_cipher_suites: vec![RsnCipherSuite::CCMP],
+                akm_suites: vec![RsnAkmSuite::PSK],
+                pre_auth: false,
+                no_pairwise: false,
+                ptksa_replay_counter: 0,
+                gtksa_replay_counter: 0,
+                mfp_required: false,
+                mfp_capable: false,
+                joint_multi_band_rsna: false,
+                peerkey_enabled: false,
+                extended_key_id: false,
+                ocvc: false,
+            }),
+            wpa_info: None,
+            wps_info: None,
+            vendor_specific: Vec::new(),
+            extended_capabilities: None,
+            data: Vec::new(),
+        },
+        timestamp: 1,
+        beacon_interval: 1024,
+        capability_info: 0x431,
+    };
+    rth.extend(frx.encode());
+    rth
+}
+
+pub fn build_csa_action(addr_client: &MacAddress, addr_ap: &MacAddress, channel: u8) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::Action,
+        flags: 0u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: [0x3a, 0x01],
+        address_1: *addr_client,
+        address_2: *addr_ap,
+        address_3: *addr_ap,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: 0,
+        },
+    };
+
+    let frx = Action {
+        header,
+        category: ActionCategory::SpectrumManagement,
+        action: 4u8,
+        station_info: StationInfo {
+            data: vec![(37u8, vec![3u8, 0u8, channel, 3u8])],
+            ..Default::default()
+        },
+    };
 
     rth.extend(frx.encode());
     rth

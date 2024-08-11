@@ -26,7 +26,7 @@ extern crate nix;
 
 use anyhow::Result;
 use attack::{
-    anon_reassociation_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
+    anon_reassociation_attack, csa_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
     m1_retrieval_attack_phase_2, rogue_m2_attack_directed, rogue_m2_attack_undirected,
 };
 
@@ -185,10 +185,6 @@ struct Arguments {
     #[arg(long, help_heading = "Advanced Options")]
     notransmit: bool,
 
-    /// Optional - Do NOT send deauths (will try other attacks only).
-    #[arg(long, help_heading = "Advanced Options")]
-    nodeauth: bool,
-
     /// Optional - Do not tar output files.
     #[arg(long, help_heading = "Advanced Options")]
     notar: bool,
@@ -231,6 +227,30 @@ struct Arguments {
         default_value_t = 300
     )]
     geofence_timeout: u32,
+
+    /// Optional - Do NOT send deauthentication attacks
+    #[arg(long, help_heading = "Attacks")]
+    disable_deauth: bool,
+
+    /// Optional - Do NOT attempt to associate for PMKID
+    #[arg(long, help_heading = "Attacks")]
+    disable_pmkid: bool,
+
+    /// Optional - Do NOT send anonymous reassociation attacks
+    #[arg(long, help_heading = "Attacks")]
+    disable_anon: bool,
+
+    /// Optional - Do NOT send Channel Switch Announcment attacks
+    #[arg(long, help_heading = "Attacks")]
+    disable_csa: bool,
+
+    /// Optional - Do NOT send disassociation attacks
+    #[arg(long, help_heading = "Attacks")]
+    disable_disassoc: bool,
+
+    /// Optional - Do NOT attempt rogue M2 collection
+    #[arg(long, help_heading = "Attacks")]
+    disable_roguem2: bool,
 }
 
 #[derive(Default)]
@@ -341,7 +361,12 @@ pub struct RawSockets {
 
 pub struct Config {
     notx: bool,
-    deauth: bool,
+    disable_deauth: bool,
+    disable_disassoc: bool,
+    disable_anon: bool,
+    disable_csa: bool,
+    disable_pmkid: bool,
+    disable_roguem2: bool,
     autoexit: bool,
     headless: bool,
     notar: bool,
@@ -355,6 +380,7 @@ pub struct IfHardware {
     original_address: MacAddress,
     current_band: WiFiBand,
     current_channel: u32,
+    capable_channels: BTreeMap<u8, Vec<u32>>,
     hop_channels: Vec<(u8, u32)>,
     target_chans: HashMap<Target, Vec<(u8, u32)>>,
     locked: bool,
@@ -635,12 +661,13 @@ impl OxideRuntime {
 
         //// Setup Channels ////
 
-        let mut iface_bands: BTreeMap<u8, Vec<u32>> = iface
+        let mut capable_channels: BTreeMap<u8, Vec<u32>> = iface
             .get_frequency_list_simple()
             .unwrap()
             .into_iter()
             .collect();
-        for (_key, value) in iface_bands.iter_mut() {
+
+        for (_key, value) in capable_channels.iter_mut() {
             value.sort(); // This sorts each vector in place
         }
 
@@ -662,7 +689,7 @@ impl OxideRuntime {
             println!("🏹 Auto Hunting enabled - will attempt to locate target channels.");
 
             // Because we are autohunting - let's just add every available channel
-            for (band, channels) in iface_bands {
+            for (band, channels) in capable_channels.clone() {
                 for channel in channels {
                     hop_channels.push((band, channel));
                 }
@@ -693,7 +720,7 @@ impl OxideRuntime {
 
             // Add all channels from bands
             for band in &bands {
-                let band_chans = if let Some(chans) = iface_bands.get(band) {
+                let band_chans = if let Some(chans) = capable_channels.get(band) {
                     chans.clone()
                 } else {
                     println!(
@@ -714,7 +741,7 @@ impl OxideRuntime {
                 if let Some((band, channel)) = map_str_to_band_and_channel(channel) {
                     let band_u8 = band.to_u8();
                     if !hop_channels.contains(&(band_u8, channel)) {
-                        if iface_bands.get(&band_u8).unwrap().contains(&channel) {
+                        if capable_channels.get(&band_u8).unwrap().contains(&channel) {
                             hop_channels.push((band_u8, channel));
                         } else {
                             println!(
@@ -1017,7 +1044,12 @@ impl OxideRuntime {
 
         let config = Config {
             notx: notransmit,
-            deauth: !cli_args.nodeauth,
+            disable_deauth: cli_args.disable_deauth,
+            disable_disassoc: cli_args.disable_disassoc,
+            disable_anon: cli_args.disable_anon,
+            disable_csa: cli_args.disable_csa,
+            disable_pmkid: cli_args.disable_pmkid,
+            disable_roguem2: cli_args.disable_roguem2,
             autoexit: cli_args.autoexit,
             headless: cli_args.headless,
             notar: cli_args.notar,
@@ -1037,6 +1069,7 @@ impl OxideRuntime {
             locked: false,
             interface: iface,
             interface_uuid,
+            capable_channels,
         };
 
         let target_data: TargetData = TargetData {
@@ -1117,6 +1150,14 @@ impl OxideRuntime {
         }
     }
 
+    pub fn is_channel_supported(&self, band: &WiFiBand, channel: u32) -> bool {
+        if let Some(channels) = self.if_hardware.capable_channels.get(&band.to_u8()) {
+            channels.contains(&channel)
+        } else {
+            false
+        }
+    }
+
     fn get_target_success(&mut self) -> bool {
         // If there are no targets always return false (not complete)
         if self.target_data.targets.empty() {
@@ -1181,7 +1222,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     }
 
     let current_channel = current_freq.channel.unwrap();
-    oxide.if_hardware.current_channel = current_channel.clone();
+    oxide.if_hardware.current_channel = current_channel;
     oxide.if_hardware.current_band = freq_to_band(current_freq.frequency.unwrap());
 
     let band = &oxide.if_hardware.current_band;
@@ -1212,56 +1253,50 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                 Frame::Beacon(beacon_frame) => {
                     oxide.counters.beacons += 1;
                     let bssid = beacon_frame.header.address_3;
-                    let signal_strength: AntennaSignal = radiotap.antenna_signal.unwrap_or(
-                        AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
-                    );
                     let station_info = &beacon_frame.station_info;
-                    let ssid = station_info
-                        .ssid
-                        .as_ref()
-                        .map(|nssid| nssid.replace('\0', ""));
+
+                    let channel = if let Some(channel) = station_info.ds_parameter_set {
+                        channel
+                    } else if let Some(ht_info) = &station_info.ht_information {
+                        ht_info.primary_channel
+                    } else {
+                        0
+                    };
+
+                    let supported_channel = if channel > 0 {
+                        oxide.is_channel_supported(band, channel.into())
+                    } else {
+                        false
+                    };
 
                     if bssid.is_real_device() && bssid != oxide.target_data.rogue_client {
                         let ap: &mut AccessPoint = oxide.access_points.add_or_update_device(
                             bssid,
-                            &AccessPoint::from_beacon(&beacon_frame, &radiotap, &oxide)?,
+                            &AccessPoint::from_beacon(&beacon_frame, &radiotap, oxide)?,
                         );
 
                         // Proliferate whitelist
                         let _ = oxide.target_data.whitelist.get_whitelisted(ap);
 
-                        // Proliferate the SSID / MAC to targets (if this is a target)
-                        // Also handle adding the target channel to autohunt params.
-
+                        // Proliferate the SSID / MAC to targets (if this is a target) and return any matching targets
                         let targets = oxide.target_data.targets.get_targets(ap);
-                        if !targets.is_empty() {
-                            // This is a target_data target
-                            if let Some(channel) = station_info.ds_parameter_set {
-                                // We have a channel in the broadcast (real channel)
-                                if oxide
-                                    .if_hardware
-                                    .hop_channels
-                                    .contains(&(band.to_u8(), channel.into()))
-                                {
-                                    // We are autohunting and our current channel is real (band/channel match)
-                                    for target in targets {
-                                        // Go through all the target matches we got (which could be a Glob SSID, Match SSID, and MAC!)
-                                        if let Some(vec) =
-                                            oxide.if_hardware.target_chans.get_mut(&target)
-                                        {
-                                            // This target is inside hop_chans
-                                            // Update the target with this band/channel (if it isn't already there)
-                                            if !vec.contains(&(band.to_u8(), channel.into())) {
-                                                vec.push((band.to_u8(), channel.into()));
-                                            }
-                                        } else {
-                                            // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
-                                            oxide.if_hardware.target_chans.insert(
-                                                target,
-                                                vec![(band.to_u8(), channel.into())],
-                                            );
-                                        }
+
+                        // if we have targets that match, and the channel is supported by our interface
+                        if !targets.is_empty() && supported_channel {
+                            // Go through all the target matches we got (which could be a Glob SSID, Match SSID, and MAC!)
+                            for target in targets {
+                                // Get the target from the target_channels hashmap
+                                if let Some(vec) = oxide.if_hardware.target_chans.get_mut(&target) {
+                                    // Update the target with this band/channel (if it isn't already there)
+                                    if !vec.contains(&(band.to_u8(), channel.into())) {
+                                        vec.push((band.to_u8(), channel.into()));
                                     }
+                                } else {
+                                    // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
+                                    oxide
+                                        .if_hardware
+                                        .target_chans
+                                        .insert(target, vec![(band.to_u8(), channel.into())]);
                                 }
                             }
                         };
@@ -1296,7 +1331,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     } else if (rate) == oxide.target_data.attack_rate.to_rate() / 4 {
                         anon_reassociation_attack(oxide, &bssid)?;
                     } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 2 {
-                        //csa_attack(oxide, beacon_frame)?;
+                        csa_attack(oxide, beacon_frame)?;
                     } else if (rate) == (oxide.target_data.attack_rate.to_rate() / 4) * 3 {
                         disassoc_attack(oxide, &bssid)?;
                     }
@@ -1377,21 +1412,29 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     //
                     oxide.counters.probe_responses += 1;
                     let bssid = &probe_response_frame.header.address_3;
-                    let signal_strength = radiotap.antenna_signal.unwrap_or(
-                        AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
-                    );
+                    let station_info = &probe_response_frame.station_info;
+
+                    let channel = if let Some(channel) = station_info.ds_parameter_set {
+                        channel
+                    } else if let Some(ht_info) = &station_info.ht_information {
+                        ht_info.primary_channel
+                    } else {
+                        0
+                    };
+
+                    let supported_channel = if channel > 0 {
+                        oxide.is_channel_supported(band, channel.into())
+                    } else {
+                        false
+                    };
+
                     if bssid.is_real_device() && *bssid != oxide.target_data.rogue_client {
-                        let station_info = &probe_response_frame.station_info;
-                        let ssid = station_info
-                            .ssid
-                            .as_ref()
-                            .map(|nssid| nssid.replace('\0', ""));
                         let ap = oxide.access_points.add_or_update_device(
                             *bssid,
                             &AccessPoint::from_probe_response(
                                 &probe_response_frame,
                                 &radiotap,
-                                &oxide,
+                                oxide,
                             )?,
                         );
 
@@ -1401,40 +1444,28 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         let _ = oxide.target_data.whitelist.get_whitelisted(ap);
 
                         // Proliferate the SSID / MAC to targets (if this is a target)
-                        // Also handle adding the target channel to autohunt params.
-
-                        let targets = oxide.target_data.targets.get_targets(ap);
-                        if !targets.is_empty() {
-                            // This is a target_data target
-                            if let Some(channel) = station_info.ds_parameter_set {
-                                // We have a channel in the broadcast (real channel)
-                                if oxide
-                                    .if_hardware
-                                    .hop_channels
-                                    .contains(&(band.to_u8(), channel.into()))
-                                {
-                                    // We are autohunting and our current channel is real (band/channel match)
-                                    for target in targets {
-                                        // Go through all the target matches we got (which could be a Glob SSID, Match SSID, and MAC!)
-                                        if let Some(vec) =
-                                            oxide.if_hardware.target_chans.get_mut(&target)
-                                        {
-                                            // This target is inside hop_chans
-                                            // Update the target with this band/channel (if it isn't already there)
-                                            if !vec.contains(&(band.to_u8(), channel.into())) {
-                                                vec.push((band.to_u8(), channel.into()));
-                                            }
-                                        } else {
-                                            // Add this target to target_chans (this was a "proliferated" target we didn't know about at first)
-                                            oxide.if_hardware.target_chans.insert(
-                                                target,
-                                                vec![(band.to_u8(), channel.into())],
-                                            );
-                                        }
+                        // Also handle adding the target channel to target_chans for autohunt params.
+                        let target_matches = oxide.target_data.targets.get_targets(ap);
+                        if !target_matches.is_empty() && supported_channel {
+                            // channel is real and supported by the interface (band/channel match)
+                            for target in target_matches {
+                                // Go through all the target matches we got (which could be a Glob SSID, Match SSID, and MAC!)
+                                // If that match is in target_chans, add this channel to it.
+                                if let Some(vec) = oxide.if_hardware.target_chans.get_mut(&target) {
+                                    // Update the target with this band/channel (if it isn't already there)
+                                    if !vec.contains(&(band.to_u8(), channel.into())) {
+                                        vec.push((band.to_u8(), channel.into()));
                                     }
+                                } else {
+                                    // Add this target to target_chans (this was a "proliferated" target we didn't know about yet)
+                                    oxide
+                                        .if_hardware
+                                        .target_chans
+                                        .insert(target, vec![(band.to_u8(), channel.into())]);
                                 }
                             }
                         };
+
                         let _ = m1_retrieval_attack(oxide, bssid);
                     };
                 }
@@ -1467,7 +1498,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                                 ),
                             );
 
-                            if ap_addr == oxide.target_data.rogue_client {
+                            if ap_addr == oxide.target_data.rogue_client
+                                && !oxide.config.disable_roguem2
+                                && !oxide.config.notx
+                            {
                                 // We need to send an auth back
                                 let frx = build_authentication_response(
                                     &client,
@@ -1675,7 +1709,10 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             ),
                         );
 
-                        if ap_mac == oxide.target_data.rogue_client {
+                        if ap_mac == oxide.target_data.rogue_client
+                            && !oxide.config.disable_roguem2
+                            && !oxide.config.notx
+                        {
                             let rogue_ssid = ssid.unwrap_or("".to_string());
                             // We need to send an association response back
                             let frx = build_association_response(
@@ -2619,24 +2656,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
         // Handle Hunting
-        let target_chans: HashMap<Target, Vec<(u8, u32)>> = oxide.if_hardware.target_chans.clone();
+
+        let target_chans: HashMap<Target, Vec<(u8, u32)>> = oxide.if_hardware.target_chans.clone(); // clone so we aren't dealing with moving it
+
         // If we found atleast one
         if oxide.config.autohunt
-            && autohunt_success_hop == u32::MAX
-            && !target_chans.values().any(|value| value.is_empty())
+            && autohunt_success_hop == u32::MAX // we haven't found a target yet
+            && target_chans.values().any(|value| !value.is_empty())
+        // there is atleast one target with a channel in target_chans
         {
             // We found atleast one target channel. Update autohunt_success_hop
             autohunt_success_hop = hop_cycle;
         }
 
-        if oxide.config.autohunt
-            && autohunt_success_hop != u32::MAX
-            && hop_cycle >= autohunt_success_hop + 3
+        if oxide.config.autohunt // We are autohunting
+            && autohunt_success_hop != u32::MAX // there is atleast one target in target_chans
+            && hop_cycle >= autohunt_success_hop + 3 // The hop_cycle has been 3 cycles after we found a target
             && inside_geo
-        // if we are autohunting
-        // and target_chans has targets
-        // and we have been hopping for 3 cycles after we found a target
-        // and geofence is good
+        // We are inside the geofence OR the geofence is disabled
         {
             // We are done auto-hunting.
             oxide.status_log.add_message(StatusMessage::new(
@@ -2675,29 +2712,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 oxide.config.notx = false; // Turn notx back to false unless CLI notransmit is true.
             }
         } else if oxide.config.autohunt && old_hop_cycle != hop_cycle {
-            old_hop_cycle = hop_cycle;
+            // We are autohunting and just restarted our the hop cycle
+            old_hop_cycle = hop_cycle; // this is now the old cycle
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Priority,
                 "=== AutoHunting NOT Complete ===".to_string(),
-            ));
+            )); // inform the user of the status
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Priority,
-                format!(
-                    "Empty Target Chans: {:?}",
-                    target_chans.values().filter(|value| value.is_empty())
-                ),
-            ));
+                format!("Empty Target Chans: {:?}", target_chans),
+            )); // show the target channels
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Priority,
                 format!(
                     "Hop Iteration: {} | First Success Hop: {}",
                     hop_cycle, autohunt_success_hop
                 ),
-            ));
+            )); // show the hop_cycle data
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Priority,
                 format!("Inside Geo: {}", inside_geo),
-            ));
+            )); // Show that we are in the geofence (or not)
         }
 
         // Calculate status rates
