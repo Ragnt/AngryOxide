@@ -85,24 +85,46 @@ Options:
   -V, --version                   Print version
 
 Targeting:
-  -t <MAC Address or SSID>          Optional - Target (MAC or SSID) to attack - will attack everything if none specified
-  -w <MAC Address or SSID>          Optional - Whitelist (MAC or SSID) to NOT attack
-      --targetlist <Targets File>   Optional - File to load target entries from
-      --whitelist <Whitelist File>  Optional - File to load whitelist entries from
+  -t, --target-entry <Target MAC/SSID>
+          Optional - Target (MAC or SSID) to attack - will attack everything if none specified
+  -w, --whitelist-entry <WhiteList MAC/SSID>
+          Optional - Whitelist (MAC or SSID) to NOT attack
+      --targetlist <Targets File>
+          Optional - File to load target entries from
+      --whitelist <Whitelist File>
+          Optional - File to load whitelist entries from
 
 Advanced Options:
-  -r, --rate <1 | 2 | 3>              Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
+  -r, --rate <Attack Rate>            Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
       --combine                       Optional - Combine all hc22000 files into one large file for bulk processing
       --noactive                      Optional - Disable Active Monitor mode
       --rogue <MAC Address>           Optional - Tx MAC for rogue-based attacks - will randomize if excluded
-      --gpsd <IP:PORT>                Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
+      --gpsd <GPSD Host:Port>         Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
       --autohunt                      Optional - AO will auto-hunt all channels then lock in on the ones targets are on
       --headless                      Optional - Set the tool to headless mode without a UI. (useful with --autoexit)
       --autoexit                      Optional - AO will auto-exit when all targets have a valid hashline
       --notransmit                    Optional - Do not transmit - passive only
-      --nodeauth                      Optional - Do NOT send deauths (will try other attacks only)
       --notar                         Optional - Do not tar output files
+      --disablemouse                  Optional - Disable mouse capture (scroll wheel)
       --dwell <Dwell Time (seconds)>  Optional - Adjust channel hop dwell time [default: 2]
+
+Geofencing:
+      --geofence
+          Optional - Enable geofencing using a specified latlng and distance
+      --center <CENTER>
+          Lat,Lng for geofencing (required if geofence is enabled)
+      --distance <DISTANCE>
+          Distance in meters from the center (required if geofence is enabled)
+      --geofence-timeout <GEOFENCE_TIMEOUT>
+          Timeout to disable geofence if GPS is lost. (default 300 seconds) [default: 300]
+
+Attacks:
+      --disable-deauth    Optional - Do NOT send deauthentication attacks
+      --disable-pmkid     Optional - Do NOT attempt to associate for PMKID
+      --disable-anon      Optional - Do NOT send anonymous reassociation attacks
+      --disable-csa       Optional - Do NOT send Channel Switch Announcment attacks
+      --disable-disassoc  Optional - Do NOT send disassociation attacks
+      --disable-roguem2   Optional - Do NOT attempt rogue M2 collection
 ```
 
 ## Building from source
