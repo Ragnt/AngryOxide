@@ -2857,7 +2857,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             channels_binding
                                                 .clone_from(&oxide.if_hardware.hop_channels);
                                             cycle_iter = channels_binding.iter().cycle();
-                                            first_channel = *cycle_iter.next().unwrap();
+                                            first_channel = *cycle_iter.clone().next().unwrap();
                                             oxide.if_hardware.locked = !oxide.if_hardware.locked;
                                         } else {
                                             // Get target_chans
@@ -2873,7 +2873,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 channels_binding
                                                     .clone_from(&oxide.if_hardware.hop_channels);
                                                 cycle_iter = channels_binding.iter().cycle();
-                                                first_channel = *cycle_iter.next().unwrap();
+                                                first_channel = *cycle_iter.clone().next().unwrap();
 
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Info,
@@ -2901,7 +2901,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             channels_binding
                                                 .clone_from(&oxide.if_hardware.hop_channels);
                                             cycle_iter = channels_binding.iter().cycle();
-                                            first_channel = *cycle_iter.next().unwrap();
+                                            first_channel = *cycle_iter.clone().next().unwrap();
 
                                             oxide.status_log.add_message(StatusMessage::new(
                                                 MessageType::Info,
@@ -2929,7 +2929,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 channels_binding
                                                     .clone_from(&oxide.if_hardware.hop_channels);
                                                 cycle_iter = channels_binding.iter().cycle();
-                                                first_channel = *cycle_iter.next().unwrap();
+                                                first_channel = *cycle_iter.clone().next().unwrap();
 
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Info,

