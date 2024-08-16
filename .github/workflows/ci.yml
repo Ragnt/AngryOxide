@@ -51,6 +51,12 @@ jobs:
             bin: angryoxide
             name: angryoxide-linux-armv7hf-musl.tar.gz
 
+          - os_name: Linux-aarch64-gnu
+            os: ubuntu-20.04
+            target: aarch64-unknown-linux-gnu
+            bin: angryoxide
+            name: angryoxide-linux-aarch64-gnu.tar.gz
+
         toolchain:
           - stable
           
@@ -75,7 +81,18 @@ jobs:
           mkdir -p "$TARGET"
           ./bootstrap/bootstrap-ubi.sh
           "$HOME/bin/ubi" --project cross-rs/cross --matching musl --in .          
-        if: matrix.platform.cross
+        if: matrix.platform.cross && !contains(matrix.platform.target, 'gnu')
+      
+      - name: Install cross (gnu)
+        id: cross-nix-gnu
+        shell: bash
+        run: |
+          set -e
+          export TARGET="$HOME/bin"
+          mkdir -p "$TARGET"
+          ./bootstrap/bootstrap-ubi.sh
+          "$HOME/bin/ubi" --project cross-rs/cross --matching musl --in .
+        if: matrix.platform.cross && contains(matrix.platform.target, 'gnu')
 
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v0

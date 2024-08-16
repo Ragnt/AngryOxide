@@ -76,7 +76,8 @@ pub fn csa_attack(oxide: &mut OxideRuntime, beacon: Beacon) -> Result<(), String
     if !oxide.config.notx {
         // Send 5 beacons with decreasing counts
         for count in (0..6).rev() {
-            let frx = build_csa_beacon(beacon.clone(), new_channel.into(), count);
+            let sequence = beacon.header.sequence_control.sequence_number + (6 - count as u16);
+            let frx = build_csa_beacon(beacon.clone(), new_channel.into(), count, sequence);
             let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
             oxide.status_log.add_message(StatusMessage::new(
                 MessageType::Info,

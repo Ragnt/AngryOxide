@@ -722,12 +722,11 @@ pub fn build_probe_response(
     rth
 }
 
-pub fn build_csa_beacon(beacon: Beacon, new_channel: u32, count: u8) -> Vec<u8> {
+pub fn build_csa_beacon(beacon: Beacon, new_channel: u32, count: u8, sequence: u16) -> Vec<u8> {
     let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
 
     let mut frx = beacon.clone();
-    frx.header.sequence_control.sequence_number =
-        beacon.header.sequence_control.sequence_number + 1;
+    frx.header.sequence_control.sequence_number = sequence;
     frx.station_info
         .data
         .push((37u8, vec![0u8, new_channel.try_into().unwrap(), count]));
