@@ -51,27 +51,25 @@ pub fn parse_authentication_frame(
     let (input, auth_seq) = le_u16(input)?;
     let (input, status_code) = le_u16(input)?;
 
+    let mut challenge_text = None;
+    let mut station_info = None;
+
     // Parse the optional challenge text, if present
-    let (challenge_text, station_info) = if auth_algorithm == 1 {
-        let (_, challenge_text) = if input.is_empty() {
-            (input, None)
-        } else {
+    if auth_algorithm == 1 && (auth_seq == 2 || auth_seq == 3) {
+        // Parse the optional challenge text
+        if !input.is_empty() {
             let (input, length) = le_u16(input)?;
-            let (input, text) = take(length)(input)?;
-            (input, Some(text.to_vec()))
+            let (_input, text) = take(length)(input)?;
+            challenge_text = Some(text.to_vec());
         };
-        (challenge_text, None)
     } else {
         // Parse station info (extended capabilities) if present
-        let station_info = if input.is_empty() {
-            None
-        } else if let Ok((_, info)) = parse_station_info(input) {
-            Some(info)
-        } else {
-            None
-        };
-        (None, station_info)
-    };
+        if !input.is_empty() {
+            if let Ok((_input, info)) = parse_station_info(input) {
+                station_info = Some(info);
+            }
+        }
+    }
 
     Ok(Frame::Authentication(Authentication {
         header,
