@@ -974,6 +974,20 @@ impl WiFiDeviceList<AccessPoint> {
         }
         (headers, rows)
     }
+
+    pub fn remove_old_devices(&mut self, timeout: u64) {
+        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        // Remove devices from HashMap
+        self.devices.retain(|_, device| {
+            device.last_recv + timeout > current_time || device.is_target()
+        });
+
+        // Remove devices from the sorted vector
+        self.devices_sorted.retain(|device| {
+            device.last_recv + timeout > current_time || device.is_target()
+        });
+    }
+
 }
 
 fn add_client_header(ap_row: Vec<String>) -> Vec<String> {
@@ -1263,4 +1277,19 @@ impl WiFiDeviceList<Station> {
         }
         strings.join(",")
     }
+
+    pub fn remove_old_devices(&mut self, timeout: u64) {
+        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        // Remove devices from HashMap
+        self.devices.retain(|_, device| {
+            device.last_recv + timeout > current_time
+        });
+
+        // Remove devices from the sorted vector
+        self.devices_sorted.retain(|device| {
+            device.last_recv + timeout > current_time
+        });
+    }
+
 }

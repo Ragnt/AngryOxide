@@ -202,6 +202,15 @@ struct Arguments {
     )]
     dwell: u64,
 
+    /// Optional - Adjust time before device gets removed (if not seen again).
+    #[arg(
+        long,
+        default_value_t = 600,
+        help_heading = "Advanced Options",
+        name = "Device Timeout (seconds)"
+    )]
+    timeout: u64,
+
     /// Optional - Enable geofencing using a specified latlng and distance.
     #[arg(
         long,
@@ -3144,6 +3153,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if oxide.config.autoexit && oxide.get_target_success() {
             running.store(false, Ordering::SeqCst);
             exit_on_succ = true;
+        }
+
+        // Remove the old entries from AP/Clients that are NOT a target and passed the timeout.
+        if cli.timeout > 0 {
+            oxide.access_points.remove_old_devices(cli.timeout);
+            oxide.unassoc_clients.remove_old_devices(cli.timeout);
         }
 
         // Handshake writing
