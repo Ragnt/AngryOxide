@@ -1,4 +1,4 @@
-use byteorder_slice::{BigEndian, ByteOrder, LittleEndian};
+use byteorder_slice::ByteOrder;
 
 /// Timestamp resolution of the pcap
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -54,23 +54,6 @@ impl Endianness {
         return Endianness::Little;
     }
 }
-
-pub(crate) trait RuntimeByteorder: ByteOrder {
-    fn endianness() -> Endianness;
-}
-
-impl RuntimeByteorder for BigEndian {
-    fn endianness() -> Endianness {
-        Endianness::Big
-    }
-}
-
-impl RuntimeByteorder for LittleEndian {
-    fn endianness() -> Endianness {
-        Endianness::Little
-    }
-}
-
 
 /// Data link type
 ///
