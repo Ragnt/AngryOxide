@@ -501,16 +501,10 @@ impl OxideRuntime {
                         let target = match line {
                             Ok(l) => {
                                 // Remove comments
-                                let line = if let Some(index) = l.find('#') {
-                                    let line_without_comment = &l[..index];
-                                    line_without_comment
-                                } else {
-                                    &l
-                                };
-                                let _ = line.trim_end();
-                                match MacAddress::from_str(&line) {
+                                let line = util::strip_comment(&l);
+                                match MacAddress::from_str(line) {
                                     Ok(mac) => Target::MAC(TargetMAC::new(mac)),
-                                    Err(_) => Target::SSID(TargetSSID::new(&line)),
+                                    Err(_) => Target::SSID(TargetSSID::new(line)),
                                 }
                             }
                             Err(_) => {
@@ -598,15 +592,8 @@ impl OxideRuntime {
 
                         let white = match line {
                             Ok(l) => {
-                                // Remove comments
-                                let line = if let Some(index) = l.find('#') {
-                                    let line_without_comment = &l[..index];
-                                    line_without_comment
-                                } else {
-                                    &l
-                                };
-                                let _ = line.trim_end();
-                                match MacAddress::from_str(&line) {
+                                let line = util::strip_comment(&l);
+                                match MacAddress::from_str(line) {
                                     Ok(mac) => {
                                         if targ_list.is_actual_target_mac(&mac) {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
@@ -616,7 +603,7 @@ impl OxideRuntime {
                                         }
                                     }
                                     Err(_) => {
-                                        if targ_list.is_actual_target_ssid(&line) {
+                                        if targ_list.is_actual_target_ssid(line) {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", line);
                                             continue;
                                         } else {

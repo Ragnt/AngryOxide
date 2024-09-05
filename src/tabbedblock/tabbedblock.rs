@@ -317,7 +317,7 @@ impl<'a> TabbedBlock<'a> {
     /// The following example demonstrates:
     /// - Default tab alignment
     /// - Multiple tabs (notice "Center" is centered according to the full with of the TabbedBlock, not
-    /// the leftover space)
+    ///   the leftover space)
     /// - Two tabs with the same alignment (notice the left tabs are separated)
     /// ```
     /// use ratatui::{

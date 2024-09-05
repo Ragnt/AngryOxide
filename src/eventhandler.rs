@@ -91,7 +91,7 @@ impl EventHandler {
                         let _ = match mouse.kind {
                             MouseEventKind::ScrollDown => tx.send(EventType::Key(event)),
                             MouseEventKind::ScrollUp => tx.send(EventType::Key(event)),
-                            _ => Ok({}),
+                            _ => Ok(()),
                         };
                     }
                 }

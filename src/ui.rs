@@ -785,7 +785,7 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
                 Line::from(vec![
                     Span::from("Make: "),
                     Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
-                        let str = format!("{}", f.manufacturer);
+                        let str = f.manufacturer.to_string();
                         if str.is_empty() {
                             "Unknown".to_string()
                         } else {
@@ -796,7 +796,7 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
                 Line::from(vec![
                     Span::from("Device Name: "),
                     Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
-                        let str = format!("{}", f.device_name);
+                        let str = f.device_name.to_string();
                         if str.is_empty() {
                             "Unknown".to_string()
                         } else {
@@ -807,7 +807,7 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
                 Line::from(vec![
                     Span::from("Device Type: "),
                     Span::from(ap.wps_data.as_ref().map_or("Unknown".to_string(), |f| {
-                        let str = format!("{}", f.primary_device_type);
+                        let str = f.primary_device_type.to_string();
                         if str.is_empty() {
                             "Unknown".to_string()
                         } else {
@@ -867,14 +867,11 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
                             height: 1,
                         });
                     let cl = Paragraph::new(format!(" {}{}", icon, client.mac_address));
-                    let last = Paragraph::new(format!("{}", epoch_to_string(client.last_recv)));
-                    let rssi = Paragraph::new(format!(
-                        "{}",
-                        match client.last_signal_strength.value {
-                            0 => "".to_string(),
-                            _ => client.last_signal_strength.value.to_string(),
-                        }
-                    ));
+                    let last = Paragraph::new(epoch_to_string(client.last_recv));
+                    let rssi = Paragraph::new(match client.last_signal_strength.value {
+                        0 => "".to_string(),
+                        _ => client.last_signal_strength.value.to_string(),
+                    });
                     let tx = Paragraph::new(format!("{}", client.interactions));
                     frame.render_widget(cl, row_layout[0]);
                     frame.render_widget(last, row_layout[1]);

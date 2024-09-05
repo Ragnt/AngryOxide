@@ -10,7 +10,7 @@ use libwifi::{
         components::{MacAddress, RsnAkmSuite, RsnCipherSuite, RsnInformation},
         Beacon, DeauthenticationReason, ProbeRequest,
     },
-    parse_frame, Addresses, Frame,
+    Addresses,
 };
 use nl80211_ng::channels::WiFiBand;
 
@@ -638,7 +638,7 @@ pub fn rogue_m2_attack_directed(
             &probe.header.address_1,
             &ssid,
             oxide.counters.sequence3(),
-            oxide.if_hardware.current_channel.try_into().unwrap(),
+            oxide.if_hardware.current_channel,
         );
         write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx)?;
         station.interactions += 1;

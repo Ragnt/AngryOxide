@@ -648,8 +648,7 @@ impl<'a> AdvTable<'a> {
     ///
     /// Create a table that needs at least 30 columns to display.  Any extra space will be assigned
     /// to the last column.
-    #[cfg_attr(feature = "unstable", doc = " ```")]
-    #[cfg_attr(not(feature = "unstable"), doc = " ```ignore")]
+    /// ```ignore
     /// # use ratatui::layout::Constraint;
     /// # use ratatui::layout::SegmentSize;
     /// # use ratatui::widgets::Table;

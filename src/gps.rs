@@ -327,11 +327,11 @@ impl Timestamp {
         Ok(Timestamp { high, low })
     }
 
-    pub fn to_u64(&self) -> u64 {
+    pub fn to_u64(self) -> u64 {
         ((self.high as u64) << 32) | self.low as u64
     }
 
-    pub fn to_system_time(&self) -> SystemTime {
+    pub fn to_system_time(self) -> SystemTime {
         UNIX_EPOCH + Duration::from_secs(self.to_u64())
     }
 }
@@ -350,7 +350,7 @@ impl FixedPoint {
         }
     }
 
-    pub fn to_f64(&self) -> f64 {
+    pub fn to_f64(self) -> f64 {
         let divisor = 10u64.pow(self.decimal_places) as f64;
         self.value as f64 / divisor
     }
@@ -364,7 +364,7 @@ pub struct Fixed3_7 {
 impl Fixed3_7 {
     // Converts from a floating-point number to a Fixed3_7 representation
     pub fn from_float(flt: f64) -> Result<Self, &'static str> {
-        if flt < -180.0 || flt > 180.0 {
+        if !(-180.0..=180.0).contains(&flt) {
             return Err("invalid value"); // Out of range values are considered illegal
         }
 
@@ -375,7 +375,7 @@ impl Fixed3_7 {
     }
 
     // Converts the Fixed3_7 back to a floating-point number
-    pub fn to_float(&self) -> f64 {
+    pub fn to_float(self) -> f64 {
         if self.value > 3600000000 {
             panic!("Value too much");
         }
@@ -391,7 +391,7 @@ pub struct Fixed3_6 {
 
 impl Fixed3_6 {
     pub fn from_float(flt: f64) -> Result<Self, &'static str> {
-        if flt < 0.0 || flt > 999.999999 {
+        if !(0.0..=999.999999).contains(&flt) {
             return Err("invalid value"); // Out of range values are considered illegal
         }
         let scaled = (flt * 1_000_000.0) as u32; // Rounding done on f64
@@ -399,7 +399,7 @@ impl Fixed3_6 {
     }
 
     // Converts the Fixed3_6 back to a floating-point number
-    pub fn to_float(&self) -> f64 {
+    pub fn to_float(self) -> f64 {
         self.value as f64 / 1_000_000.0
     }
 }
@@ -419,7 +419,7 @@ impl Fixed6_4 {
         Ok(Fixed6_4 { value: scaled })
     }
 
-    pub fn to_float(&self) -> f64 {
+    pub fn to_float(self) -> f64 {
         (self.value as i64 - 18_000_000 * 10_000) as f64 / 10_000.0
     }
 }
