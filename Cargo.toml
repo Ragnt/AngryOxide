@@ -21,6 +21,10 @@ license.workspace = true
 name = "angryoxide"
 path = "src/main.rs"
 
+[features]
+default = ["bundled"]
+bundled = ["rusqlite/bundled"]
+
 [dependencies]
 libwifi = { version = "0.3.1", path = "libs/libwifi" }
 pcap-file = { version = "2.0.0", path = "libs/pcap-file" }
@@ -56,7 +60,7 @@ derive_setters = "0.1.6"
 gpsd_proto = "1.0.0"
 itertools = "0.12.0"
 geographiclib-rs = "0.2.3"
-rusqlite = { version = "0.30.0", features = ["bundled"] }
+rusqlite = "0.30.0"
 uuid = { version = "1.6.1", features = ["v4"] }
 crc32fast = "1.3.2"
 flate2 = { version = "1.0.28", features = ["zlib"] }
