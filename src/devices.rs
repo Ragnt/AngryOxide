@@ -1,7 +1,6 @@
 use globset::Glob;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, StationInfo, WpaAkmSuite, WpsInformation};
 use libwifi::frame::{Beacon, ProbeResponse};
-use libwifi::Frame;
 use nl80211_ng::channels::{WiFiBand};
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
@@ -20,7 +19,6 @@ const CONST_T1_TIMEOUT: Duration = Duration::from_secs(5); // Do not change stat
 const CONST_T2_TIMEOUT: Duration = Duration::from_millis(2); // Still need a purpose for this.
 
 //////////////////////////////////////////////////////////////////////
-/// 
 #[derive(Clone, Debug)]
 pub struct AuthSequence {
     pub t1: Instant,
@@ -180,11 +178,7 @@ impl AccessPoint {
             client_list,
             channel: chan,
             beacon_count: 0,
-            information: if let Some(info) = information {
-                info
-            } else {
-                APFlags::default()
-            },
+            information: information.unwrap_or_default(),
             pr_station: None,
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
@@ -227,11 +221,7 @@ impl AccessPoint {
             client_list,
             channel: chan,
             beacon_count: 0,
-            information: if let Some(info) = information {
-                info
-            } else {
-                APFlags::default()
-            },
+            information: information.unwrap_or_default(),
             pr_station: None,
             auth_sequence: AuthSequence::new(rogue_mac),
             has_hs: false,
@@ -256,10 +246,9 @@ impl AccessPoint {
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
             Some((band.clone(), channel as u32))
-        } else if let Some(ht_info) = &station_info.ht_information {
-                Some((band.clone(), ht_info.primary_channel as u32))
         } else {
-            None
+            station_info.ht_information.as_ref()
+                .map(|ht_info| (band.clone(), ht_info.primary_channel as u32))
         };
 
         Ok(AccessPoint::new(

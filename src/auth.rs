@@ -186,14 +186,11 @@ impl FourWayHandshake {
     }
 
     pub fn is_wpa3(&self) -> bool {
-        if let Some(rsn) = self.rsn_type.clone() {
-            if rsn == vec![RsnAkmSuite::SAE] {
-                return true;
-            } else {
-                return false;
-            }
+        if let Some(rsn) = &self.rsn_type {
+            rsn == &[RsnAkmSuite::SAE]
+        } else {
+            false
         }
-        false
     }
 
     pub fn written(&self) -> bool {

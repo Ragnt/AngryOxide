@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use libwifi::frame::components::WpsInformation;
 use libwifi::frame::{EapolKey, KeyInformation};
 use radiotap::field::ext::TimeUnit;
+use std::fmt::Write;
 use std::fs::File;
 use std::io;
 use std::net::IpAddr;
@@ -28,7 +29,10 @@ pub fn epoch_to_string(epoch: u64) -> String {
 }
 
 pub fn slice_to_hex_string(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    bytes.iter().fold(String::new(), |mut output, b| {
+        let _ = write!(output, "{b:02x}");
+        output
+    })
 }
 
 pub fn epoch_to_iso_string(epoch: u64) -> String {
@@ -198,6 +202,13 @@ pub fn sanitize_essid(filename: &str) -> String {
         .collect()
 }
 
+pub fn strip_comment(line: &str) -> &str {
+    line.split_once('#')
+        .map(|(line_without_comment, _)| line_without_comment)
+        .unwrap_or(line)
+        .trim_end()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,5 +232,13 @@ mod tests {
                 input
             );
         }
+    }
+
+    #[test]
+    fn test_strip_comment() {
+        assert_eq!(strip_comment("hello world"), "hello world");
+        assert_eq!(strip_comment("hello # world"), "hello");
+        assert_eq!(strip_comment("hello # world # test"), "hello");
+        assert_eq!(strip_comment("hello   "), "hello");
     }
 }

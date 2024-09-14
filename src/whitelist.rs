@@ -179,7 +179,7 @@ impl WhiteList {
                 }
             }
         }
-        return matches;
+        matches
     }
 
     pub fn is_whitelisted_mac(&self, mac: &MacAddress) -> bool {

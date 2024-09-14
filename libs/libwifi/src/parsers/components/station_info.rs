@@ -151,13 +151,13 @@ fn parse_wpa_information(data: &[u8]) -> Result<WpaInformation, &'static str> {
 }
 
 fn parse_ht_information(data: &[u8]) -> Result<HTInformation, &'static str> {
-    if data.len() < 1 {
+    if data.is_empty() {
         return Err("WPA Information data too short");
     }
 
     Ok(HTInformation {
-        primary_channel: data[0] as u8,
-        other_data: (&data[1..]).to_vec(),
+        primary_channel: data[0],
+        other_data: data[1..].to_vec(),
     })
 }
 

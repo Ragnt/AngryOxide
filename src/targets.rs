@@ -179,7 +179,7 @@ impl TargetList {
                 }
             }
         }
-        return matches;
+        matches
     }
 
     pub fn is_actual_target_mac(&self, mac: &MacAddress) -> bool {

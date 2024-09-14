@@ -560,11 +560,11 @@ pub enum WpsSetupState {
     Configured = 0x02,
 }
 
-impl ToString for WpsSetupState {
-    fn to_string(&self) -> String {
+impl fmt::Display for WpsSetupState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            WpsSetupState::NotConfigured => "Not Configured".to_string(),
-            WpsSetupState::Configured => "Configured".to_string(),
+            WpsSetupState::NotConfigured => write!(f, "Not Configured"),
+            WpsSetupState::Configured => write!(f, "Configured"),
         }
     }
 }
