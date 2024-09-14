@@ -2632,8 +2632,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut err: Option<String> = None;
     let mut exit_on_succ = false;
-    let mut terminal =
-        Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal");
+
+    let mut terminal: Option<Terminal<CrosstermBackend<std::io::Stdout>>> = None;
 
     if !oxide.config.headless {
         // UI is in normal mode
@@ -2644,6 +2644,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         enable_raw_mode()?;
         initialize_panic_handler(oxide.config.disable_mouse);
+        terminal =
+            Some(Terminal::new(CrosstermBackend::new(stdout())).expect("Cannot allocate terminal"));
     } else {
         // UI is in headless mode
         ctrlc::set_handler(move || {
@@ -2795,146 +2797,128 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // This should ONLY apply to normal UI mode.
         if !oxide.config.headless {
-            if let Some(ev) = oxide.eventhandler.get() {
-                match ev {
-                    EventType::Key(event) => {
-                        if let Event::Key(key) = event {
-                            if key.kind == KeyEventKind::Press {
-                                match key.code {
-                                    KeyCode::Char('d') | KeyCode::Right => {
-                                        oxide.ui_state.menu_next()
-                                    }
-                                    KeyCode::Char('a') | KeyCode::Left => {
-                                        oxide.ui_state.menu_back()
-                                    }
-                                    KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Up => {
-                                        if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                                            oxide.ui_state.table_previous_item_big();
-                                        } else {
-                                            oxide.ui_state.table_previous_item();
+            if let Some(ref mut term) = terminal {
+                // The terminal is already initialized outside the loop if not in headless mode
+                if let Some(ev) = oxide.eventhandler.get() {
+                    match ev {
+                        EventType::Key(event) => {
+                            if let Event::Key(key) = event {
+                                if key.kind == KeyEventKind::Press {
+                                    match key.code {
+                                        KeyCode::Char('d') | KeyCode::Right => {
+                                            oxide.ui_state.menu_next()
                                         }
-                                    }
-                                    KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Down => {
-                                        if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                                            oxide.ui_state.table_next_item_big(table_len);
-                                        } else {
-                                            oxide.ui_state.table_next_item(table_len);
+                                        KeyCode::Char('a') | KeyCode::Left => {
+                                            oxide.ui_state.menu_back()
                                         }
-                                    }
-                                    KeyCode::Char('q') => {
-                                        oxide.ui_state.show_quit = !oxide.ui_state.show_quit;
-                                    }
-                                    KeyCode::Char('y') | KeyCode::Char('Y') => {
-                                        if oxide.ui_state.show_quit {
-                                            running.store(false, Ordering::SeqCst)
+                                        KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Up => {
+                                            if key.modifiers.intersects(KeyModifiers::SHIFT) {
+                                                oxide.ui_state.table_previous_item_big();
+                                            } else {
+                                                oxide.ui_state.table_previous_item();
+                                            }
                                         }
-                                    }
-                                    KeyCode::Char('n') | KeyCode::Char('N') => {
-                                        if oxide.ui_state.show_quit {
-                                            oxide.ui_state.show_quit = false;
+                                        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Down => {
+                                            if key.modifiers.intersects(KeyModifiers::SHIFT) {
+                                                oxide.ui_state.table_next_item_big(table_len);
+                                            } else {
+                                                oxide.ui_state.table_next_item(table_len);
+                                            }
                                         }
-                                    }
-                                    KeyCode::Char(' ') => oxide.ui_state.toggle_pause(),
-                                    KeyCode::Char('e') => oxide.ui_state.sort_next(),
-                                    KeyCode::Char('r') => oxide.ui_state.toggle_reverse(),
-                                    KeyCode::Char('c') => {
-                                        oxide.ui_state.copy_short = true;
-                                    }
-                                    KeyCode::Char('C') => {
-                                        oxide.ui_state.copy_long = true;
-                                    }
-                                    KeyCode::Char('t') => {
-                                        oxide.ui_state.add_target = true;
-                                    }
-                                    KeyCode::Char('T') => {
-                                        oxide.ui_state.add_target = true;
-                                        oxide.ui_state.set_autoexit = true;
-                                    }
-                                    KeyCode::Char('k') => {
-                                        oxide.ui_state.show_keybinds =
-                                            !oxide.ui_state.show_keybinds;
-                                    }
-                                    KeyCode::Char('l') => {
-                                        if oxide.if_hardware.locked {
-                                            oxide.status_log.add_message(StatusMessage::new(
-                                                MessageType::Info,
-                                                "Unlocking Channel".to_string(),
-                                            ));
-
-                                            // Setup channels hops
-                                            oxide.if_hardware.hop_channels.clone_from(&old_hops);
-                                            channels_binding
-                                                .clone_from(&oxide.if_hardware.hop_channels);
-                                            cycle_iter = channels_binding.iter().cycle();
-                                            first_channel = *cycle_iter.clone().next().unwrap();
-                                            oxide.if_hardware.locked = !oxide.if_hardware.locked;
-                                        } else {
-                                            // Get target_chans
-                                            old_hops.clone_from(&oxide.if_hardware.hop_channels);
-                                            let new_hops: Vec<(u8, u32)> = vec![(
-                                                oxide.if_hardware.current_band.to_u8(),
-                                                oxide.if_hardware.current_channel,
-                                            )];
-
-                                            if !new_hops.is_empty() {
+                                        KeyCode::Char('q') => {
+                                            oxide.ui_state.show_quit = !oxide.ui_state.show_quit;
+                                        }
+                                        KeyCode::Char('y') | KeyCode::Char('Y') => {
+                                            if oxide.ui_state.show_quit {
+                                                running.store(false, Ordering::SeqCst)
+                                            }
+                                        }
+                                        KeyCode::Char('n') | KeyCode::Char('N') => {
+                                            if oxide.ui_state.show_quit {
+                                                oxide.ui_state.show_quit = false;
+                                            }
+                                        }
+                                        KeyCode::Char(' ') => oxide.ui_state.toggle_pause(),
+                                        KeyCode::Char('e') => oxide.ui_state.sort_next(),
+                                        KeyCode::Char('r') => oxide.ui_state.toggle_reverse(),
+                                        KeyCode::Char('c') => oxide.ui_state.copy_short = true,
+                                        KeyCode::Char('C') => oxide.ui_state.copy_long = true,
+                                        KeyCode::Char('t') => oxide.ui_state.add_target = true,
+                                        KeyCode::Char('T') => {
+                                            oxide.ui_state.add_target = true;
+                                            oxide.ui_state.set_autoexit = true;
+                                        }
+                                        KeyCode::Char('k') => {
+                                            oxide.ui_state.show_keybinds =
+                                                !oxide.ui_state.show_keybinds;
+                                        }
+                                        KeyCode::Char('l') => {
+                                            if oxide.if_hardware.locked {
+                                                oxide.status_log.add_message(StatusMessage::new(
+                                                    MessageType::Info,
+                                                    "Unlocking Channel".to_string(),
+                                                ));
                                                 // Setup channels hops
-                                                oxide.if_hardware.hop_channels = new_hops;
+                                                oxide
+                                                    .if_hardware
+                                                    .hop_channels
+                                                    .clone_from(&old_hops);
                                                 channels_binding
                                                     .clone_from(&oxide.if_hardware.hop_channels);
                                                 cycle_iter = channels_binding.iter().cycle();
                                                 first_channel = *cycle_iter.clone().next().unwrap();
-
-                                                oxide.status_log.add_message(StatusMessage::new(
-                                                    MessageType::Info,
-                                                    format!(
-                                                        "Locking to Channel {} ({:?})",
-                                                        oxide.if_hardware.current_channel,
-                                                        oxide.if_hardware.current_band,
-                                                    ),
-                                                ));
-
                                                 oxide.if_hardware.locked =
                                                     !oxide.if_hardware.locked;
                                             } else {
-                                                oxide.status_log.add_message(StatusMessage::new(
-                                                    MessageType::Warning,
-                                                    "Could not lock: No Channel".to_string(),
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    KeyCode::Char('L') => {
-                                        if oxide.if_hardware.locked {
-                                            // Setup channels hops
-                                            oxide.if_hardware.hop_channels.clone_from(&old_hops);
-                                            channels_binding
-                                                .clone_from(&oxide.if_hardware.hop_channels);
-                                            cycle_iter = channels_binding.iter().cycle();
-                                            first_channel = *cycle_iter.clone().next().unwrap();
+                                                // Get target_chans
+                                                old_hops
+                                                    .clone_from(&oxide.if_hardware.hop_channels);
+                                                let new_hops: Vec<(u8, u32)> = vec![(
+                                                    oxide.if_hardware.current_band.to_u8(),
+                                                    oxide.if_hardware.current_channel,
+                                                )];
 
-                                            oxide.status_log.add_message(StatusMessage::new(
-                                                MessageType::Info,
-                                                "Unlocking Channel".to_string(),
-                                            ));
-                                            oxide.if_hardware.locked = !oxide.if_hardware.locked;
-                                        } else {
-                                            // Get target_chans
-                                            old_hops.clone_from(&oxide.if_hardware.hop_channels);
-                                            let target_chans =
-                                                oxide.if_hardware.target_chans.clone();
-                                            let mut new_hops: Vec<(u8, u32)> = Vec::new();
+                                                if !new_hops.is_empty() {
+                                                    // Setup channels hops
+                                                    oxide.if_hardware.hop_channels = new_hops;
+                                                    channels_binding.clone_from(
+                                                        &oxide.if_hardware.hop_channels,
+                                                    );
+                                                    cycle_iter = channels_binding.iter().cycle();
+                                                    first_channel =
+                                                        *cycle_iter.clone().next().unwrap();
 
-                                            for (_, chan) in target_chans {
-                                                for ch in chan {
-                                                    if !new_hops.contains(&ch) {
-                                                        new_hops.push(ch);
-                                                    }
+                                                    oxide.status_log.add_message(
+                                                        StatusMessage::new(
+                                                            MessageType::Info,
+                                                            format!(
+                                                                "Locking to Channel {} ({:?})",
+                                                                oxide.if_hardware.current_channel,
+                                                                oxide.if_hardware.current_band,
+                                                            ),
+                                                        ),
+                                                    );
+
+                                                    oxide.if_hardware.locked =
+                                                        !oxide.if_hardware.locked;
+                                                } else {
+                                                    oxide.status_log.add_message(
+                                                        StatusMessage::new(
+                                                            MessageType::Warning,
+                                                            "Could not lock: No Channel"
+                                                                .to_string(),
+                                                        ),
+                                                    );
                                                 }
                                             }
-
-                                            if !new_hops.is_empty() {
+                                        }
+                                        KeyCode::Char('L') => {
+                                            if oxide.if_hardware.locked {
                                                 // Setup channels hops
-                                                oxide.if_hardware.hop_channels = new_hops;
+                                                oxide
+                                                    .if_hardware
+                                                    .hop_channels
+                                                    .clone_from(&old_hops);
                                                 channels_binding
                                                     .clone_from(&oxide.if_hardware.hop_channels);
                                                 cycle_iter = channels_binding.iter().cycle();
@@ -2942,38 +2926,83 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                                 oxide.status_log.add_message(StatusMessage::new(
                                                     MessageType::Info,
-                                                    format!(
-                                                        "Locking to Target Channels! {:?}",
-                                                        oxide.if_hardware.hop_channels,
-                                                    ),
+                                                    "Unlocking Channel".to_string(),
                                                 ));
-
                                                 oxide.if_hardware.locked =
                                                     !oxide.if_hardware.locked;
                                             } else {
-                                                oxide.status_log.add_message(StatusMessage::new(
-                                                    MessageType::Warning,
-                                                    "Could not lock: No Target Channels"
-                                                        .to_string(),
-                                                ));
+                                                // Get target_chans
+                                                old_hops
+                                                    .clone_from(&oxide.if_hardware.hop_channels);
+                                                let target_chans =
+                                                    oxide.if_hardware.target_chans.clone();
+                                                let mut new_hops: Vec<(u8, u32)> = Vec::new();
+
+                                                for (_, chan) in target_chans {
+                                                    for ch in chan {
+                                                        if !new_hops.contains(&ch) {
+                                                            new_hops.push(ch);
+                                                        }
+                                                    }
+                                                }
+
+                                                if !new_hops.is_empty() {
+                                                    // Setup channels hops
+                                                    oxide.if_hardware.hop_channels = new_hops;
+                                                    channels_binding.clone_from(
+                                                        &oxide.if_hardware.hop_channels,
+                                                    );
+                                                    cycle_iter = channels_binding.iter().cycle();
+                                                    first_channel =
+                                                        *cycle_iter.clone().next().unwrap();
+
+                                                    oxide.status_log.add_message(
+                                                        StatusMessage::new(
+                                                            MessageType::Info,
+                                                            format!(
+                                                                "Locking to Target Channels! {:?}",
+                                                                oxide.if_hardware.hop_channels,
+                                                            ),
+                                                        ),
+                                                    );
+
+                                                    oxide.if_hardware.locked =
+                                                        !oxide.if_hardware.locked;
+                                                } else {
+                                                    oxide.status_log.add_message(
+                                                        StatusMessage::new(
+                                                            MessageType::Warning,
+                                                            "Could not lock: No Target Channels"
+                                                                .to_string(),
+                                                        ),
+                                                    );
+                                                }
                                             }
                                         }
+                                        _ => {}
+                                    }
+                                }
+                            } else if let Event::Mouse(event) = event {
+                                match event.kind {
+                                    MouseEventKind::ScrollDown => {
+                                        oxide.ui_state.table_next_item(table_len)
+                                    }
+                                    MouseEventKind::ScrollUp => {
+                                        oxide.ui_state.table_previous_item()
                                     }
                                     _ => {}
                                 }
                             }
-                        } else if let Event::Mouse(event) = event {
-                            match event.kind {
-                                MouseEventKind::ScrollDown => {
-                                    oxide.ui_state.table_next_item(table_len)
-                                }
-                                MouseEventKind::ScrollUp => oxide.ui_state.table_previous_item(),
-                                _ => {}
-                            }
                         }
-                    }
-                    EventType::Tick => {
-                        let _ = print_ui(&mut terminal, &mut oxide, start_time, frame_rate);
+                        EventType::Tick => {
+                            // This part updates the UI using the terminal, only if it's initialized
+                            let _ = print_ui(
+                                term,
+                                &mut oxide,
+                                start_time,
+                                frame_rate,
+                            );
+                        }
                     }
                 }
             }
