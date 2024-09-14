@@ -2997,7 +2997,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         EventType::Tick => {
                             // This part updates the UI using the terminal, only if it's initialized
                             let _ = print_ui(
-                                &mut terminal.as_mut().unwrap(),
+                                term,
                                 &mut oxide,
                                 start_time,
                                 frame_rate,
