@@ -1,9 +1,13 @@
 name: Update manuf file
 
 on:
+
   schedule:
     - cron: '0 0 * * *'  # Runs daily at midnight UTC
   workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   update-manuf:
@@ -25,5 +29,3 @@ jobs:
 
     - name: Push changes
       run: git push
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
