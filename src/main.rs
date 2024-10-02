@@ -21,9 +21,6 @@ mod ui;
 mod util;
 mod whitelist;
 
-extern crate libc;
-extern crate nix;
-
 use anyhow::Result;
 use attack::{
     anon_reassociation_attack, csa_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
