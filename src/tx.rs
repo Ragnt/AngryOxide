@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use libwifi::frame::{
     components::{
         DataHeader, FrameControl, MacAddress, ManagementHeader, RsnAkmSuite, RsnCipherSuite,
-        RsnInformation, SequenceControl, StationInfo,
+        RsnInformation, SequenceControl, StationInfo, SupportedRate,
     },
     Ack, Action, ActionCategory, AssociationRequest, AssociationResponse, Authentication, Beacon,
     Cts, Data, Deauthentication, DeauthenticationReason, Disassociation, EapolKey, ProbeRequest,
@@ -22,6 +22,94 @@ const RTH_NO_ACK: [u8; 10] = [
     0x0a, 0x00, /* radiotap header length */
     0x00, 0x80, 0x00, 0x00, /* bitmap */
     0x28, 0x00, /* tx flags */
+];
+
+const FAST_RATES: [SupportedRate; 8] = [
+    SupportedRate {
+        rate: 6.0,
+        mandatory: true,
+    },
+    SupportedRate {
+        rate: 9.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 12.0,
+        mandatory: true,
+    },
+    SupportedRate {
+        rate: 18.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 24.0,
+        mandatory: true,
+    },
+    SupportedRate {
+        rate: 36.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 48.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 54.0,
+        mandatory: false,
+    }
+];
+
+const RATES: [SupportedRate; 8] = [
+    SupportedRate {
+        rate: 1.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 2.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 5.5,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 6.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 9.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 11.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 12.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 18.0,
+        mandatory: false,
+    },
+];
+const EXT_RATES: [SupportedRate; 4] = [
+    SupportedRate {
+        rate: 24.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 36.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 48.0,
+        mandatory: false,
+    },
+    SupportedRate {
+        rate: 54.0,
+        mandatory: false,
+    },
 ];
 
 // These frames are MOSTLY hard coded based on security research by Zer0Beat (HcxTools)
@@ -249,17 +337,9 @@ pub fn build_association_request_rg(
         beacon_interval: 0x0005,
         capability_info: 0x0431,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid,
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
             rsn_information: Some(RsnInformation {
                 version: 1,
                 group_cipher_suite,
@@ -276,16 +356,13 @@ pub fn build_association_request_rg(
                 extended_key_id: false,
                 ocvc: false,
             }),
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
             data: vec![
                 /* RM Enabled Capabilities */
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
                 /* Supported Operating Classes */
                 (0x3b, vec![0x51, 0x51, 0x53, 0x54]),
             ],
-            extended_capabilities: None,
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
@@ -326,17 +403,9 @@ pub fn build_association_request(
         capability_info: 0x431,
         beacon_interval: 0x14,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid,
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
             rsn_information: Some(RsnInformation {
                 version: 1,
                 group_cipher_suite,
@@ -353,14 +422,11 @@ pub fn build_association_request(
                 extended_key_id: false,
                 ocvc: false,
             }),
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
             data: vec![
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
                 (0x3b, vec![0x51, 0x51, 0x53, 0x54]),
             ],
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
@@ -470,26 +536,15 @@ pub fn build_reassociation_request(
         listen_interval: 0x14,
         current_ap_address: *ap_mac,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid,
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
             rsn_information: Some(rsn),
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
             data: vec![
                 (0x46, vec![0x7b, 0x00, 0x02, 0x00, 0x00]),
                 (0x3b, vec![0x51, 0x51, 0x53, 0x54]),
             ],
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
@@ -521,23 +576,10 @@ pub fn build_probe_request_undirected(addr_rogue: &MacAddress, sequence: u16) ->
     let frx = ProbeRequest {
         header,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
-            ssid: None,
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
-            rsn_information: None,
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             data: Vec::new(),
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
@@ -573,23 +615,9 @@ pub fn build_probe_request_target(
     let frx = ProbeRequest {
         header,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
-            ssid: None,
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
-            rsn_information: None,
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
-            data: Vec::new(),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
@@ -626,23 +654,10 @@ pub fn build_probe_request_directed(
     let frx = ProbeRequest {
         header,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid: Some(ssid.to_string()),
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
-            rsn_information: None,
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
-            data: Vec::new(),
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
@@ -681,17 +696,10 @@ pub fn build_probe_response(
     let frx = ProbeResponse {
         header,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid: Some(ssid.to_string()),
-            ssid_length: None,
             ds_parameter_set: Some(channel.try_into().unwrap()),
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
             rsn_information: Some(RsnInformation {
                 version: 1,
                 group_cipher_suite: RsnCipherSuite::CCMP,
@@ -708,11 +716,7 @@ pub fn build_probe_response(
                 extended_key_id: false,
                 ocvc: false,
             }),
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
-            data: Vec::new(),
+            ..Default::default()
         },
         timestamp: 1,
         beacon_interval: 1024,
@@ -765,17 +769,10 @@ pub fn build_beacon(
     let frx = Beacon {
         header,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),            
             ssid: Some(ssid.to_string()),
-            ssid_length: None,
             ds_parameter_set: Some(channel.try_into().unwrap()),
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
             rsn_information: Some(RsnInformation {
                 version: 1,
                 group_cipher_suite: RsnCipherSuite::CCMP,
@@ -792,11 +789,7 @@ pub fn build_beacon(
                 extended_key_id: false,
                 ocvc: false,
             }),
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: Vec::new(),
-            extended_capabilities: None,
-            data: Vec::new(),
+            ..Default::default()
         },
         timestamp: 1,
         beacon_interval: 1024,
@@ -877,23 +870,10 @@ pub fn build_association_response(
         status_code: 0,
         association_id: 49153u16,
         station_info: StationInfo {
-            supported_rates: vec![1.0, 2.0, 5.5, 11.0, 6.0, 9.0, 12.0, 18.0],
-            extended_supported_rates: Some(vec![24.0, 36.0, 48.0, 54.0]),
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),            
             ssid: Some(ssid.to_string()),
-            ssid_length: None,
-            ds_parameter_set: None,
-            tim: None,
-            country_info: None,
-            power_constraint: None,
-            ht_capabilities: None,
-            ht_information: None,
-            vht_capabilities: None,
-            rsn_information: None,
-            wpa_info: None,
-            wps_info: None,
-            vendor_specific: vec![],
-            extended_capabilities: None,
-            data: vec![],
+            ..Default::default()
         },
     };
     rth.extend(frx.encode());
