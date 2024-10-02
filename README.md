@@ -139,7 +139,7 @@ If you want to build from source instead of using precompiled binaries, these ar
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone this repo
-git clone https://github.com/Ragnt/AngryOxide.git
+git clone --recurse-submodules https://github.com/Ragnt/AngryOxide.git
 
 # Build/Install
 cd AngryOxide
