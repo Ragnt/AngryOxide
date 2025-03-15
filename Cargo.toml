@@ -17,6 +17,13 @@ description.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[profile.release]
+opt-level = "z"        # Optimize for binary size
+strip = true           # strip binary
+lto = true             # Enable link-time optimization
+codegen-units = 1      # Force single codegen unit for maximum optimization
+panic = "abort"        # Reduce size by avoiding unwinding
+
 [[bin]]
 name = "angryoxide"
 path = "src/main.rs"

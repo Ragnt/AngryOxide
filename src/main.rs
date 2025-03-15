@@ -199,7 +199,7 @@ struct Arguments {
     )]
     dwell: u64,
 
-    /// Optional - Adjust time before device gets removed (if not seen again).
+    /// Optional - Adjust time before device gets aged out (if not seen again).
     #[arg(
         long,
         default_value_t = 600,
