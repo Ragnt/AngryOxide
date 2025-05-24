@@ -367,6 +367,7 @@ pub struct RawSockets {
 
 pub struct Config {
     notx: bool,
+    original_notx: bool,
     disable_deauth: bool,
     disable_disassoc: bool,
     disable_anon: bool,
@@ -1037,6 +1038,7 @@ impl OxideRuntime {
 
         let config = Config {
             notx: notransmit,
+            original_notx: notransmit,
             disable_deauth: cli_args.disable_deauth,
             disable_disassoc: cli_args.disable_disassoc,
             disable_anon: cli_args.disable_anon,
@@ -2994,29 +2996,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if oxide.ui_state.add_target {
             match oxide.ui_state.current_menu {
-                MenuType::AccessPoints => {
+                MenuType::AccessPoints => { // Only works on AP menu
                     if let Some(ref ap) = oxide.ui_state.ap_selected_item {
                         if let Some(accesspoint) = oxide.access_points.get_device(&ap.mac_address) {
-                            oxide
-                                .target_data
-                                .targets
-                                .add(Target::MAC(targets::TargetMAC {
-                                    addr: ap.mac_address,
-                                }));
-                            accesspoint.is_target = true;
-                            if let Some(ssid) = &ap.ssid {
+                            if accesspoint.is_target() {
+                                    oxide.status_log.add_message(
+                                        StatusMessage::new(
+                                            MessageType::Warning,
+                                            format!("Removed Target: {}", ap.mac_address)
+                                        ),
+                                    );
+                                    accesspoint.is_target = false;
+                                    oxide.target_data.targets.remove_mac(&accesspoint.mac_address);
+                                    if let Some(ssid) = &ap.ssid {
+                                        oxide
+                                            .target_data
+                                            .targets
+                                            .remove_ssid(&ssid.to_string());
+                                    }
+                                    if oxide.target_data.targets.empty() {
+                                        if cli.notransmit { // this should go back to nuking everything unless notx is set to true.
+                                            oxide.config.notx = true;
+                                        }
+                                        // make sure autoexit is turned off if we disable the target
+                                        oxide.config.autoexit = false;
+                                    }
+                            } else {
+                                oxide.status_log.add_message(
+                                    StatusMessage::new(
+                                        MessageType::Warning,
+                                        format!("Added Target: {}", ap.mac_address)
+                                    ),
+                                );
+                                accesspoint.is_target = true;
                                 oxide
                                     .target_data
                                     .targets
-                                    .add(Target::SSID(targets::TargetSSID {
-                                        ssid: ssid.to_string(),
+                                    .add(Target::MAC(targets::TargetMAC {
+                                        addr: ap.mac_address,
                                     }));
-                            }
-                            if oxide.config.notx {
-                                oxide.config.notx = false;
-                            }
-                            if oxide.ui_state.set_autoexit {
-                                oxide.config.autoexit = true;
+                                if let Some(ssid) = &ap.ssid {
+                                    oxide
+                                        .target_data
+                                        .targets
+                                        .add(Target::SSID(targets::TargetSSID {
+                                            ssid: ssid.to_string(),
+                                        }));
+                                }
+                                if oxide.config.notx {
+                                    oxide.config.notx = false;
+                                }
+                                if oxide.ui_state.set_autoexit {
+                                    oxide.config.autoexit = true;
+                                }
                             }
                         }
                     }

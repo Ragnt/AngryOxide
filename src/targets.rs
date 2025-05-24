@@ -96,6 +96,30 @@ impl TargetList {
         self.targets.push(target);
     }
 
+    /// Remove *exactly* the provided `Target`.  
+    /// Returns `true` if something was deleted.
+    pub fn remove(&mut self, target: &Target) -> bool {
+        let before = self.targets.len();
+        self.targets.retain(|t| t != target);
+        before != self.targets.len()
+    }
+
+    /// Remove every stored MAC equal to `mac`.
+    pub fn remove_mac(&mut self, mac: &MacAddress) -> bool {
+        let before = self.targets.len();
+        self.targets
+            .retain(|t| !matches!(t, Target::MAC(tgt) if tgt.addr == *mac));
+        before != self.targets.len()
+    }
+
+    /// Remove every stored SSID equal to `ssid`.
+    pub fn remove_ssid(&mut self, ssid: &str) -> bool {
+        let before = self.targets.len();
+        self.targets
+            .retain(|t| !matches!(t, Target::SSID(tgt) if tgt.ssid == ssid));
+        before != self.targets.len()
+    }
+
     pub fn empty(&self) -> bool {
         self.targets.is_empty()
     }
