@@ -84,6 +84,7 @@ impl EventHandler {
                                 KeyCode::Down => tx.send(EventType::Key(event)),
                                 KeyCode::Left => tx.send(EventType::Key(event)),
                                 KeyCode::Right => tx.send(EventType::Key(event)),
+                                KeyCode::Esc => tx.send(EventType::Key(event)),
                                 _ => Ok(()),
                             };
                         }
