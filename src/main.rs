@@ -2966,10 +2966,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         KeyCode::Esc => {
-                                            oxide.ui_state.ap_state.select(None);
-                                            oxide.ui_state.sta_state.select(None);
-                                            oxide.ui_state.hs_state.select(None);
-                                            oxide.ui_state.messages_state.select(None);
+                                            match oxide.ui_state.current_menu {
+                                                MenuType::AccessPoints => {
+                                                    oxide.ui_state.ap_state.select(None);
+                                                }
+                                                MenuType::Clients => {
+                                                    oxide.ui_state.sta_state.select(None);
+                                                }
+                                                MenuType::Handshakes => {
+                                                    oxide.ui_state.hs_state.select(None);
+                                                }
+                                                MenuType::Messages => {
+                                                    oxide.ui_state.messages_state.select(None);
+                                                }
+                                            }
                                         }
                                         _ => {}
                                     }
