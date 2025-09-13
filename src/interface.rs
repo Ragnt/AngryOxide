@@ -4,14 +4,17 @@ use std::collections::HashMap;
 
 #[cfg(target_os = "linux")]
 use nl80211_ng::{
-    attr::Nl80211Iftype,
-    channels::{freq_to_band, map_str_to_band_and_channel, WiFiBand},
-    get_interface_info_idx, set_interface_chan, Nl80211,
+    channels::{freq_to_band, map_str_to_band_and_channel},
+    get_interface_info_idx, set_interface_chan,
 };
 
 // Re-export common types that are used throughout the codebase
 #[cfg(target_os = "linux")]
+pub use nl80211_ng::attr::Nl80211Iftype;
+#[cfg(target_os = "linux")]
 pub use nl80211_ng::channels::WiFiBand;
+#[cfg(target_os = "linux")]
+pub use nl80211_ng::Nl80211;
 
 // Create an extension trait for Interface on Linux
 #[cfg(target_os = "linux")]
@@ -36,7 +39,7 @@ pub use nl80211_ng::Interface;
 
 // Create a wrapper type for Band to add the to_u8() method
 #[cfg(target_os = "linux")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Band(WiFiBand);
 
 #[cfg(target_os = "linux")]
@@ -66,6 +69,10 @@ impl Band {
     }
 
     pub const Unknown: Band = Band(WiFiBand::Band2_4GHz); // Placeholder for Unknown
+    pub const Band2_4GHz: Band = Band(WiFiBand::Band2_4GHz);
+    pub const Band5GHz: Band = Band(WiFiBand::Band5GHz);
+    pub const Band6GHz: Band = Band(WiFiBand::Band6GHz);
+    pub const Band60GHz: Band = Band(WiFiBand::Band60GHz);
 }
 
 #[cfg(target_os = "linux")]
@@ -513,7 +520,7 @@ pub struct Phy {
 }
 
 #[cfg(target_os = "linux")]
-pub use nl80211_ng::Phy;
+pub use nl80211_ng::phy::Phy;
 
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -532,9 +539,6 @@ pub enum Nl80211Iftype {
     IftypeOcb,
     IftypeNan,
 }
-
-#[cfg(target_os = "linux")]
-pub use nl80211_ng::attr::Nl80211Iftype;
 
 // Channel/frequency conversion functions
 #[cfg(target_os = "linux")]
