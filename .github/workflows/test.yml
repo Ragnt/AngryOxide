@@ -111,7 +111,7 @@ jobs:
       - name: Check interface module compilation
         run: |
           # Ensure interface functions compile on both platforms
-          cargo build --lib
+          cargo build
 
       - name: Verify monitor mode implementation
         run: |

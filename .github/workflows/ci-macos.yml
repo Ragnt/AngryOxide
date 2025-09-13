@@ -117,7 +117,7 @@ jobs:
           cd -
 
       - name: Upload Universal Binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: angryoxide-macos-universal
           path: angryoxide-macos-universal.tar.gz

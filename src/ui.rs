@@ -12,8 +12,9 @@ fn set_clipboard_content(content: String) -> anyhow::Result<()> {
 
         let mut ctx = Osc52ClipboardContext::new_with(
             X11BinClipboardContext::new()
-                .map_err(|e| anyhow::anyhow!("Failed to create X11 clipboard context: {:?}", e))?
-        ).map_err(|e| anyhow::anyhow!("Failed to create OSC52 clipboard context: {:?}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to create X11 clipboard context: {:?}", e))?,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create OSC52 clipboard context: {:?}", e))?;
         ctx.set_contents(content)
             .map_err(|e| anyhow::anyhow!("Failed to set clipboard contents: {:?}", e))?;
         Ok(())
