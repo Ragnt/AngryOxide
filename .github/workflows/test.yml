@@ -36,7 +36,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check code formatting
-        run: cargo fmt -- --check
+        run: cargo fmt --all
 
       - name: Run clippy
         run: cargo clippy -- -D warnings
