@@ -120,7 +120,7 @@ impl PcapNgParser {
     }
 
     /// Returns the [`InterfaceDescriptionBlock`] corresponding to the given packet.
-    pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock> {
+    pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock<'_>> {
         self.interfaces.get(packet.interface_id as usize)
     }
 }

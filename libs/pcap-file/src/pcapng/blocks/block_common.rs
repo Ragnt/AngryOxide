@@ -317,7 +317,7 @@ impl<'a> Block<'a> {
 /// Common interface for the PcapNg blocks
 pub trait PcapNgBlock<'a> {
     /// Parse a new block from a slice
-    fn from_slice<B: ByteOrder>(slice: &'a [u8]) -> Result<(&[u8], Self), PcapError>
+    fn from_slice<B: ByteOrder>(slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError>
     where
         Self: std::marker::Sized;
 

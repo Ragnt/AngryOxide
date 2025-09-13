@@ -60,7 +60,7 @@ impl<'a> PcapNgBlock<'a> for SectionHeaderBlock<'a> {
         return Ok((rem, block));
 
         #[allow(clippy::type_complexity)]
-        fn parse_inner<B: ByteOrder>(mut slice: &[u8]) -> Result<(&[u8], u16, u16, i64, Vec<SectionHeaderOption>), PcapError> {
+        fn parse_inner<B: ByteOrder>(mut slice: &[u8]) -> Result<(&[u8], u16, u16, i64, Vec<SectionHeaderOption<'_>>), PcapError> {
             let maj_ver = slice.read_u16::<B>().unwrap();
             let min_ver = slice.read_u16::<B>().unwrap();
             let sec_len = slice.read_i64::<B>().unwrap();

@@ -39,7 +39,7 @@ fn is_tcpdump_monitoring(ifname: &str) -> bool {
     if let Ok(output) = Command::new("ps").arg("aux").output() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Look for tcpdump with -I flag (monitor mode) on our interface
-        let search_pattern = format!("tcpdump.*-I.*{}", ifname);
+        let _search_pattern = format!("tcpdump.*-I.*{}", ifname);
         for line in stdout.lines() {
             if line.contains("tcpdump") && line.contains("-I") && line.contains(ifname) {
                 return true;
@@ -56,7 +56,7 @@ fn is_airport_sniffing(ifname: &str) -> bool {
     if let Ok(output) = Command::new("ps").arg("aux").output() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Look for airport sniff command
-        let search_pattern = format!("airport.*{}.*sniff", ifname);
+        let _search_pattern = format!("airport.*{}.*sniff", ifname);
         for line in stdout.lines() {
             if line.contains("airport") && line.contains(ifname) && line.contains("sniff") {
                 return true;
@@ -66,19 +66,17 @@ fn is_airport_sniffing(ifname: &str) -> bool {
 
     // Also check for pcap files in /tmp/ which airport creates
     if let Ok(entries) = fs::read_dir("/tmp") {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if let Some(filename) = path.file_name() {
-                    let filename_str = filename.to_string_lossy();
-                    if filename_str.starts_with("airportSniff") && filename_str.ends_with(".cap") {
-                        // Check if file was modified recently (within last minute)
-                        if let Ok(metadata) = fs::metadata(&path) {
-                            if let Ok(modified) = metadata.modified() {
-                                if let Ok(elapsed) = modified.elapsed() {
-                                    if elapsed.as_secs() < 60 {
-                                        return true;
-                                    }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(filename) = path.file_name() {
+                let filename_str = filename.to_string_lossy();
+                if filename_str.starts_with("airportSniff") && filename_str.ends_with(".cap") {
+                    // Check if file was modified recently (within last minute)
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        if let Ok(modified) = metadata.modified() {
+                            if let Ok(elapsed) = modified.elapsed() {
+                                if elapsed.as_secs() < 60 {
+                                    return true;
                                 }
                             }
                         }
@@ -135,27 +133,14 @@ fn can_read_radiotap_headers(ifname: &str) -> bool {
 
 /// Get detailed hardware capabilities for WiFi interface
 pub fn get_hardware_capabilities(ifname: &str) -> HardwareCapabilities {
-    let mut caps = HardwareCapabilities::default();
-
-    // Get chipset info
-    caps.chipset = get_chipset_info(ifname);
-
-    // Check monitor mode support
-    caps.supports_monitor = check_monitor_support(ifname);
-
-    // Check injection support
-    caps.supports_injection = check_injection_support(ifname);
-
-    // Get supported bands
-    caps.supported_bands = get_supported_bands(ifname);
-
-    // Get supported channels
-    caps.supported_channels = get_supported_channels(ifname);
-
-    // Check for active monitor capability
-    caps.supports_active_monitor = check_active_monitor_support(ifname);
-
-    caps
+    HardwareCapabilities {
+        chipset: get_chipset_info(ifname),
+        supports_monitor: check_monitor_support(ifname),
+        supports_injection: check_injection_support(ifname),
+        supported_bands: get_supported_bands(ifname),
+        supported_channels: get_supported_channels(ifname),
+        supports_active_monitor: check_active_monitor_support(ifname),
+    }
 }
 
 /// Hardware capability information
@@ -170,7 +155,7 @@ pub struct HardwareCapabilities {
 }
 
 /// Get chipset information
-fn get_chipset_info(ifname: &str) -> String {
+fn get_chipset_info(_ifname: &str) -> String {
     // Use system_profiler to get WiFi hardware info
     if let Ok(output) = Command::new("system_profiler")
         .arg("SPAirPortDataType")

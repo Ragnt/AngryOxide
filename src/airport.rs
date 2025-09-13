@@ -2,10 +2,8 @@
 // This module provides functions for monitor mode and channel control
 // Supports multiple methods: airport (legacy but still works), tcpdump (modern), and wdutil (info)
 
-use std::io::{self, BufRead, BufReader};
 #[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
@@ -53,7 +51,7 @@ pub fn disassociate() -> Result<(), String> {
 
 /// Set the WiFi interface to a specific channel
 #[cfg(target_os = "macos")]
-pub fn set_channel(interface: &str, channel: u8) -> Result<(), String> {
+pub fn set_channel(_interface: &str, channel: u8) -> Result<(), String> {
     use std::path::Path;
 
     // First disassociate from any network
@@ -82,6 +80,7 @@ pub fn set_channel(interface: &str, channel: u8) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 pub struct SniffHandle {
     process: std::process::Child,
+    #[allow(dead_code)]
     interface: String,
 }
 
@@ -141,7 +140,7 @@ pub fn start_sniff(interface: &str, channel: u8) -> Result<SniffHandle, String> 
 
 /// Check if monitor mode is available for the interface
 #[cfg(target_os = "macos")]
-pub fn check_monitor_capability(interface: &str) -> bool {
+pub fn check_monitor_capability(_interface: &str) -> bool {
     use std::path::Path;
 
     // Check if we have any method available for monitor mode
@@ -163,7 +162,7 @@ pub fn check_monitor_capability(interface: &str) -> bool {
 
 /// Get current channel of the interface
 #[cfg(target_os = "macos")]
-pub fn get_current_channel(interface: &str) -> Result<u8, String> {
+pub fn get_current_channel(_interface: &str) -> Result<u8, String> {
     use std::path::Path;
 
     // Try airport first
@@ -268,7 +267,7 @@ pub fn disable_monitor_mode(interface: &str) -> Result<(), String> {
     // Kill any running airport sniff or tcpdump processes on this interface
     let _ = Command::new("pkill")
         .arg("-f")
-        .arg(format!("airport.*sniff"))
+        .arg("airport.*sniff")
         .output();
 
     let _ = Command::new("pkill")

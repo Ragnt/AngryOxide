@@ -1,22 +1,26 @@
 // macOS-specific interface management implementation
 // Provides real interface information and control
 
-use libc::{c_char, c_int, ioctl, socket, AF_INET, SOCK_DGRAM};
+use libc::{c_char, ioctl, socket, AF_INET, SOCK_DGRAM};
 use std::ffi::CString;
 use std::mem;
 use std::process::Command;
 
-use crate::interface::{Band, Interface, Nl80211Iftype};
+use crate::interface::{Interface, Nl80211Iftype};
 
 // ioctl constants for macOS
 const SIOCGIFHWADDR: libc::c_ulong = 0xc0206935; // Get hardware address
 const SIOCGIFFLAGS: libc::c_ulong = 0xc0206911; // Get interface flags
+#[allow(dead_code)]
 const SIOCSIFFLAGS: libc::c_ulong = 0x80206910; // Set interface flags
+#[allow(dead_code)]
 const SIOCGIFADDR: libc::c_ulong = 0xc0206921; // Get interface address
+#[allow(dead_code)]
 const SIOCSIFLLADDR: libc::c_ulong = 0x8020693c; // Set link-level address (MAC)
 
 // Interface flags
 const IFF_UP: i16 = 0x1;
+#[allow(dead_code)]
 const IFF_RUNNING: i16 = 0x40;
 const IFF_PROMISC: i16 = 0x100;
 
@@ -69,10 +73,10 @@ pub fn get_interface_info_macos(ifindex: i32) -> Result<Interface, String> {
         let mut current_iftype = None;
         if ioctl(sock, SIOCGIFFLAGS as _, &mut ifr) == 0 {
             let flags = ifr.ifr_ifru.ifru_flags;
-            if flags & IFF_UP as i16 != 0 {
+            if flags & IFF_UP != 0 {
                 mode = Some(1); // Interface is up
             }
-            if flags & IFF_PROMISC as i16 != 0 {
+            if flags & IFF_PROMISC != 0 {
                 current_iftype = Some(Nl80211Iftype::IftypeMonitor);
             } else {
                 current_iftype = Some(Nl80211Iftype::IftypeStation);
@@ -260,7 +264,7 @@ fn parse_channel_from_line(line: &str) -> Option<u8> {
 }
 
 /// Get current SSID if connected
-fn get_current_ssid(ifname: &str) -> Option<Vec<u8>> {
+fn get_current_ssid(_ifname: &str) -> Option<Vec<u8>> {
     // Try using airport
     if let Ok(output) = Command::new(
         "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport",
@@ -339,7 +343,7 @@ pub fn set_interface_mac_macos(ifindex: i32, mac: &[u8; 6]) -> Result<(), String
 /// Disable power save mode
 pub fn set_powersave_off_macos(ifindex: i32) -> Result<(), String> {
     // Get interface name
-    let ifname = get_interface_name_from_index(ifindex)?;
+    let _ifname = get_interface_name_from_index(ifindex)?;
 
     // Use pmset to disable power save for WiFi
     let output = Command::new("sudo")

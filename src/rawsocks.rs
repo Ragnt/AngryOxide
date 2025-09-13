@@ -1,4 +1,3 @@
-use std::os::fd::OwnedFd;
 
 #[cfg(target_os = "linux")]
 pub use linux_impl::{open_socket_rx, open_socket_tx};
@@ -191,7 +190,7 @@ mod macos_impl {
     use std::{
         ffi::CString,
         io, mem,
-        os::fd::{AsRawFd, FromRawFd, OwnedFd},
+        os::fd::{FromRawFd, OwnedFd},
         os::unix::io::RawFd,
         ptr,
     };
@@ -200,11 +199,13 @@ mod macos_impl {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
     // BPF ioctl constants for macOS
+    #[allow(dead_code)]
     const BIOCGBLEN: c_uint = 0x40044266;
     const BIOCSBLEN: c_uint = 0xc0044266;
     const BIOCSETIF: c_uint = 0x8020426c;
     const BIOCIMMEDIATE: c_uint = 0x80044270;
     const BIOCSHDRCMPLT: c_uint = 0x80044275;
+    #[allow(dead_code)]
     const BIOCGDLT: c_uint = 0x4004426a;
     const BIOCSDLT: c_uint = 0x80044278;
     const BIOCPROMISC: c_uint = 0x20004269;
@@ -430,7 +431,7 @@ mod macos_impl {
             }
 
             // Parse BPF header
-            let hdr_ptr = unsafe { (buffer.as_ptr().add(offset) as *const bpf_hdr) };
+            let hdr_ptr = unsafe { buffer.as_ptr().add(offset) as *const bpf_hdr };
             let hdr = unsafe { *hdr_ptr };
 
             // Get packet data (skip BPF header)

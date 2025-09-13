@@ -28,7 +28,7 @@ impl<'a> UnknownBlock<'a> {
 }
 
 impl<'a> PcapNgBlock<'a> for UnknownBlock<'a> {
-    fn from_slice<B: ByteOrder>(_slice: &'a [u8]) -> Result<(&[u8], Self), PcapError>
+    fn from_slice<B: ByteOrder>(_slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError>
     where
         Self: Sized,
     {

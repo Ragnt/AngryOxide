@@ -1,8 +1,6 @@
 // Modern macOS WiFi monitor mode implementation
 // Uses tcpdump and Wireless Diagnostics as airport is deprecated
 
-use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -244,7 +242,7 @@ pub enum MonitorMethod {
 }
 
 /// Get current WiFi channel
-pub fn get_current_channel(interface: &str) -> Result<u8, String> {
+pub fn get_current_channel(_interface: &str) -> Result<u8, String> {
     // Try airport first
     if Path::new(AIRPORT_PATH).exists() {
         let output = Command::new(AIRPORT_PATH)

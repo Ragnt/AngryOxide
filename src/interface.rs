@@ -173,18 +173,21 @@ pub enum Band {
 }
 
 #[cfg(target_os = "macos")]
-impl Band {
-    pub fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for Band {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let band_str = match self {
             Band::Band2_4GHz => "2.4GHz",
             Band::Band5GHz => "5GHz",
             Band::Band6GHz => "6GHz",
             Band::Band60GHz => "60GHz",
             Band::Unknown => "Unknown",
-        }
-        .to_string()
+        };
+        write!(f, "{}", band_str)
     }
+}
 
+#[cfg(target_os = "macos")]
+impl Band {
     pub fn to_u8(&self) -> u8 {
         match self {
             Band::Band2_4GHz => 0,
@@ -223,7 +226,7 @@ pub fn set_interface_channel(ifindex: i32, channel: u8, band: Band) -> Result<()
 }
 
 #[cfg(target_os = "macos")]
-pub fn set_interface_channel(ifindex: i32, channel: u8, band: Band) -> Result<(), String> {
+pub fn set_interface_channel(ifindex: i32, channel: u8, _band: Band) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use crate::airport;
@@ -360,7 +363,7 @@ impl Nl80211Mock {
 
     pub fn set_interface_down(&self, ifindex: i32) -> Result<(), String> {
         // Use ioctl to bring interface down
-        use libc::{c_int, ioctl, socket, AF_INET, IFF_UP, SOCK_DGRAM};
+        use libc::{ioctl, socket, AF_INET, IFF_UP, SOCK_DGRAM};
         use std::ffi::CString;
         use std::mem;
 
@@ -413,7 +416,7 @@ impl Nl80211Mock {
 
     pub fn set_interface_up(&self, ifindex: i32) -> Result<(), String> {
         // Use ioctl to bring interface up
-        use libc::{c_int, ioctl, socket, AF_INET, IFF_UP, SOCK_DGRAM};
+        use libc::{ioctl, socket, AF_INET, IFF_UP, SOCK_DGRAM};
         use std::ffi::CString;
         use std::mem;
 
@@ -552,13 +555,13 @@ pub fn frequency_to_band(freq: u32) -> Option<Band> {
 
 #[cfg(target_os = "macos")]
 pub fn frequency_to_band(freq: u32) -> Option<Band> {
-    if freq >= 2412 && freq <= 2484 {
+    if (2412..=2484).contains(&freq) {
         Some(Band::Band2_4GHz)
-    } else if freq >= 5180 && freq <= 5825 {
+    } else if (5180..=5825).contains(&freq) {
         Some(Band::Band5GHz)
-    } else if freq >= 5945 && freq <= 7125 {
+    } else if (5945..=7125).contains(&freq) {
         Some(Band::Band6GHz)
-    } else if freq >= 58320 && freq <= 64800 {
+    } else if (58320..=64800).contains(&freq) {
         Some(Band::Band60GHz)
     } else {
         None
@@ -576,11 +579,11 @@ pub fn map_channel_to_band(channel_str: &str) -> Option<(u8, Band)> {
     let channel: u8 = channel_str.parse().ok()?;
 
     // Basic channel to band mapping
-    if channel >= 1 && channel <= 14 {
+    if (1..=14).contains(&channel) {
         Some((channel, Band::Band2_4GHz))
-    } else if channel >= 36 && channel <= 165 {
+    } else if (36..=165).contains(&channel) {
         Some((channel, Band::Band5GHz))
-    } else if channel >= 1 && channel <= 233 {
+    } else if (1..=233).contains(&channel) {
         // 6GHz channels
         Some((channel, Band::Band6GHz))
     } else {
