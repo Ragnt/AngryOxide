@@ -543,6 +543,7 @@ pub enum Nl80211Iftype {
     IftypeNan,
 }
 
+
 // Channel/frequency conversion functions
 #[cfg(target_os = "linux")]
 pub fn frequency_to_band(freq: u32) -> Option<Band> {

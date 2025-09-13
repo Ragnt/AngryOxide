@@ -225,7 +225,7 @@ mod macos_impl {
     }
 
     // Macro to align to word boundary
-    fn bpf_wordalign(x: usize) -> usize {
+    pub fn bpf_wordalign(x: usize) -> usize {
         (x + (BPF_ALIGNMENT - 1)) & !(BPF_ALIGNMENT - 1)
     }
 
@@ -250,7 +250,7 @@ mod macos_impl {
         Err("Could not open any BPF device".to_string())
     }
 
-    fn get_interface_name(ifindex: i32) -> Result<String, String> {
+    pub fn get_interface_name(ifindex: i32) -> Result<String, String> {
         // On macOS, we need to convert ifindex to interface name
         // This is a simplified version - should use if_indextoname
         use std::process::Command;

@@ -38,24 +38,23 @@ mod monitor_mode_tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_interface_mock_creation() {
-        let mock = Nl80211Mock::new();
+        let mock = Nl80211Mock::new().expect("Failed to create mock");
 
         // Test listing PHYs
-        let phys = mock.list_phys();
+        let phys = mock.list_phys().expect("Failed to list PHYs");
         assert!(!phys.is_empty(), "Should return at least one mock PHY");
 
         // Verify PHY has expected fields
         let phy = &phys[0];
         assert_eq!(phy.index, 0);
         assert!(!phy.name.is_empty());
-        assert!(phy.ht_cap.is_some());
-        assert!(phy.vht_cap.is_some());
+        assert!(phy.iftypes.is_some());
     }
 
     #[test]
     #[cfg(target_os = "macos")]
     fn test_interface_operations() {
-        let mock = Nl80211Mock::new();
+        let mock = Nl80211Mock::new().expect("Failed to create mock");
 
         // Test interface down
         let result = mock.set_interface_down(0);
