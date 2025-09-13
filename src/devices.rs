@@ -1,7 +1,7 @@
 use globset::Glob;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, StationInfo, WpaAkmSuite, WpsInformation};
 use libwifi::frame::{Beacon, ProbeResponse};
-use nl80211_ng::channels::{WiFiBand};
+use crate::interface::Band as WiFiBand;
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
 use rand::seq::IteratorRandom;

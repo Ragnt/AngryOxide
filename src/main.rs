@@ -8,6 +8,7 @@ mod devices;
 mod eventhandler;
 mod geofence;
 mod gps;
+mod interface;
 mod matrix;
 mod oui;
 mod pcapng;
@@ -44,9 +45,13 @@ use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, WpaAkm
 use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
 use nix::unistd::geteuid;
 
-use nl80211_ng::attr::Nl80211Iftype;
-use nl80211_ng::channels::{freq_to_band, map_str_to_band_and_channel, WiFiBand};
-use nl80211_ng::{get_interface_info_idx, set_interface_chan, Interface, Nl80211};
+use crate::interface::{
+    frequency_to_band, get_interface_info, get_nl80211, map_channel_to_band,
+    set_interface_channel, Band as WiFiBand, Interface, Nl80211, Nl80211Iftype,
+};
+
+#[cfg(target_os = "linux")]
+use crate::interface::InterfaceExt;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -452,7 +457,7 @@ impl OxideRuntime {
 
         // Get + Setup Interface
 
-        let mut netlink = Nl80211::new().expect("Cannot open Nl80211");
+        let mut netlink = get_nl80211().expect("Cannot open Nl80211");
 
         // Need to ensure the channels available here are validated
         let iface = if let Some(interface) = netlink
@@ -467,7 +472,7 @@ impl OxideRuntime {
             exit(EXIT_FAILURE);
         };
 
-        let original_address = MacAddress::from_vec(iface.clone().mac.unwrap()).unwrap();
+        let original_address = MacAddress::from_vec(iface.clone().mac.to_vec()).unwrap();
 
         let idx = iface.index.unwrap();
         let interface_uuid = Uuid::new_v4();
@@ -732,7 +737,7 @@ impl OxideRuntime {
             // Add all individual channels (if valid)
 
             for channel in &channels {
-                if let Some((band, channel)) = map_str_to_band_and_channel(channel) {
+                if let Some((channel, band)) = map_channel_to_band(channel) {
                     let band_u8 = band.to_u8();
                     if !hop_channels.contains(&(band_u8, channel)) {
                         if capable_channels.get(&band_u8).unwrap().contains(&channel) {
@@ -822,7 +827,7 @@ impl OxideRuntime {
 
         if let Some(ref phy) = iface.phy {
             if !phy.iftypes.clone().is_some_and(|types| {
-                types.contains(&nl80211_ng::attr::Nl80211Iftype::IftypeMonitor)
+                types.contains(&Nl80211Iftype::IftypeMonitor)
             }) {
                 println!(
                     "{}",
@@ -873,7 +878,7 @@ impl OxideRuntime {
             netlink.set_interface_monitor(false, idx).ok();
         }
 
-        if let Ok(after) = get_interface_info_idx(idx) {
+        if let Ok(after) = get_interface_info(idx) {
             if let Some(iftype) = after.current_iftype {
                 if iftype != Nl80211Iftype::IftypeMonitor {
                     println!("{}", get_art("Interface did not go into Monitor mode"));
@@ -891,7 +896,7 @@ impl OxideRuntime {
         netlink.set_interface_up(idx).ok();
         netlink.set_powersave_off(idx).ok();
 
-        if let Err(e) = set_interface_chan(idx, hop_channels[0].1, hop_channels[0].0) {
+        if let Err(e) = set_interface_channel(idx, hop_channels[0].1, hop_channels[0].0) {
             eprintln!("{}", e);
         }
 
@@ -1218,7 +1223,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
 
     let current_channel = current_freq.channel.unwrap();
     oxide.if_hardware.current_channel = current_channel;
-    oxide.if_hardware.current_band = freq_to_band(current_freq.frequency.unwrap());
+    oxide.if_hardware.current_band = frequency_to_band(current_freq.frequency.unwrap());
 
     let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
@@ -2578,7 +2583,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cycle_iter = channels_binding.iter().cycle();
     if let Some(&(band, channel)) = cycle_iter.next() {
         first_channel = (band, channel);
-        if let Err(e) = set_interface_chan(idx, channel, band) {
+        if let Err(e) = set_interface_channel(idx, channel, band) {
             eprintln!("{}", e);
         }
     }
@@ -2643,7 +2648,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::SeqCst) {
         // Update our interface
         oxide.if_hardware.interface =
-            match get_interface_info_idx(oxide.if_hardware.interface.index.unwrap()) {
+            match get_interface_info(oxide.if_hardware.interface.index.unwrap()) {
                 Ok(interface) => interface,
                 Err(e) => {
                     // Uh oh... no interfacee
@@ -2768,7 +2773,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Err(e) = oxide
                     .if_hardware
                     .netlink
-                    .set_interface_chan(idx, channel, band)
+                    .set_interface_channel(idx, channel, band)
                 {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,

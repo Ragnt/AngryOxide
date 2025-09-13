@@ -1,7 +1,7 @@
 use byteorder::LE;
 use crc32fast::Hasher;
 use libwifi::frame::components::MacAddress;
-use nl80211_ng::Interface;
+use crate::interface::Interface;
 use pcap_file::pcapng::blocks::enhanced_packet::{EnhancedPacketBlock, EnhancedPacketOption};
 use pcap_file::pcapng::blocks::interface_description::{
     InterfaceDescriptionBlock, InterfaceDescriptionOption,
@@ -129,7 +129,7 @@ impl PcapWriter {
 
         let mut pcap_writer = PcapNgWriter::with_section_header(file, shb).unwrap();
 
-        let mac = interface.mac.clone().unwrap();
+        let mac = interface.mac.clone();
         let interface = InterfaceDescriptionBlock {
             linktype: DataLink::IEEE802_11_RADIOTAP,
             snaplen: 0x0000,

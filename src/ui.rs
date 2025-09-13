@@ -1,9 +1,30 @@
-use copypasta_ext::osc52::Osc52ClipboardContext;
-use copypasta_ext::prelude::*;
-use copypasta_ext::x11_bin::X11BinClipboardContext;
 use derive_setters::Setters;
 use libwifi::frame::components::MacAddress;
 use std::{io::Result, time::Instant};
+
+// Helper function to set clipboard content for the current platform
+fn set_clipboard_content(content: String) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use copypasta_ext::osc52::Osc52ClipboardContext;
+        use copypasta_ext::prelude::*;
+        use copypasta_ext::x11_bin::X11BinClipboardContext;
+        
+        let mut ctx = Osc52ClipboardContext::new_with(X11BinClipboardContext::new()?)?;
+        ctx.set_contents(content)?;
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use terminal_clipboard::set_clipboard;
+        set_clipboard(content)?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        Err(anyhow::anyhow!("Unsupported platform for clipboard"))
+    }
+}
 
 use crate::{
     advancedtable::{self, advtable::AdvTable},
@@ -651,17 +672,13 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     if oxide.ui_state.copy_short {
         if let Some(ap) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(ap.mac_address.to_string()).unwrap();
+            set_clipboard_content(ap.mac_address.to_string().to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(ap) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(ap.to_json_str()).unwrap();
+            set_clipboard_content(ap.to_json_str().to_string()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
@@ -937,17 +954,13 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
 
     if oxide.ui_state.copy_short {
         if let Some(station) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(station.mac_address.to_string()).unwrap();
+            set_clipboard_content(station.mac_address.to_string().to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(station) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(station.to_json_str()).unwrap();
+            set_clipboard_content(station.to_json_str().to_string()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
@@ -1037,17 +1050,13 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     if oxide.ui_state.copy_short {
         if let Some(hs) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(hs.json_summary()).unwrap();
+            set_clipboard_content(hs.json_summary().to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(hs) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(hs.json_detail()).unwrap();
+            set_clipboard_content(hs.json_detail().to_string()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }

@@ -12,7 +12,7 @@ use libwifi::{
     },
     Addresses,
 };
-use nl80211_ng::channels::WiFiBand;
+use crate::interface::Band as WiFiBand;
 
 use crate::{
     status::{MessageType, StatusMessage},

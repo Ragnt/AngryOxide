@@ -1,4 +1,4 @@
-use nl80211_ng::Interface;
+use crate::interface::Interface;
 
 use rusqlite::{params, Connection, Result};
 use std::time::Duration;
