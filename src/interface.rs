@@ -26,11 +26,15 @@ pub trait InterfaceExt {
 #[cfg(target_os = "linux")]
 impl InterfaceExt for nl80211_ng::Interface {
     fn name_as_string(&self) -> String {
-        self.name.clone()
+        self.name
+            .clone()
+            .and_then(|n| String::from_utf8(n).ok())
+            .unwrap_or_else(|| "unknown".to_string())
     }
 
     fn driver_as_string(&self) -> String {
-        self.driver.clone().unwrap_or_else(|| "unknown".to_string())
+        // nl80211_ng::Interface doesn't have a driver field on Linux
+        "nl80211".to_string()
     }
 }
 
@@ -39,14 +43,14 @@ pub use nl80211_ng::Interface;
 
 // Create a wrapper type for Band to add the to_u8() method
 #[cfg(target_os = "linux")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Band(WiFiBand);
 
 #[cfg(target_os = "linux")]
 impl Band {
     pub fn to_u8(&self) -> u8 {
         match self.0 {
-            WiFiBand::Band2_4GHz => 0,
+            WiFiBand::Band2GHz => 0,
             WiFiBand::Band5GHz => 1,
             WiFiBand::Band6GHz => 2,
             WiFiBand::Band60GHz => 3,
@@ -60,16 +64,16 @@ impl Band {
 
     pub fn from_u8(val: u8) -> Self {
         match val {
-            0 => Band(WiFiBand::Band2_4GHz),
+            0 => Band(WiFiBand::Band2GHz),
             1 => Band(WiFiBand::Band5GHz),
             2 => Band(WiFiBand::Band6GHz),
             3 => Band(WiFiBand::Band60GHz),
-            _ => Band(WiFiBand::Band2_4GHz), // Default to 2.4GHz for unknown
+            _ => Band(WiFiBand::Band2GHz), // Default to 2.4GHz for unknown
         }
     }
 
-    pub const Unknown: Band = Band(WiFiBand::Band2_4GHz); // Placeholder for Unknown
-    pub const Band2_4GHz: Band = Band(WiFiBand::Band2_4GHz);
+    pub const Unknown: Band = Band(WiFiBand::Band2GHz); // Placeholder for Unknown
+    pub const Band2_4GHz: Band = Band(WiFiBand::Band2GHz);
     pub const Band5GHz: Band = Band(WiFiBand::Band5GHz);
     pub const Band6GHz: Band = Band(WiFiBand::Band6GHz);
     pub const Band60GHz: Band = Band(WiFiBand::Band60GHz);
@@ -520,7 +524,7 @@ pub struct Phy {
 }
 
 #[cfg(target_os = "linux")]
-pub use nl80211_ng::phy::Phy;
+pub use nl80211_ng::Phy;
 
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq)]
