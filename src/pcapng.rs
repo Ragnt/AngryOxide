@@ -136,7 +136,7 @@ impl PcapWriter {
             options: vec![
                 InterfaceDescriptionOption::IfName(Cow::from(interface.name_as_string())),
                 InterfaceDescriptionOption::IfHardware(Cow::from(interface.driver_as_string())),
-                InterfaceDescriptionOption::IfMacAddr(Cow::from(mac)),
+                InterfaceDescriptionOption::IfMacAddr(Cow::from(mac.to_vec())),
             ],
         };
 

@@ -84,3 +84,8 @@ procfs = "0.16.0"
 nl80211-ng = ">=0.5.5"
 neli = "0.6.4"
 neli-proc-macros = "0.1.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
+core-foundation-sys = "0.8"
+system-configuration = "0.5"

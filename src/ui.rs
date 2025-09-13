@@ -16,8 +16,17 @@ fn set_clipboard_content(content: String) -> anyhow::Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        use terminal_clipboard::set_clipboard;
-        set_clipboard(content)?;
+        // Use copypasta for macOS as well, or use pbcopy command
+        use std::process::Command;
+        Command::new("pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                child.stdin.as_mut().unwrap().write_all(content.as_bytes())?;
+                child.wait().map(|_| ())
+            })
+            .map_err(|e| anyhow::anyhow!("Failed to set clipboard: {}", e))?;
         Ok(())
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -604,28 +613,28 @@ fn create_status_bar(
             .if_hardware
             .interface
             .name
-            .clone()
-            .expect("Cannot get interface name"),
+            .clone(),
     );
 
-    let mac_addr = MacAddress::from_vec(
+    let mac_addr = MacAddress(
         oxide
             .if_hardware
             .interface
             .mac
-            .clone()
-            .expect("Cannot get mac address"),
+            .clone(),
     );
 
     // Top Left
     let interface = format!(
         "Interface: {}",
-        interface_name.expect("Cannot get interface name")
+        interface_name.unwrap_or_else(|_| "unknown".to_string())
     );
-    let mac: String = format!("MacAddr: {}", mac_addr.expect("Cannot get mac address"));
+    let mac: String = format!("MacAddr: {}", mac_addr);
     let channel = format!(
         "Frequency: {} {}",
-        oxide.if_hardware.interface.frequency.clone().print(),
+        oxide.if_hardware.interface.frequency
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "N/A".to_string()),
         if oxide.ui_state.geofenced {
             "(GeoFenced)"
         } else if oxide.config.autohunt {

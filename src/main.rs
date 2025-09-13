@@ -1,5 +1,13 @@
 #![allow(dead_code)]
 mod advancedtable;
+#[cfg(target_os = "macos")]
+mod airport;
+#[cfg(target_os = "macos")]
+mod macos_interface;
+#[cfg(target_os = "macos")]
+mod macos_monitor;
+#[cfg(target_os = "macos")]
+mod wireless_diagnostics;
 mod ascii;
 mod attack;
 mod auth;
@@ -460,13 +468,17 @@ impl OxideRuntime {
         let mut netlink = get_nl80211().expect("Cannot open Nl80211");
 
         // Need to ensure the channels available here are validated
-        let iface = if let Some(interface) = netlink
-            .get_interfaces()
-            .iter()
-            .find(|&(_, iface)| iface.name_as_string() == interface_name)
-            .map(|(_, iface)| iface.clone())
-        {
-            interface
+        let iface = if let Ok(interfaces) = netlink.get_interfaces() {
+            if let Some(interface) = interfaces
+                .iter()
+                .find(|iface| iface.name_as_string() == interface_name)
+                .cloned()
+            {
+                interface
+            } else {
+                println!("{}", get_art("Interface not found"));
+                exit(EXIT_FAILURE);
+            }
         } else {
             println!("{}", get_art("Interface not found"));
             exit(EXIT_FAILURE);
@@ -660,9 +672,16 @@ impl OxideRuntime {
 
         //// Setup Channels ////
 
+        #[cfg(target_os = "linux")]
         let mut capable_channels: BTreeMap<u8, Vec<u32>> = iface
             .get_frequency_list_simple()
             .unwrap()
+            .into_iter()
+            .collect();
+
+        #[cfg(target_os = "macos")]
+        let mut capable_channels: BTreeMap<u8, Vec<u32>> = iface
+            .get_frequency_list_simple()
             .into_iter()
             .collect();
 
@@ -739,9 +758,10 @@ impl OxideRuntime {
             for channel in &channels {
                 if let Some((channel, band)) = map_channel_to_band(channel) {
                     let band_u8 = band.to_u8();
-                    if !hop_channels.contains(&(band_u8, channel)) {
-                        if capable_channels.get(&band_u8).unwrap().contains(&channel) {
-                            hop_channels.push((band_u8, channel));
+                    let channel_u32 = channel as u32;
+                    if !hop_channels.contains(&(band_u8, channel_u32)) {
+                        if capable_channels.get(&band_u8).unwrap().contains(&channel_u32) {
+                            hop_channels.push((band_u8, channel_u32));
                         } else {
                             println!(
                                 "WARNING: Channel {} not available for interface {}... ignoring.",
@@ -825,6 +845,7 @@ impl OxideRuntime {
 
         ///////////////////////////////
 
+        #[cfg(target_os = "linux")]
         if let Some(ref phy) = iface.phy {
             if !phy.iftypes.clone().is_some_and(|types| {
                 types.contains(&Nl80211Iftype::IftypeMonitor)
@@ -835,6 +856,12 @@ impl OxideRuntime {
                 );
                 exit(EXIT_FAILURE);
             }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, monitor mode capability is checked differently
+            // The check happens when we actually try to enable monitor mode
         }
 
         println!("💲 Mouse Capture: {}", !cli_args.disablemouse);
@@ -866,16 +893,32 @@ impl OxideRuntime {
         thread::sleep(Duration::from_millis(500));
 
         // Setting Monitor
+        #[cfg(target_os = "linux")]
         println!(
             "💲 Setting {} to Monitor mode. (\"active\" flag: {})",
             interface_name,
             (iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive)
         );
 
-        if iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive {
-            netlink.set_interface_monitor(true, idx).ok();
-        } else {
-            netlink.set_interface_monitor(false, idx).ok();
+        #[cfg(target_os = "macos")]
+        println!(
+            "💲 Setting {} to Monitor mode.",
+            interface_name
+        );
+
+        #[cfg(target_os = "linux")]
+        {
+            if iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive {
+                netlink.set_interface_monitor(true, idx).ok();
+            } else {
+                netlink.set_interface_monitor(false, idx).ok();
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, we always use the same monitor mode approach
+            netlink.set_interface_monitor(!cli_args.noactive, idx).ok();
         }
 
         if let Ok(after) = get_interface_info(idx) {
@@ -896,7 +939,7 @@ impl OxideRuntime {
         netlink.set_interface_up(idx).ok();
         netlink.set_powersave_off(idx).ok();
 
-        if let Err(e) = set_interface_channel(idx, hop_channels[0].1, hop_channels[0].0) {
+        if let Err(e) = set_interface_channel(idx, hop_channels[0].1 as u8, WiFiBand::from_u8(hop_channels[0].0)) {
             eprintln!("{}", e);
         }
 
@@ -1110,8 +1153,7 @@ impl OxideRuntime {
         let band_channels = self
             .if_hardware
             .interface
-            .get_frequency_list_simple()
-            .unwrap();
+            .get_frequency_list_simple();
         let current_channel = self.if_hardware.current_channel;
         let mut band: u8 = 0;
 
@@ -1216,14 +1258,15 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
 
     // Get Channel Values
     let current_freq = oxide.if_hardware.interface.frequency.clone();
+    let current_channel_opt = oxide.if_hardware.interface.channel.clone();
 
-    if current_freq.channel.is_none() {
+    if current_channel_opt.is_none() {
         panic!("Channel is None. Current Frequency: {current_freq:?}");
     }
 
-    let current_channel = current_freq.channel.unwrap();
-    oxide.if_hardware.current_channel = current_channel;
-    oxide.if_hardware.current_band = frequency_to_band(current_freq.frequency.unwrap());
+    let current_channel = current_channel_opt.unwrap();
+    oxide.if_hardware.current_channel = current_channel as u32;
+    oxide.if_hardware.current_band = frequency_to_band(current_freq.unwrap()).unwrap_or(WiFiBand::Band2_4GHz);
 
     let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
@@ -2207,7 +2250,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
         None
     };
 
-    let freq = Some(current_freq.frequency.unwrap() as f64);
+    let freq = current_freq.map(|f| f as f64);
     let signal = radiotap.antenna_signal.map(|signal| signal.value as i32);
     let rate = radiotap.rate.map(|rate| rate.value as f64);
 
@@ -2487,48 +2530,90 @@ fn handle_null_data_frame(
 }
 
 fn write_packet(fd: i32, packet: &[u8]) -> Result<(), String> {
-    let bytes_written =
-        unsafe { libc::write(fd, packet.as_ptr() as *const libc::c_void, packet.len()) };
+    #[cfg(target_os = "linux")]
+    {
+        let bytes_written =
+            unsafe { libc::write(fd, packet.as_ptr() as *const libc::c_void, packet.len()) };
 
-    if bytes_written < 0 {
-        // An error occurred during write
-        let error_code = io::Error::last_os_error();
+        if bytes_written < 0 {
+            // An error occurred during write
+            let error_code = io::Error::last_os_error();
+            return Err(error_code.to_string());
+        }
 
-        return Err(error_code.to_string());
+        Ok(())
     }
 
-    Ok(())
+    #[cfg(target_os = "macos")]
+    {
+        use rawsocks::write_bpf_packet;
+
+        match write_bpf_packet(fd, packet) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
 }
 
 fn read_frame(oxide: &mut OxideRuntime) -> Result<Vec<u8>, io::Error> {
-    let mut buffer = vec![0u8; 6000];
-    let packet_len = unsafe {
-        libc::read(
-            oxide.raw_sockets.rx_socket.as_raw_fd(),
-            buffer.as_mut_ptr() as *mut libc::c_void,
-            buffer.len(),
-        )
-    };
+    #[cfg(target_os = "linux")]
+    {
+        let mut buffer = vec![0u8; 6000];
+        let packet_len = unsafe {
+            libc::read(
+                oxide.raw_sockets.rx_socket.as_raw_fd(),
+                buffer.as_mut_ptr() as *mut libc::c_void,
+                buffer.len(),
+            )
+        };
 
-    // Handle non-blocking read
-    if packet_len < 0 {
-        let error_code = io::Error::last_os_error();
-        if error_code.kind() == io::ErrorKind::WouldBlock {
-            oxide.counters.empty_reads += 1;
-            return Ok(Vec::new());
-        } else {
-            // An actual error occurred
-            oxide.counters.error_count += 1;
-            oxide.status_log.add_message(StatusMessage::new(
-                MessageType::Error,
-                format!("Error Reading from Socket: {:?}", error_code.kind()),
-            ));
-            return Err(error_code);
+        // Handle non-blocking read
+        if packet_len < 0 {
+            let error_code = io::Error::last_os_error();
+            if error_code.kind() == io::ErrorKind::WouldBlock {
+                oxide.counters.empty_reads += 1;
+                return Ok(Vec::new());
+            } else {
+                // An actual error occurred
+                oxide.counters.error_count += 1;
+                oxide.status_log.add_message(StatusMessage::new(
+                    MessageType::Error,
+                    format!("Error Reading from Socket: {:?}", error_code.kind()),
+                ));
+                return Err(error_code);
+            }
         }
+
+        buffer.truncate(packet_len as usize);
+        Ok(buffer)
     }
 
-    buffer.truncate(packet_len as usize);
-    Ok(buffer)
+    #[cfg(target_os = "macos")]
+    {
+        use rawsocks::read_bpf_packet;
+
+        match read_bpf_packet(oxide.raw_sockets.rx_socket.as_raw_fd()) {
+            Ok(packet) => {
+                if packet.is_empty() {
+                    oxide.counters.empty_reads += 1;
+                }
+                Ok(packet)
+            }
+            Err(e) => {
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    oxide.counters.empty_reads += 1;
+                    Ok(Vec::new())
+                } else {
+                    oxide.counters.error_count += 1;
+                    oxide.status_log.add_message(StatusMessage::new(
+                        MessageType::Error,
+                        format!("Error Reading from Socket: {:?}", e.kind()),
+                    ));
+                    Err(e)
+                }
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -2548,7 +2633,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let iface = oxide.if_hardware.interface.clone();
     let idx = iface.index.unwrap();
-    let interface_name = String::from_utf8(iface.clone().name.unwrap())
+    let interface_name = String::from_utf8(iface.clone().name)
         .expect("cannot get interface name from bytes.");
 
     let duration = Duration::from_secs(1);
@@ -2583,7 +2668,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cycle_iter = channels_binding.iter().cycle();
     if let Some(&(band, channel)) = cycle_iter.next() {
         first_channel = (band, channel);
-        if let Err(e) = set_interface_channel(idx, channel, band) {
+        if let Err(e) = set_interface_channel(idx, channel as u8, WiFiBand::from_u8(band)) {
             eprintln!("{}", e);
         }
     }
@@ -2773,7 +2858,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Err(e) = oxide
                     .if_hardware
                     .netlink
-                    .set_interface_channel(idx, channel, band)
+                    .set_interface_channel(idx, channel as u8, WiFiBand::from_u8(band))
                 {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
