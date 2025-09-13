@@ -615,9 +615,34 @@ fn create_status_bar(
         right_side_layout[1],
     );
 
-    let interface_name = String::from_utf8(oxide.if_hardware.interface.name.clone());
+    let interface_name = String::from_utf8({
+        #[cfg(target_os = "linux")]
+        {
+            oxide.if_hardware.interface.name.clone().unwrap_or_default()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            oxide.if_hardware.interface.name.clone()
+        }
+    });
 
-    let mac_addr = MacAddress(oxide.if_hardware.interface.mac.clone());
+    let mac_addr = MacAddress({
+        #[cfg(target_os = "linux")]
+        {
+            oxide
+                .if_hardware
+                .interface
+                .mac
+                .clone()
+                .unwrap_or_default()
+                .try_into()
+                .unwrap_or([0u8; 6])
+        }
+        #[cfg(target_os = "macos")]
+        {
+            oxide.if_hardware.interface.mac.clone()
+        }
+    });
 
     // Top Left
     let interface = format!(

@@ -209,7 +209,7 @@ impl Band {
 // Platform-specific implementations
 #[cfg(target_os = "linux")]
 pub fn get_interface_info(ifindex: i32) -> Result<Interface, String> {
-    get_interface_info_idx(ifindex).map_err(|e| e.to_string())
+    get_interface_info_idx(ifindex as u32).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -219,7 +219,7 @@ pub fn get_interface_info(ifindex: i32) -> Result<Interface, String> {
 
 #[cfg(target_os = "linux")]
 pub fn set_interface_channel(ifindex: i32, channel: u8, band: Band) -> Result<(), String> {
-    set_interface_chan(ifindex, channel, band.into()).map_err(|e| e.to_string())
+    set_interface_chan(ifindex as u32, channel as u32, band.to_u8()).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -523,8 +523,7 @@ pub struct Phy {
     pub active_monitor: Option<bool>,
 }
 
-#[cfg(target_os = "linux")]
-pub use nl80211_ng::Phy;
+// Note: nl80211_ng::Phy doesn't exist in the current version
 
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -547,7 +546,7 @@ pub enum Nl80211Iftype {
 // Channel/frequency conversion functions
 #[cfg(target_os = "linux")]
 pub fn frequency_to_band(freq: u32) -> Option<Band> {
-    freq_to_band(freq).map(Band::from)
+    freq_to_band(freq).map(|band| Band::from(band))
 }
 
 #[cfg(target_os = "macos")]
@@ -567,7 +566,8 @@ pub fn frequency_to_band(freq: u32) -> Option<Band> {
 
 #[cfg(target_os = "linux")]
 pub fn map_channel_to_band(channel_str: &str) -> Option<(u8, Band)> {
-    map_str_to_band_and_channel(channel_str).map(|(band, channel)| (channel, Band::from(band)))
+    map_str_to_band_and_channel(channel_str)
+        .map(|(band, channel)| (channel as u8, Band::from(band)))
 }
 
 #[cfg(target_os = "macos")]
