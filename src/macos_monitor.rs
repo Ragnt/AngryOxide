@@ -1,9 +1,9 @@
 // Enhanced monitor mode detection and management for macOS
 // Provides accurate active monitor detection and hardware capability checks
 
-use std::process::Command;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 /// Check if an interface is actively in monitor mode
 pub fn is_interface_in_monitor_mode(ifname: &str) -> bool {
@@ -36,10 +36,7 @@ pub fn is_interface_in_monitor_mode(ifname: &str) -> bool {
 /// Check if tcpdump is running in monitor mode on the interface
 fn is_tcpdump_monitoring(ifname: &str) -> bool {
     // Use ps to check for tcpdump processes
-    if let Ok(output) = Command::new("ps")
-        .arg("aux")
-        .output()
-    {
+    if let Ok(output) = Command::new("ps").arg("aux").output() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Look for tcpdump with -I flag (monitor mode) on our interface
         let search_pattern = format!("tcpdump.*-I.*{}", ifname);
@@ -56,10 +53,7 @@ fn is_tcpdump_monitoring(ifname: &str) -> bool {
 /// Check if airport is running in sniff mode
 fn is_airport_sniffing(ifname: &str) -> bool {
     // Check for airport sniff process
-    if let Ok(output) = Command::new("ps")
-        .arg("aux")
-        .output()
-    {
+    if let Ok(output) = Command::new("ps").arg("aux").output() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Look for airport sniff command
         let search_pattern = format!("airport.*{}.*sniff", ifname);
@@ -99,10 +93,7 @@ fn is_airport_sniffing(ifname: &str) -> bool {
 
 /// Check if interface is in promiscuous mode
 fn is_interface_promiscuous(ifname: &str) -> bool {
-    if let Ok(output) = Command::new("ifconfig")
-        .arg(ifname)
-        .output()
-    {
+    if let Ok(output) = Command::new("ifconfig").arg(ifname).output() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Look for PROMISC flag
         stdout.contains("PROMISC")
@@ -133,9 +124,8 @@ fn can_read_radiotap_headers(ifname: &str) -> bool {
         let error_str = String::from_utf8_lossy(&output.stderr);
 
         // If we can capture with -I flag without error, monitor mode works
-        if output.status.success() ||
-           output_str.contains("802.11") ||
-           error_str.contains("802.11") {
+        if output.status.success() || output_str.contains("802.11") || error_str.contains("802.11")
+        {
             return true;
         }
     }
@@ -227,7 +217,11 @@ fn check_monitor_support(ifname: &str) -> bool {
     // Check if we can enable monitor mode
 
     // 1. Check if airport exists and works
-    if Path::new("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport").exists() {
+    if Path::new(
+        "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport",
+    )
+    .exists()
+    {
         if let Ok(output) = Command::new("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport")
             .arg("-I")
             .output()
@@ -256,8 +250,9 @@ fn check_monitor_support(ifname: &str) -> bool {
             {
                 // If no permission error, monitor mode is likely supported
                 let stderr = String::from_utf8_lossy(&test_output.stderr);
-                if !stderr.contains("Operation not permitted") &&
-                   !stderr.contains("You don't have permission") {
+                if !stderr.contains("Operation not permitted")
+                    && !stderr.contains("You don't have permission")
+                {
                     return true;
                 }
             }
@@ -289,10 +284,7 @@ fn check_injection_support(ifname: &str) -> bool {
 
 /// Check if running on Apple Silicon
 fn is_apple_silicon() -> bool {
-    if let Ok(output) = Command::new("uname")
-        .arg("-m")
-        .output()
-    {
+    if let Ok(output) = Command::new("uname").arg("-m").output() {
         let arch = String::from_utf8_lossy(&output.stdout);
         return arch.contains("arm64") || arch.contains("aarch64");
     }
@@ -318,13 +310,15 @@ fn get_supported_bands(_ifname: &str) -> Vec<String> {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         // Check for band support indicators
-        if stdout.contains("802.11a") || stdout.contains("802.11n") ||
-           stdout.contains("802.11ac") || stdout.contains("802.11ax") {
+        if stdout.contains("802.11a")
+            || stdout.contains("802.11n")
+            || stdout.contains("802.11ac")
+            || stdout.contains("802.11ax")
+        {
             bands.push("5GHz".to_string());
         }
 
-        if stdout.contains("802.11b") || stdout.contains("802.11g") ||
-           stdout.contains("802.11n") {
+        if stdout.contains("802.11b") || stdout.contains("802.11g") || stdout.contains("802.11n") {
             bands.push("2.4GHz".to_string());
         }
 
@@ -364,9 +358,8 @@ fn get_supported_channels(_ifname: &str) -> Vec<u8> {
 
     // Add common 5GHz channels
     channels.extend_from_slice(&[
-        36, 40, 44, 48, 52, 56, 60, 64,
-        100, 104, 108, 112, 116, 120, 124, 128,
-        132, 136, 140, 144, 149, 153, 157, 161, 165
+        36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144,
+        149, 153, 157, 161, 165,
     ]);
 
     channels
@@ -374,9 +367,11 @@ fn get_supported_channels(_ifname: &str) -> Vec<u8> {
 
 /// Get WiFi country code
 fn get_country_code() -> String {
-    if let Ok(output) = Command::new("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport")
-        .arg("prefs")
-        .output()
+    if let Ok(output) = Command::new(
+        "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport",
+    )
+    .arg("prefs")
+    .output()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
         for line in stdout.lines() {

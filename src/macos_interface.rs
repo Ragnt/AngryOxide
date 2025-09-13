@@ -1,18 +1,18 @@
 // macOS-specific interface management implementation
 // Provides real interface information and control
 
+use libc::{c_char, c_int, ioctl, socket, AF_INET, SOCK_DGRAM};
 use std::ffi::CString;
 use std::mem;
 use std::process::Command;
-use libc::{c_char, c_int, ioctl, socket, AF_INET, SOCK_DGRAM};
 
-use crate::interface::{Interface, Band, Nl80211Iftype};
+use crate::interface::{Band, Interface, Nl80211Iftype};
 
 // ioctl constants for macOS
 const SIOCGIFHWADDR: libc::c_ulong = 0xc0206935; // Get hardware address
-const SIOCGIFFLAGS: libc::c_ulong = 0xc0206911;  // Get interface flags
-const SIOCSIFFLAGS: libc::c_ulong = 0x80206910;  // Set interface flags
-const SIOCGIFADDR: libc::c_ulong = 0xc0206921;   // Get interface address
+const SIOCGIFFLAGS: libc::c_ulong = 0xc0206911; // Get interface flags
+const SIOCSIFFLAGS: libc::c_ulong = 0x80206910; // Set interface flags
+const SIOCGIFADDR: libc::c_ulong = 0xc0206921; // Get interface address
 const SIOCSIFLLADDR: libc::c_ulong = 0x8020693c; // Set link-level address (MAC)
 
 // Interface flags
@@ -51,8 +51,14 @@ pub fn get_interface_info_macos(ifindex: i32) -> Result<Interface, String> {
             // On macOS, the MAC is in sa_data starting at offset 0
             let mac_ptr = addr_bytes.sa_data.as_ptr() as *const u8;
             let mac_slice = std::slice::from_raw_parts(mac_ptr, 6);
-            [mac_slice[0], mac_slice[1], mac_slice[2],
-             mac_slice[3], mac_slice[4], mac_slice[5]]
+            [
+                mac_slice[0],
+                mac_slice[1],
+                mac_slice[2],
+                mac_slice[3],
+                mac_slice[4],
+                mac_slice[5],
+            ]
         } else {
             // Fallback: try to get MAC using ifconfig
             get_mac_from_ifconfig(&ifname).unwrap_or([0; 6])
@@ -156,8 +162,8 @@ fn parse_mac_address(mac_str: &str) -> Result<[u8; 6], String> {
 
     let mut mac = [0u8; 6];
     for (i, part) in parts.iter().enumerate() {
-        mac[i] = u8::from_str_radix(part, 16)
-            .map_err(|_| "Failed to parse MAC address".to_string())?;
+        mac[i] =
+            u8::from_str_radix(part, 16).map_err(|_| "Failed to parse MAC address".to_string())?;
     }
 
     Ok(mac)
@@ -240,7 +246,9 @@ fn channel_to_frequency(channel: u8) -> u32 {
 /// Parse channel number from a line of text
 fn parse_channel_from_line(line: &str) -> Option<u8> {
     // Look for patterns like "Channel: 6" or "channel 6"
-    let parts: Vec<&str> = line.split(|c: char| c == ':' || c.is_whitespace()).collect();
+    let parts: Vec<&str> = line
+        .split(|c: char| c == ':' || c.is_whitespace())
+        .collect();
     for (i, part) in parts.iter().enumerate() {
         if part.to_lowercase().contains("channel") && i + 1 < parts.len() {
             if let Ok(channel) = parts[i + 1].parse::<u8>() {
@@ -254,9 +262,11 @@ fn parse_channel_from_line(line: &str) -> Option<u8> {
 /// Get current SSID if connected
 fn get_current_ssid(ifname: &str) -> Option<Vec<u8>> {
     // Try using airport
-    if let Ok(output) = Command::new("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport")
-        .arg("-I")
-        .output()
+    if let Ok(output) = Command::new(
+        "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport",
+    )
+    .arg("-I")
+    .output()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
         for line in stdout.lines() {
@@ -302,8 +312,10 @@ pub fn set_interface_mac_macos(ifindex: i32, mac: &[u8; 6]) -> Result<(), String
     bring_interface_down(&ifname)?;
 
     // Use ifconfig to set MAC address
-    let mac_str = format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    let mac_str = format!(
+        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    );
 
     let output = Command::new("sudo")
         .arg("ifconfig")
@@ -344,7 +356,11 @@ pub fn set_powersave_off_macos(ifindex: i32) -> Result<(), String> {
     }
 
     // Also try to disable power save using airport if available
-    if std::path::Path::new("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport").exists() {
+    if std::path::Path::new(
+        "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport",
+    )
+    .exists()
+    {
         let _ = Command::new("sudo")
             .arg("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport")
             .arg("prefs")

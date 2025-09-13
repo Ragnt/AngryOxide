@@ -1,4 +1,3 @@
-
 use crossterm::event::{poll, Event, KeyCode, KeyEventKind, MouseEventKind};
 
 use std::time::Duration;

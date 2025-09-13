@@ -56,7 +56,7 @@ const FAST_RATES: [SupportedRate; 8] = [
     SupportedRate {
         rate: 54.0,
         mandatory: false,
-    }
+    },
 ];
 
 const RATES: [SupportedRate; 8] = [
@@ -770,7 +770,7 @@ pub fn build_beacon(
         header,
         station_info: StationInfo {
             supported_rates: RATES.to_vec(),
-            extended_supported_rates: Some(EXT_RATES.to_vec()),            
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid: Some(ssid.to_string()),
             ds_parameter_set: Some(channel.try_into().unwrap()),
             rsn_information: Some(RsnInformation {
@@ -871,7 +871,7 @@ pub fn build_association_response(
         association_id: 49153u16,
         station_info: StationInfo {
             supported_rates: RATES.to_vec(),
-            extended_supported_rates: Some(EXT_RATES.to_vec()),            
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
             ssid: Some(ssid.to_string()),
             ..Default::default()
         },

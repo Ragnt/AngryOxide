@@ -1,4 +1,3 @@
-
 use libwifi::frame::components::MacAddress;
 
 // Define bitmasks for different OUI lengths

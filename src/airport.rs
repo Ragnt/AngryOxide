@@ -2,16 +2,17 @@
 // This module provides functions for monitor mode and channel control
 // Supports multiple methods: airport (legacy but still works), tcpdump (modern), and wdutil (info)
 
+use std::io::{self, BufRead, BufReader};
 #[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
-use std::io::{self, BufRead, BufReader};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
 /// Path to the Airport utility on macOS
 #[cfg(target_os = "macos")]
-const AIRPORT_PATH: &str = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
+const AIRPORT_PATH: &str =
+    "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
 
 /// Path to tcpdump (available on all macOS versions)
 #[cfg(target_os = "macos")]
@@ -28,9 +29,7 @@ pub fn disassociate() -> Result<(), String> {
 
     // Try airport first if available
     if Path::new(AIRPORT_PATH).exists() {
-        let output = Command::new(AIRPORT_PATH)
-            .arg("-z")
-            .output();
+        let output = Command::new(AIRPORT_PATH).arg("-z").output();
 
         if let Ok(output) = output {
             if output.status.success() {
@@ -47,10 +46,7 @@ pub fn disassociate() -> Result<(), String> {
 
     thread::sleep(Duration::from_millis(100));
 
-    let _ = Command::new("/sbin/ifconfig")
-        .arg("en0")
-        .arg("up")
-        .output();
+    let _ = Command::new("/sbin/ifconfig").arg("en0").arg("up").output();
 
     Ok(())
 }
@@ -93,7 +89,8 @@ pub struct SniffHandle {
 impl SniffHandle {
     /// Stop sniffing
     pub fn stop(mut self) -> Result<(), String> {
-        self.process.kill()
+        self.process
+            .kill()
             .map_err(|e| format!("Failed to stop sniffing: {}", e))?;
         Ok(())
     }
@@ -123,7 +120,10 @@ pub fn start_sniff(interface: &str, channel: u8) -> Result<SniffHandle, String> 
     // Check if process is still running
     match child.try_wait() {
         Ok(Some(status)) => {
-            return Err(format!("Airport sniff exited immediately with status: {}", status));
+            return Err(format!(
+                "Airport sniff exited immediately with status: {}",
+                status
+            ));
         }
         Ok(None) => {
             // Process is still running, good
@@ -147,9 +147,7 @@ pub fn check_monitor_capability(interface: &str) -> bool {
     // Check if we have any method available for monitor mode
     if Path::new(AIRPORT_PATH).exists() {
         // Try to get interface info
-        let output = Command::new(AIRPORT_PATH)
-            .arg("-I")
-            .output();
+        let output = Command::new(AIRPORT_PATH).arg("-I").output();
 
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -170,9 +168,7 @@ pub fn get_current_channel(interface: &str) -> Result<u8, String> {
 
     // Try airport first
     if Path::new(AIRPORT_PATH).exists() {
-        let output = Command::new(AIRPORT_PATH)
-            .arg("-I")
-            .output();
+        let output = Command::new(AIRPORT_PATH).arg("-I").output();
 
         if let Ok(output) = output {
             if output.status.success() {
@@ -194,9 +190,7 @@ pub fn get_current_channel(interface: &str) -> Result<u8, String> {
 
     // Try wdutil as fallback
     if Path::new(WDUTIL_PATH).exists() {
-        let output = Command::new(WDUTIL_PATH)
-            .arg("info")
-            .output();
+        let output = Command::new(WDUTIL_PATH).arg("info").output();
 
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -306,7 +300,10 @@ mod tests {
     #[test]
     fn test_airport_path_exists() {
         use std::path::Path;
-        assert!(Path::new(AIRPORT_PATH).exists(), "Airport utility not found at expected path");
+        assert!(
+            Path::new(AIRPORT_PATH).exists(),
+            "Airport utility not found at expected path"
+        );
     }
 
     #[test]

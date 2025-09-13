@@ -117,7 +117,7 @@ impl WhiteList {
                                 }));
                             }
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         return true;
@@ -130,7 +130,7 @@ impl WhiteList {
                                 addr: ap.mac_address,
                             }))
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         return true;
@@ -158,7 +158,7 @@ impl WhiteList {
                                 }));
                             }
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         matches.push(target);
@@ -171,7 +171,7 @@ impl WhiteList {
                                 addr: ap.mac_address,
                             }))
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         matches.push(target);

@@ -11,7 +11,7 @@ use nl80211_ng::{
 
 // Re-export common types that are used throughout the codebase
 #[cfg(target_os = "linux")]
-pub use nl80211_ng::{channels::WiFiBand};
+pub use nl80211_ng::channels::WiFiBand;
 
 // Create an extension trait for Interface on Linux
 #[cfg(target_os = "linux")]
@@ -25,7 +25,7 @@ impl InterfaceExt for nl80211_ng::Interface {
     fn name_as_string(&self) -> String {
         self.name.clone()
     }
-    
+
     fn driver_as_string(&self) -> String {
         self.driver.clone().unwrap_or_else(|| "unknown".to_string())
     }
@@ -116,16 +116,21 @@ impl Interface {
         let mut band_map = HashMap::new();
 
         // 2.4 GHz band (band ID 0)
-        band_map.insert(0, vec![
-            2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472, 2484,
-        ]);
+        band_map.insert(
+            0,
+            vec![
+                2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472, 2484,
+            ],
+        );
 
         // 5 GHz band (band ID 1)
-        band_map.insert(1, vec![
-            5180, 5200, 5220, 5240, 5260, 5280, 5300, 5320,
-            5500, 5520, 5540, 5560, 5580, 5600, 5620, 5640, 5660, 5680, 5700,
-            5745, 5765, 5785, 5805, 5825,
-        ]);
+        band_map.insert(
+            1,
+            vec![
+                5180, 5200, 5220, 5240, 5260, 5280, 5300, 5320, 5500, 5520, 5540, 5560, 5580, 5600,
+                5620, 5640, 5660, 5680, 5700, 5745, 5765, 5785, 5805, 5825,
+            ],
+        );
 
         band_map
     }
@@ -136,8 +141,12 @@ impl Interface {
             self.name_as_string(),
             self.index,
             self.phy,
-            self.mac[0], self.mac[1], self.mac[2],
-            self.mac[3], self.mac[4], self.mac[5]
+            self.mac[0],
+            self.mac[1],
+            self.mac[2],
+            self.mac[3],
+            self.mac[4],
+            self.mac[5]
         )
     }
 }
@@ -161,7 +170,8 @@ impl Band {
             Band::Band6GHz => "6GHz",
             Band::Band60GHz => "60GHz",
             Band::Unknown => "Unknown",
-        }.to_string()
+        }
+        .to_string()
     }
 
     pub fn to_u8(&self) -> u8 {
@@ -237,7 +247,7 @@ impl Nl80211Mock {
     pub fn new() -> Result<Self, String> {
         Ok(Self {})
     }
-    
+
     pub fn get_interfaces(&self) -> Result<Vec<Interface>, String> {
         // Basic implementation to get network interfaces on macOS
         use std::process::Command;
@@ -276,7 +286,7 @@ impl Nl80211Mock {
     pub fn list_interfaces(&self) -> Result<Vec<Interface>, String> {
         self.get_interfaces()
     }
-    
+
     pub fn list_phys(&self) -> Result<Vec<Phy>, String> {
         // Return a mock Phy for WiFi interfaces
         #[cfg(target_os = "macos")]
@@ -336,7 +346,7 @@ impl Nl80211Mock {
         // Default to en0 if not found
         Ok("en0".to_string())
     }
-    
+
     pub fn set_interface_down(&self, ifindex: i32) -> Result<(), String> {
         // Use ioctl to bring interface down
         use libc::{c_int, ioctl, socket, AF_INET, IFF_UP, SOCK_DGRAM};
@@ -389,7 +399,7 @@ impl Nl80211Mock {
 
         Ok(())
     }
-    
+
     pub fn set_interface_up(&self, ifindex: i32) -> Result<(), String> {
         // Use ioctl to bring interface up
         use libc::{c_int, ioctl, socket, AF_INET, IFF_UP, SOCK_DGRAM};
@@ -442,11 +452,11 @@ impl Nl80211Mock {
 
         Ok(())
     }
-    
+
     pub fn set_interface_mac(&self, ifindex: i32, mac: &[u8; 6]) -> Result<(), String> {
         crate::macos_interface::set_interface_mac_macos(ifindex, mac)
     }
-    
+
     pub fn set_interface_monitor(&self, active: bool, ifindex: i32) -> Result<(), String> {
         #[cfg(target_os = "macos")]
         {
@@ -471,16 +481,21 @@ impl Nl80211Mock {
             Err("Monitor mode not implemented for this platform".to_string())
         }
     }
-    
+
     pub fn set_powersave_off(&self, ifindex: i32) -> Result<(), String> {
         crate::macos_interface::set_powersave_off_macos(ifindex)
     }
-    
+
     pub fn set_interface_station(&self, ifindex: i32) -> Result<(), String> {
         crate::macos_interface::set_interface_station_macos(ifindex)
     }
-    
-    pub fn set_interface_channel(&self, ifindex: i32, channel: u8, band: Band) -> Result<(), String> {
+
+    pub fn set_interface_channel(
+        &self,
+        ifindex: i32,
+        channel: u8,
+        band: Band,
+    ) -> Result<(), String> {
         set_interface_channel(ifindex, channel, band)
     }
 }
@@ -550,7 +565,7 @@ pub fn map_channel_to_band(channel_str: &str) -> Option<(u8, Band)> {
 #[cfg(target_os = "macos")]
 pub fn map_channel_to_band(channel_str: &str) -> Option<(u8, Band)> {
     let channel: u8 = channel_str.parse().ok()?;
-    
+
     // Basic channel to band mapping
     if channel >= 1 && channel <= 14 {
         Some((channel, Band::Band2_4GHz))

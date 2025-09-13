@@ -1,7 +1,7 @@
+use crate::interface::Interface;
 use byteorder::LE;
 use crc32fast::Hasher;
 use libwifi::frame::components::MacAddress;
-use crate::interface::Interface;
 use pcap_file::pcapng::blocks::enhanced_packet::{EnhancedPacketBlock, EnhancedPacketOption};
 use pcap_file::pcapng::blocks::interface_description::{
     InterfaceDescriptionBlock, InterfaceDescriptionOption,

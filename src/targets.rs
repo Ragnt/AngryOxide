@@ -96,7 +96,7 @@ impl TargetList {
         self.targets.push(target);
     }
 
-    /// Remove *exactly* the provided `Target`.  
+    /// Remove *exactly* the provided `Target`.
     /// Returns `true` if something was deleted.
     pub fn remove(&mut self, target: &Target) -> bool {
         let before = self.targets.len();
@@ -207,7 +207,6 @@ impl TargetList {
     }
 
     pub fn is_actual_target_mac(&self, mac: &MacAddress) -> bool {
-
         for target in &self.targets {
             match target {
                 Target::MAC(tgt) => {
@@ -222,7 +221,6 @@ impl TargetList {
     }
 
     pub fn is_actual_target_ssid(&self, ssid: &str) -> bool {
-
         for target in &self.targets {
             match target {
                 Target::MAC(_) => {} // do nothing, we don't have anything to compare to here.

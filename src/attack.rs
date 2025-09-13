@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use crate::interface::Band as WiFiBand;
 use libwifi::{
     frame::{
         components::{MacAddress, RsnAkmSuite, RsnCipherSuite, RsnInformation},
@@ -12,7 +13,6 @@ use libwifi::{
     },
     Addresses,
 };
-use crate::interface::Band as WiFiBand;
 
 use crate::{
     status::{MessageType, StatusMessage},

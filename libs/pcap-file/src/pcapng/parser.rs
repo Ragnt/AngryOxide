@@ -5,9 +5,8 @@ use super::blocks::enhanced_packet::EnhancedPacketBlock;
 use super::blocks::interface_description::InterfaceDescriptionBlock;
 use super::blocks::section_header::SectionHeaderBlock;
 use super::blocks::{INTERFACE_DESCRIPTION_BLOCK, SECTION_HEADER_BLOCK};
-use crate::errors::PcapError;
 use crate::Endianness;
-
+use crate::errors::PcapError;
 
 /// Parses a PcapNg from a slice of bytes.
 ///

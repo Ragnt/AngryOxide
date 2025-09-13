@@ -2,13 +2,12 @@ use std::io::Write;
 
 use byteorder_slice::{BigEndian, ByteOrder, LittleEndian};
 
+use super::RawBlock;
+use super::blocks::SECTION_HEADER_BLOCK;
 use super::blocks::block_common::{Block, PcapNgBlock};
 use super::blocks::interface_description::InterfaceDescriptionBlock;
 use super::blocks::section_header::SectionHeaderBlock;
-use super::blocks::SECTION_HEADER_BLOCK;
-use super::RawBlock;
 use crate::{Endianness, PcapError, PcapResult};
-
 
 /// Writes a PcapNg to a writer.
 ///

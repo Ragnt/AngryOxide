@@ -7,7 +7,6 @@ use crate::errors::*;
 use crate::pcap::{PcapHeader, PcapPacket};
 use crate::{Endianness, TsResolution};
 
-
 /// Writes a pcap to a writer.
 ///
 /// # Example

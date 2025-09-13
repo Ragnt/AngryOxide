@@ -1,13 +1,12 @@
 use std::io::Read;
 
+use super::PcapNgParser;
 use super::blocks::block_common::{Block, RawBlock};
 use super::blocks::enhanced_packet::EnhancedPacketBlock;
 use super::blocks::interface_description::InterfaceDescriptionBlock;
 use super::blocks::section_header::SectionHeaderBlock;
-use super::PcapNgParser;
 use crate::errors::PcapError;
 use crate::read_buffer::ReadBuffer;
-
 
 /// Reads a PcapNg from a reader.
 ///
@@ -49,8 +48,7 @@ impl<R: Read> PcapNgReader<R> {
             Ok(has_data) => {
                 if has_data {
                     Some(self.reader.parse_with(|src| self.parser.next_block(src)))
-                }
-                else {
+                } else {
                     None
                 }
             },
@@ -64,8 +62,7 @@ impl<R: Read> PcapNgReader<R> {
             Ok(has_data) => {
                 if has_data {
                     Some(self.reader.parse_with(|src| self.parser.next_raw_block(src)))
-                }
-                else {
+                } else {
                     None
                 }
             },

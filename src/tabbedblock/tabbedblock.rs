@@ -292,7 +292,7 @@ impl<'a> TabbedBlock<'a> {
     /// [spans](crate::text::Span) (`Vec<Span>`).
     ///
     /// By default, the tabs will avoid being rendered in the corners of the TabbedBlock but will align
-    /// against the left or right edge of the TabbedBlock if there is no border on that edge.  
+    /// against the left or right edge of the TabbedBlock if there is no border on that edge.
     /// The following demonstrates this behavior, notice the second tab is one character off to
     /// the left.
     ///

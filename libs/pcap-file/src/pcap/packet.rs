@@ -2,13 +2,13 @@ use std::borrow::Cow;
 use std::io::Write;
 use std::time::Duration;
 
+use byteorder_slice::ByteOrder;
 use byteorder_slice::byteorder::WriteBytesExt;
 use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
 use derive_into_owned::IntoOwned;
 
-use crate::errors::*;
 use crate::TsResolution;
+use crate::errors::*;
 
 /// Pcap packet.
 ///
@@ -104,7 +104,6 @@ impl<'a> PcapPacket<'a> {
         Ok(PcapPacket { timestamp: Duration::new(ts_sec as u64, ts_nsec), orig_len, data: raw.data })
     }
 }
-
 
 /// Raw Pcap packet with its header and data.
 /// The fields of the packet are not validated.

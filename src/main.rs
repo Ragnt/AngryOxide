@@ -2,12 +2,6 @@
 mod advancedtable;
 #[cfg(target_os = "macos")]
 mod airport;
-#[cfg(target_os = "macos")]
-mod macos_interface;
-#[cfg(target_os = "macos")]
-mod macos_monitor;
-#[cfg(target_os = "macos")]
-mod wireless_diagnostics;
 mod ascii;
 mod attack;
 mod auth;
@@ -17,6 +11,10 @@ mod eventhandler;
 mod geofence;
 mod gps;
 mod interface;
+#[cfg(target_os = "macos")]
+mod macos_interface;
+#[cfg(target_os = "macos")]
+mod macos_monitor;
 mod matrix;
 mod oui;
 mod pcapng;
@@ -29,6 +27,8 @@ mod tx;
 mod ui;
 mod util;
 mod whitelist;
+#[cfg(target_os = "macos")]
+mod wireless_diagnostics;
 
 use anyhow::Result;
 use attack::{
@@ -54,8 +54,8 @@ use libwifi::frame::{DataFrame, EapolKey, NullDataFrame};
 use nix::unistd::geteuid;
 
 use crate::interface::{
-    frequency_to_band, get_interface_info, get_nl80211, map_channel_to_band,
-    set_interface_channel, Band as WiFiBand, Interface, Nl80211, Nl80211Iftype,
+    frequency_to_band, get_interface_info, get_nl80211, map_channel_to_band, set_interface_channel,
+    Band as WiFiBand, Interface, Nl80211, Nl80211Iftype,
 };
 
 #[cfg(target_os = "linux")]
@@ -680,10 +680,8 @@ impl OxideRuntime {
             .collect();
 
         #[cfg(target_os = "macos")]
-        let mut capable_channels: BTreeMap<u8, Vec<u32>> = iface
-            .get_frequency_list_simple()
-            .into_iter()
-            .collect();
+        let mut capable_channels: BTreeMap<u8, Vec<u32>> =
+            iface.get_frequency_list_simple().into_iter().collect();
 
         for (_key, value) in capable_channels.iter_mut() {
             value.sort(); // This sorts each vector in place
@@ -760,7 +758,11 @@ impl OxideRuntime {
                     let band_u8 = band.to_u8();
                     let channel_u32 = channel as u32;
                     if !hop_channels.contains(&(band_u8, channel_u32)) {
-                        if capable_channels.get(&band_u8).unwrap().contains(&channel_u32) {
+                        if capable_channels
+                            .get(&band_u8)
+                            .unwrap()
+                            .contains(&channel_u32)
+                        {
                             hop_channels.push((band_u8, channel_u32));
                         } else {
                             println!(
@@ -847,9 +849,11 @@ impl OxideRuntime {
 
         #[cfg(target_os = "linux")]
         if let Some(ref phy) = iface.phy {
-            if !phy.iftypes.clone().is_some_and(|types| {
-                types.contains(&Nl80211Iftype::IftypeMonitor)
-            }) {
+            if !phy
+                .iftypes
+                .clone()
+                .is_some_and(|types| types.contains(&Nl80211Iftype::IftypeMonitor))
+            {
                 println!(
                     "{}",
                     get_art("Monitor Mode not available for this interface.")
@@ -901,10 +905,7 @@ impl OxideRuntime {
         );
 
         #[cfg(target_os = "macos")]
-        println!(
-            "💲 Setting {} to Monitor mode.",
-            interface_name
-        );
+        println!("💲 Setting {} to Monitor mode.", interface_name);
 
         #[cfg(target_os = "linux")]
         {
@@ -939,7 +940,11 @@ impl OxideRuntime {
         netlink.set_interface_up(idx).ok();
         netlink.set_powersave_off(idx).ok();
 
-        if let Err(e) = set_interface_channel(idx, hop_channels[0].1 as u8, WiFiBand::from_u8(hop_channels[0].0)) {
+        if let Err(e) = set_interface_channel(
+            idx,
+            hop_channels[0].1 as u8,
+            WiFiBand::from_u8(hop_channels[0].0),
+        ) {
             eprintln!("{}", e);
         }
 
@@ -1150,10 +1155,7 @@ impl OxideRuntime {
     }
 
     pub fn get_adjacent_channel(&self) -> Option<u32> {
-        let band_channels = self
-            .if_hardware
-            .interface
-            .get_frequency_list_simple();
+        let band_channels = self.if_hardware.interface.get_frequency_list_simple();
         let current_channel = self.if_hardware.current_channel;
         let mut band: u8 = 0;
 
@@ -1266,7 +1268,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
 
     let current_channel = current_channel_opt.unwrap();
     oxide.if_hardware.current_channel = current_channel as u32;
-    oxide.if_hardware.current_band = frequency_to_band(current_freq.unwrap()).unwrap_or(WiFiBand::Band2_4GHz);
+    oxide.if_hardware.current_band =
+        frequency_to_band(current_freq.unwrap()).unwrap_or(WiFiBand::Band2_4GHz);
 
     let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
@@ -2633,8 +2636,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let iface = oxide.if_hardware.interface.clone();
     let idx = iface.index.unwrap();
-    let interface_name = String::from_utf8(iface.clone().name)
-        .expect("cannot get interface name from bytes.");
+    let interface_name =
+        String::from_utf8(iface.clone().name).expect("cannot get interface name from bytes.");
 
     let duration = Duration::from_secs(1);
     thread::sleep(duration);
@@ -2855,11 +2858,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if (band, channel) == first_channel {
                     hop_cycle += 1;
                 }
-                if let Err(e) = oxide
-                    .if_hardware
-                    .netlink
-                    .set_interface_channel(idx, channel as u8, WiFiBand::from_u8(band))
-                {
+                if let Err(e) = oxide.if_hardware.netlink.set_interface_channel(
+                    idx,
+                    channel as u8,
+                    WiFiBand::from_u8(band),
+                ) {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Channel Switch Error: {e:?}"),
@@ -3055,22 +3058,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 }
                                             }
                                         }
-                                        KeyCode::Esc => {
-                                            match oxide.ui_state.current_menu {
-                                                MenuType::AccessPoints => {
-                                                    oxide.ui_state.ap_state.select(None);
-                                                }
-                                                MenuType::Clients => {
-                                                    oxide.ui_state.sta_state.select(None);
-                                                }
-                                                MenuType::Handshakes => {
-                                                    oxide.ui_state.hs_state.select(None);
-                                                }
-                                                MenuType::Messages => {
-                                                    oxide.ui_state.messages_state.select(None);
-                                                }
+                                        KeyCode::Esc => match oxide.ui_state.current_menu {
+                                            MenuType::AccessPoints => {
+                                                oxide.ui_state.ap_state.select(None);
                                             }
-                                        }
+                                            MenuType::Clients => {
+                                                oxide.ui_state.sta_state.select(None);
+                                            }
+                                            MenuType::Handshakes => {
+                                                oxide.ui_state.hs_state.select(None);
+                                            }
+                                            MenuType::Messages => {
+                                                oxide.ui_state.messages_state.select(None);
+                                            }
+                                        },
                                         _ => {}
                                     }
                                 }
@@ -3088,12 +3089,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         EventType::Tick => {
                             // This part updates the UI using the terminal, only if it's initialized
-                            let _ = print_ui(
-                                term,
-                                &mut oxide,
-                                start_time,
-                                frame_rate,
-                            );
+                            let _ = print_ui(term, &mut oxide, start_time, frame_rate);
                         }
                     }
                 }
@@ -3102,38 +3098,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if oxide.ui_state.add_target {
             match oxide.ui_state.current_menu {
-                MenuType::AccessPoints => { // Only works on AP menu
+                MenuType::AccessPoints => {
+                    // Only works on AP menu
                     if let Some(ref ap) = oxide.ui_state.ap_selected_item {
                         if let Some(accesspoint) = oxide.access_points.get_device(&ap.mac_address) {
                             if accesspoint.is_target() {
-                                    oxide.status_log.add_message(
-                                        StatusMessage::new(
-                                            MessageType::Warning,
-                                            format!("Removed Target: {}", ap.mac_address)
-                                        ),
-                                    );
-                                    accesspoint.is_target = false;
-                                    oxide.target_data.targets.remove_mac(&accesspoint.mac_address);
-                                    if let Some(ssid) = &ap.ssid {
-                                        oxide
-                                            .target_data
-                                            .targets
-                                            .remove_ssid(&ssid.to_string());
+                                oxide.status_log.add_message(StatusMessage::new(
+                                    MessageType::Warning,
+                                    format!("Removed Target: {}", ap.mac_address),
+                                ));
+                                accesspoint.is_target = false;
+                                oxide
+                                    .target_data
+                                    .targets
+                                    .remove_mac(&accesspoint.mac_address);
+                                if let Some(ssid) = &ap.ssid {
+                                    oxide.target_data.targets.remove_ssid(&ssid.to_string());
+                                }
+                                if oxide.target_data.targets.empty() {
+                                    if cli.notransmit {
+                                        // this should go back to nuking everything unless notx is set to true.
+                                        oxide.config.notx = true;
                                     }
-                                    if oxide.target_data.targets.empty() {
-                                        if cli.notransmit { // this should go back to nuking everything unless notx is set to true.
-                                            oxide.config.notx = true;
-                                        }
-                                        // make sure autoexit is turned off if we disable the target
-                                        oxide.config.autoexit = false;
-                                    }
+                                    // make sure autoexit is turned off if we disable the target
+                                    oxide.config.autoexit = false;
+                                }
                             } else {
-                                oxide.status_log.add_message(
-                                    StatusMessage::new(
-                                        MessageType::Warning,
-                                        format!("Added Target: {}", ap.mac_address)
-                                    ),
-                                );
+                                oxide.status_log.add_message(StatusMessage::new(
+                                    MessageType::Warning,
+                                    format!("Added Target: {}", ap.mac_address),
+                                ));
                                 accesspoint.is_target = true;
                                 oxide
                                     .target_data
@@ -3142,12 +3136,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         addr: ap.mac_address,
                                     }));
                                 if let Some(ssid) = &ap.ssid {
-                                    oxide
-                                        .target_data
-                                        .targets
-                                        .add(Target::SSID(targets::TargetSSID {
+                                    oxide.target_data.targets.add(Target::SSID(
+                                        targets::TargetSSID {
                                             ssid: ssid.to_string(),
-                                        }));
+                                        },
+                                    ));
                                 }
                                 if oxide.config.notx {
                                     oxide.config.notx = false;

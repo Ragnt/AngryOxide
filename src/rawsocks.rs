@@ -190,19 +190,14 @@ mod linux_impl {
 mod macos_impl {
     use std::{
         ffi::CString,
-        io,
-        mem,
+        io, mem,
         os::fd::{AsRawFd, FromRawFd, OwnedFd},
         os::unix::io::RawFd,
         ptr,
     };
 
-    use libc::{
-        c_char, c_int, c_uint, c_void, ioctl, open, timeval, O_RDWR,
-    };
-    use nix::{
-        fcntl::{fcntl, FcntlArg, OFlag},
-    };
+    use libc::{c_char, c_int, c_uint, c_void, ioctl, open, timeval, O_RDWR};
+    use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
     // BPF ioctl constants for macOS
     const BIOCGBLEN: c_uint = 0x40044266;
@@ -217,16 +212,16 @@ mod macos_impl {
     const DLT_EN10MB: c_int = 1;
 
     // BPF alignment
-    const BPF_ALIGNMENT: usize = 4;  // sizeof(long) on 32-bit, adjust for 64-bit if needed
+    const BPF_ALIGNMENT: usize = 4; // sizeof(long) on 32-bit, adjust for 64-bit if needed
 
     // BPF header structure
     #[repr(C)]
     #[derive(Debug, Clone, Copy)]
     pub struct bpf_hdr {
-        pub bh_tstamp: timeval,     // timestamp
-        pub bh_caplen: u32,         // length of captured portion
-        pub bh_datalen: u32,        // original length of packet
-        pub bh_hdrlen: u16,         // length of bpf header (this struct plus alignment padding)
+        pub bh_tstamp: timeval, // timestamp
+        pub bh_caplen: u32,     // length of captured portion
+        pub bh_datalen: u32,    // original length of packet
+        pub bh_hdrlen: u16,     // length of bpf header (this struct plus alignment padding)
     }
 
     // Macro to align to word boundary
@@ -281,9 +276,18 @@ mod macos_impl {
     fn configure_bpf(fd: RawFd, ifname: &str, is_tx: bool) -> Result<(), String> {
         // Set buffer size
         let buf_len: c_uint = 32768; // 32KB buffer
-        let ret = unsafe { ioctl(fd, BIOCSBLEN as _, &buf_len as *const c_uint as *const c_void) };
+        let ret = unsafe {
+            ioctl(
+                fd,
+                BIOCSBLEN as _,
+                &buf_len as *const c_uint as *const c_void,
+            )
+        };
         if ret < 0 {
-            return Err(format!("Failed to set BPF buffer length: {}", io::Error::last_os_error()));
+            return Err(format!(
+                "Failed to set BPF buffer length: {}",
+                io::Error::last_os_error()
+            ));
         }
 
         // Bind to interface
@@ -299,28 +303,53 @@ mod macos_impl {
 
         let ret = unsafe { ioctl(fd, BIOCSETIF as _, &ifr as *const ifreq as *const c_void) };
         if ret < 0 {
-            return Err(format!("Failed to bind BPF to interface {}: {}", ifname, io::Error::last_os_error()));
+            return Err(format!(
+                "Failed to bind BPF to interface {}: {}",
+                ifname,
+                io::Error::last_os_error()
+            ));
         }
 
         // Set immediate mode (don't buffer packets)
         let immediate: c_uint = 1;
-        let ret = unsafe { ioctl(fd, BIOCIMMEDIATE as _, &immediate as *const c_uint as *const c_void) };
+        let ret = unsafe {
+            ioctl(
+                fd,
+                BIOCIMMEDIATE as _,
+                &immediate as *const c_uint as *const c_void,
+            )
+        };
         if ret < 0 {
-            return Err(format!("Failed to set immediate mode: {}", io::Error::last_os_error()));
+            return Err(format!(
+                "Failed to set immediate mode: {}",
+                io::Error::last_os_error()
+            ));
         }
 
         // Set promiscuous mode
         let ret = unsafe { ioctl(fd, BIOCPROMISC as _, ptr::null::<c_void>()) };
         if ret < 0 {
-            eprintln!("Warning: Failed to set promiscuous mode: {}", io::Error::last_os_error());
+            eprintln!(
+                "Warning: Failed to set promiscuous mode: {}",
+                io::Error::last_os_error()
+            );
         }
 
         if is_tx {
             // Set header complete mode for TX (we'll provide complete headers)
             let hdrcmplt: c_uint = 1;
-            let ret = unsafe { ioctl(fd, BIOCSHDRCMPLT as _, &hdrcmplt as *const c_uint as *const c_void) };
+            let ret = unsafe {
+                ioctl(
+                    fd,
+                    BIOCSHDRCMPLT as _,
+                    &hdrcmplt as *const c_uint as *const c_void,
+                )
+            };
             if ret < 0 {
-                return Err(format!("Failed to set header complete mode: {}", io::Error::last_os_error()));
+                return Err(format!(
+                    "Failed to set header complete mode: {}",
+                    io::Error::last_os_error()
+                ));
             }
         }
 
@@ -328,7 +357,9 @@ mod macos_impl {
         let dlt = DLT_IEEE802_11_RADIO;
         let ret = unsafe { ioctl(fd, BIOCSDLT as _, &dlt as *const c_int as *const c_void) };
         if ret < 0 {
-            eprintln!("Warning: Could not set DLT to IEEE802_11_RADIO, monitor mode may not be available");
+            eprintln!(
+                "Warning: Could not set DLT to IEEE802_11_RADIO, monitor mode may not be available"
+            );
             // Fall back to Ethernet
             let dlt = DLT_EN10MB;
             unsafe { ioctl(fd, BIOCSDLT as _, &dlt as *const c_int as *const c_void) };
@@ -374,17 +405,12 @@ mod macos_impl {
     /// Read a packet from BPF device
     /// Returns the packet data without the BPF header
     pub fn read_bpf_packet(fd: RawFd) -> Result<Vec<u8>, io::Error> {
-        const BUFFER_SIZE: usize = 32768;  // 32KB buffer
+        const BUFFER_SIZE: usize = 32768; // 32KB buffer
         let mut buffer = vec![0u8; BUFFER_SIZE];
 
         // Read from BPF device
-        let bytes_read = unsafe {
-            libc::read(
-                fd,
-                buffer.as_mut_ptr() as *mut c_void,
-                buffer.len(),
-            )
-        };
+        let bytes_read =
+            unsafe { libc::read(fd, buffer.as_mut_ptr() as *mut c_void, buffer.len()) };
 
         if bytes_read < 0 {
             return Err(io::Error::last_os_error());
@@ -404,9 +430,7 @@ mod macos_impl {
             }
 
             // Parse BPF header
-            let hdr_ptr = unsafe {
-                (buffer.as_ptr().add(offset) as *const bpf_hdr)
-            };
+            let hdr_ptr = unsafe { (buffer.as_ptr().add(offset) as *const bpf_hdr) };
             let hdr = unsafe { *hdr_ptr };
 
             // Get packet data (skip BPF header)
@@ -432,13 +456,8 @@ mod macos_impl {
     /// Write a packet to BPF device for injection
     pub fn write_bpf_packet(fd: RawFd, packet: &[u8]) -> Result<isize, io::Error> {
         // BPF expects just the packet data for injection (no BPF header needed)
-        let bytes_written = unsafe {
-            libc::write(
-                fd,
-                packet.as_ptr() as *const c_void,
-                packet.len(),
-            )
-        };
+        let bytes_written =
+            unsafe { libc::write(fd, packet.as_ptr() as *const c_void, packet.len()) };
 
         if bytes_written < 0 {
             Err(io::Error::last_os_error())
@@ -467,16 +486,20 @@ mod tests {
 
     #[test]
     fn test_bpf_header_size() {
-        use std::mem;
         use macos_impl::bpf_hdr;
+        use std::mem;
 
         // Verify the size of bpf_hdr structure
         let expected_size = mem::size_of::<libc::timeval>() + 4 + 4 + 2; // timeval + caplen + datalen + hdrlen
         let actual_size = mem::size_of::<bpf_hdr>();
 
         // The actual size might be larger due to padding
-        assert!(actual_size >= expected_size,
-                "BPF header size {} is less than expected {}", actual_size, expected_size);
+        assert!(
+            actual_size >= expected_size,
+            "BPF header size {} is less than expected {}",
+            actual_size,
+            expected_size
+        );
     }
 
     #[test]
@@ -492,13 +515,16 @@ mod tests {
 
     #[test]
     fn test_bpf_packet_parsing() {
-        use std::mem;
         use macos_impl::bpf_hdr;
+        use std::mem;
 
         // Create a mock BPF buffer with header and packet data
         let packet_data = b"test packet data";
         let hdr = bpf_hdr {
-            bh_tstamp: libc::timeval { tv_sec: 0, tv_usec: 0 },
+            bh_tstamp: libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            },
             bh_caplen: packet_data.len() as u32,
             bh_datalen: packet_data.len() as u32,
             bh_hdrlen: mem::size_of::<bpf_hdr>() as u16,
@@ -509,10 +535,7 @@ mod tests {
 
         // Add header bytes
         let hdr_bytes = unsafe {
-            std::slice::from_raw_parts(
-                &hdr as *const _ as *const u8,
-                mem::size_of::<bpf_hdr>()
-            )
+            std::slice::from_raw_parts(&hdr as *const _ as *const u8, mem::size_of::<bpf_hdr>())
         };
         buffer.extend_from_slice(hdr_bytes);
 
@@ -520,9 +543,7 @@ mod tests {
         buffer.extend_from_slice(packet_data);
 
         // Verify we can parse the header back
-        let parsed_hdr = unsafe {
-            *(buffer.as_ptr() as *const bpf_hdr)
-        };
+        let parsed_hdr = unsafe { *(buffer.as_ptr() as *const bpf_hdr) };
 
         assert_eq!(parsed_hdr.bh_caplen, packet_data.len() as u32);
         assert_eq!(parsed_hdr.bh_datalen, packet_data.len() as u32);

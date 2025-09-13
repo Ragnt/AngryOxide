@@ -9,7 +9,6 @@ use derive_into_owned::IntoOwned;
 use super::block_common::{Block, PcapNgBlock};
 use crate::PcapError;
 
-
 /// Unknown block
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct UnknownBlock<'a> {

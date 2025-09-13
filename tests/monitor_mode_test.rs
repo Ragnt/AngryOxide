@@ -3,7 +3,9 @@
 #[cfg(test)]
 mod monitor_mode_tests {
     #[cfg(target_os = "macos")]
-    use angry_oxide::airport::{check_monitor_capability, disassociate, set_channel, get_current_channel};
+    use angry_oxide::airport::{
+        check_monitor_capability, disassociate, get_current_channel, set_channel,
+    };
 
     #[cfg(target_os = "macos")]
     use angry_oxide::interface::{Nl80211Mock, Phy};
@@ -14,7 +16,10 @@ mod monitor_mode_tests {
     #[cfg(target_os = "macos")]
     fn test_airport_utility_exists() {
         let airport_path = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
-        assert!(std::path::Path::new(airport_path).exists(), "Airport utility not found");
+        assert!(
+            std::path::Path::new(airport_path).exists(),
+            "Airport utility not found"
+        );
     }
 
     #[test]
@@ -104,7 +109,7 @@ mod monitor_mode_tests {
     #[ignore] // Requires root
     #[cfg(target_os = "macos")]
     fn test_monitor_mode_enable_disable() {
-        use angry_oxide::airport::{enable_monitor_mode, disable_monitor_mode};
+        use angry_oxide::airport::{disable_monitor_mode, enable_monitor_mode};
 
         let interface = "en0";
 
@@ -163,8 +168,10 @@ mod monitor_mode_tests {
         println!("Available interfaces: {}", interfaces);
 
         // Check for common WiFi interface names
-        assert!(interfaces.contains("en0") || interfaces.contains("en1"),
-                "No WiFi interfaces found");
+        assert!(
+            interfaces.contains("en0") || interfaces.contains("en1"),
+            "No WiFi interfaces found"
+        );
     }
 
     #[test]

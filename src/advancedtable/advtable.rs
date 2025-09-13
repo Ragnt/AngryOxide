@@ -709,9 +709,9 @@ impl<'a> AdvTable<'a> {
             if is_selected {
                 self.selected_row_area = Some(Rect {
                     x: table_row_area.x,
-                    y: table_row_area.y+1,
+                    y: table_row_area.y + 1,
                     width: table_row_area.width,
-                    height: table_row_area.height-1,
+                    height: table_row_area.height - 1,
                 });
             }
         }

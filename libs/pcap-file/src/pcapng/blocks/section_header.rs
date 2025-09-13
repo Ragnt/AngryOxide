@@ -10,9 +10,8 @@ use derive_into_owned::IntoOwned;
 
 use super::block_common::{Block, PcapNgBlock};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
-use crate::errors::PcapError;
 use crate::Endianness;
-
+use crate::errors::PcapError;
 
 /// Section Header Block: it defines the most important characteristics of the capture file.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -102,7 +101,6 @@ impl Default for SectionHeaderBlock<'static> {
         }
     }
 }
-
 
 /// Section Header Block options
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]

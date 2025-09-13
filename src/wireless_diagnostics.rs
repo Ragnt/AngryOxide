@@ -1,16 +1,17 @@
 // Modern macOS WiFi monitor mode implementation
 // Uses tcpdump and Wireless Diagnostics as airport is deprecated
 
-use std::process::{Command, Child, Stdio};
-use std::io::{BufReader, BufRead};
-use std::sync::Arc;
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::fs;
-use std::path::Path;
 
-const AIRPORT_PATH: &str = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
+const AIRPORT_PATH: &str =
+    "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
 const TCPDUMP_PATH: &str = "/usr/sbin/tcpdump";
 const WIRELESS_DIAGNOSTICS_PATH: &str = "/System/Library/CoreServices/Applications/Wireless Diagnostics.app/Contents/MacOS/Wireless Diagnostics";
 
@@ -34,9 +35,7 @@ impl MonitorMode {
         // Check for airport first (older but still works on some systems)
         if Path::new(AIRPORT_PATH).exists() {
             // Try to run airport to see if it actually works
-            let result = Command::new(AIRPORT_PATH)
-                .arg("-I")
-                .output();
+            let result = Command::new(AIRPORT_PATH).arg("-I").output();
 
             if result.is_ok() {
                 return MonitorMethod::Airport;
@@ -135,7 +134,7 @@ impl MonitorMode {
                 self.running.store(true, Ordering::Relaxed);
                 Ok(())
             }
-            Err(e) => Err(format!("Failed to start Wireless Diagnostics: {}", e))
+            Err(e) => Err(format!("Failed to start Wireless Diagnostics: {}", e)),
         }
     }
 
@@ -145,8 +144,12 @@ impl MonitorMode {
 
         if let Some(mut child) = self.process.take() {
             // Try to terminate gracefully
-            child.kill().map_err(|e| format!("Failed to stop monitor mode: {}", e))?;
-            child.wait().map_err(|e| format!("Failed to wait for process: {}", e))?;
+            child
+                .kill()
+                .map_err(|e| format!("Failed to stop monitor mode: {}", e))?;
+            child
+                .wait()
+                .map_err(|e| format!("Failed to wait for process: {}", e))?;
         }
 
         // Re-enable normal mode on interface
@@ -159,9 +162,7 @@ impl MonitorMode {
     fn disassociate(&self) -> Result<(), String> {
         // Try airport first
         if Path::new(AIRPORT_PATH).exists() {
-            let result = Command::new(AIRPORT_PATH)
-                .arg("-z")
-                .output();
+            let result = Command::new(AIRPORT_PATH).arg("-z").output();
 
             if result.is_ok() {
                 return Ok(());
@@ -257,7 +258,8 @@ pub fn get_current_channel(interface: &str) -> Result<u8, String> {
                 let parts: Vec<&str> = line.split(':').collect();
                 if parts.len() >= 2 {
                     let channel_str = parts[1].trim().split(',').next().unwrap_or("0");
-                    return channel_str.parse::<u8>()
+                    return channel_str
+                        .parse::<u8>()
                         .map_err(|_| "Failed to parse channel".to_string());
                 }
             }
@@ -277,7 +279,8 @@ pub fn get_current_channel(interface: &str) -> Result<u8, String> {
             let parts: Vec<&str> = line.split(':').collect();
             if parts.len() >= 2 {
                 let channel_str = parts[1].trim().split(' ').next().unwrap_or("0");
-                return channel_str.parse::<u8>()
+                return channel_str
+                    .parse::<u8>()
                     .map_err(|_| "Failed to parse channel".to_string());
             }
         }
