@@ -468,6 +468,22 @@ impl OxideRuntime {
         let netlink = get_nl80211().expect("Cannot open Nl80211");
 
         // Need to ensure the channels available here are validated
+        #[cfg(target_os = "linux")]
+        let iface = {
+            let interfaces = netlink.get_interfaces();
+            if let Some(interface) = interfaces
+                .values()
+                .find(|iface| iface.name_as_string() == interface_name)
+                .cloned()
+            {
+                interface
+            } else {
+                println!("{}", get_art("Interface not found"));
+                exit(EXIT_FAILURE);
+            }
+        };
+
+        #[cfg(target_os = "macos")]
         let iface = if let Ok(interfaces) = netlink.get_interfaces() {
             if let Some(interface) = interfaces
                 .iter()
@@ -681,7 +697,7 @@ impl OxideRuntime {
 
         #[cfg(target_os = "macos")]
         let mut capable_channels: BTreeMap<u8, Vec<u32>> =
-            iface.get_frequency_list_simple().into_iter().collect();
+            iface.get_frequency_list_simple().unwrap_or_default().into_iter().collect();
 
         for (_key, value) in capable_channels.iter_mut() {
             value.sort(); // This sorts each vector in place
@@ -910,9 +926,9 @@ impl OxideRuntime {
         #[cfg(target_os = "linux")]
         {
             if iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive {
-                netlink.set_interface_monitor(true, idx).ok();
+                netlink.set_interface_monitor(true, idx as u32).ok();
             } else {
-                netlink.set_interface_monitor(false, idx).ok();
+                netlink.set_interface_monitor(false, idx as u32).ok();
             }
         }
 
@@ -937,7 +953,13 @@ impl OxideRuntime {
         // Set interface up
         thread::sleep(Duration::from_millis(500));
         println!("💲 Setting {} up.", interface_name);
+        #[cfg(target_os = "linux")]
+        netlink.set_interface_up(idx as u32).ok();
+        #[cfg(target_os = "macos")]
         netlink.set_interface_up(idx).ok();
+        #[cfg(target_os = "linux")]
+        netlink.set_powersave_off(idx as u32).ok();
+        #[cfg(target_os = "macos")]
         netlink.set_powersave_off(idx).ok();
 
         if let Err(e) = set_interface_channel(
@@ -1155,7 +1177,7 @@ impl OxideRuntime {
     }
 
     pub fn get_adjacent_channel(&self) -> Option<u32> {
-        let band_channels = self.if_hardware.interface.get_frequency_list_simple();
+        let band_channels = self.if_hardware.interface.get_frequency_list_simple()?;
         let current_channel = self.if_hardware.current_channel;
         let mut band: u8 = 0;
 
@@ -2851,11 +2873,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if (band, channel) == first_channel {
                     hop_cycle += 1;
                 }
-                if let Err(e) = oxide.if_hardware.netlink.set_interface_channel(
+                #[cfg(target_os = "linux")]
+                let result = oxide.if_hardware.netlink.set_interface_chan(
+                    idx as u32,
+                    channel as u32,
+                    band,
+                );
+
+                #[cfg(target_os = "macos")]
+                let result = oxide.if_hardware.netlink.set_interface_channel(
                     idx,
                     channel as u8,
                     WiFiBand::from_u8(band),
-                ) {
+                );
+
+                if let Err(e) = result {
                     oxide.status_log.add_message(StatusMessage::new(
                         MessageType::Error,
                         format!("Channel Switch Error: {e:?}"),
@@ -3273,6 +3305,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(code) => {
                 if code.kind().to_string() == "network down" {
+                    #[cfg(target_os = "linux")]
+                    oxide
+                        .if_hardware
+                        .netlink
+                        .set_interface_up(oxide.if_hardware.interface.index.unwrap())
+                        .ok();
+                    #[cfg(target_os = "macos")]
                     oxide
                         .if_hardware
                         .netlink
@@ -3410,7 +3449,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("💲 Setting {} down.", interface_name);
-    match oxide.if_hardware.netlink.set_interface_down(idx) {
+    #[cfg(target_os = "linux")]
+    let down_result = oxide.if_hardware.netlink.set_interface_down(idx as u32);
+    #[cfg(target_os = "macos")]
+    let down_result = oxide.if_hardware.netlink.set_interface_down(idx);
+
+    match down_result {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }
@@ -3419,6 +3463,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "💲 Restoring {} MAC back to {}.",
         interface_name, oxide.if_hardware.original_address
     );
+    #[cfg(target_os = "linux")]
+    oxide
+        .if_hardware
+        .netlink
+        .set_interface_mac(idx as u32, &oxide.if_hardware.original_address.0)
+        .ok();
+    #[cfg(target_os = "macos")]
     oxide
         .if_hardware
         .netlink
@@ -3426,7 +3477,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok();
 
     println!("💲 Setting {} to station mode.", interface_name);
-    match oxide.if_hardware.netlink.set_interface_station(idx) {
+    #[cfg(target_os = "linux")]
+    let station_result = oxide.if_hardware.netlink.set_interface_station(idx as u32);
+    #[cfg(target_os = "macos")]
+    let station_result = oxide.if_hardware.netlink.set_interface_station(idx);
+
+    match station_result {
         Ok(_) => {}
         Err(e) => println!("Error: {e:?}"),
     }

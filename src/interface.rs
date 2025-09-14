@@ -147,7 +147,7 @@ impl Interface {
         self.driver.clone().unwrap_or_else(|| "unknown".to_string())
     }
 
-    pub fn get_frequency_list_simple(&self) -> HashMap<u8, Vec<u32>> {
+    pub fn get_frequency_list_simple(&self) -> Option<HashMap<u8, Vec<u32>>> {
         use std::collections::HashMap;
 
         let mut band_map = HashMap::new();
@@ -169,7 +169,7 @@ impl Interface {
             ],
         );
 
-        band_map
+        Some(band_map)
     }
 
     pub fn pretty_print(&self) -> String {

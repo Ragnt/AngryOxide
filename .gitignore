@@ -5,5 +5,5 @@
 *.kismet
 *.hc22000
 .claude/*
-
+target/*
 
