@@ -97,18 +97,25 @@ impl From<Band> for WiFiBand {
 
 // For macOS, we need to define compatible types
 #[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Default)]
+pub struct Frequency {
+    pub frequency: Option<u32>,
+    pub width: Option<u32>,
+    pub channel: Option<u32>,
+    pub pwr: Option<u32>,
+}
+
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone)]
 pub struct Interface {
-    pub index: Option<i32>,
+    pub index: Option<u32>,
     pub ssid: Option<Vec<u8>>,
-    pub name: Vec<u8>,
-    pub mac: [u8; 6],
-    pub frequency: Option<u32>,
-    pub channel: Option<u8>,
-    pub phy: i32,
-    pub device: Option<u32>,
-    pub wdev: Option<u64>,
-    pub mode: Option<u32>,
+    pub name: Option<Vec<u8>>,
+    pub mac: Option<Vec<u8>>,
+    pub frequency: Frequency,
+    pub phy: Option<u32>,
+    pub phy_name: u32,
+    pub device: Option<u64>,
     pub current_iftype: Option<Nl80211Iftype>,
     pub driver: Option<String>,
 }
@@ -116,7 +123,10 @@ pub struct Interface {
 #[cfg(target_os = "macos")]
 impl Interface {
     pub fn name_as_string(&self) -> String {
-        String::from_utf8_lossy(&self.name).to_string()
+        self.name
+            .as_ref()
+            .map(|n| String::from_utf8_lossy(n).to_string())
+            .unwrap_or_else(|| "unknown".to_string())
     }
 
     pub fn driver_as_string(&self) -> String {
@@ -149,17 +159,23 @@ impl Interface {
     }
 
     pub fn pretty_print(&self) -> String {
+        let mac_str = self.mac.as_ref()
+            .map(|mac| {
+                if mac.len() >= 6 {
+                    format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
+                } else {
+                    "00:00:00:00:00:00".to_string()
+                }
+            })
+            .unwrap_or_else(|| "00:00:00:00:00:00".to_string());
+
         format!(
-            "Interface: {} (index: {:?}, phy: {}, MAC: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x})",
+            "Interface: {} (index: {:?}, phy: {:?}, MAC: {})",
             self.name_as_string(),
             self.index,
             self.phy,
-            self.mac[0],
-            self.mac[1],
-            self.mac[2],
-            self.mac[3],
-            self.mac[4],
-            self.mac[5]
+            mac_str
         )
     }
 }
@@ -282,16 +298,14 @@ impl Nl80211Mock {
             // Only include potential WiFi interfaces (en0, en1, etc.)
             if iface_name.starts_with("en") {
                 interfaces.push(Interface {
-                    index: Some(idx as i32),
+                    index: Some(idx as u32),
                     ssid: None,
-                    name: iface_name.as_bytes().to_vec(),
-                    mac: [0, 0, 0, 0, 0, 0], // Would need ioctl to get real MAC
-                    frequency: None,
-                    channel: None,
-                    phy: idx as i32,
-                    device: Some(idx as u32),
-                    wdev: Some(idx as u64),
-                    mode: None,
+                    name: Some(iface_name.as_bytes().to_vec()),
+                    mac: Some(vec![0, 0, 0, 0, 0, 0]), // Would need ioctl to get real MAC
+                    frequency: Frequency::default(),
+                    phy: Some(idx as u32),
+                    phy_name: idx as u32,
+                    device: Some(idx as u64),
                     current_iftype: Some(Nl80211Iftype::IftypeStation),
                     driver: Some("unknown".to_string()),
                 });
@@ -356,7 +370,7 @@ impl Nl80211Mock {
         let interfaces = self.get_interfaces()?;
 
         for iface in interfaces {
-            if iface.index == Some(ifindex) {
+            if iface.index == Some(ifindex as u32) {
                 return Ok(iface.name_as_string());
             }
         }

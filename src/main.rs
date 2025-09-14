@@ -484,9 +484,9 @@ impl OxideRuntime {
             exit(EXIT_FAILURE);
         };
 
-        let original_address = MacAddress::from_vec(iface.clone().mac.to_vec()).unwrap();
+        let original_address = MacAddress::from_vec(iface.clone().mac.unwrap_or_default()).unwrap();
 
-        let idx = iface.index.unwrap();
+        let idx = iface.index.unwrap() as i32;
         let interface_uuid = Uuid::new_v4();
         println!("💲 Interface Summary:");
         println!("{}", iface.pretty_print());
@@ -1255,14 +1255,14 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let packet_id = oxide.counters.packet_id();
 
     // Get Channel Values
-    let current_freq = oxide.if_hardware.interface.frequency;
-    let current_channel_opt = oxide.if_hardware.interface.channel;
+    let current_freq = oxide.if_hardware.interface.frequency.frequency;
+    let current_channel_opt = oxide.if_hardware.interface.frequency.channel;
 
     if current_channel_opt.is_none() {
         panic!("Channel is None. Current Frequency: {current_freq:?}");
     }
 
-    let current_channel = current_channel_opt.unwrap();
+    let current_channel = current_channel_opt.unwrap() as u8;
     oxide.if_hardware.current_channel = current_channel as u32;
     oxide.if_hardware.current_band =
         frequency_to_band(current_freq.unwrap()).unwrap_or(WiFiBand::Band2_4GHz);
@@ -2628,9 +2628,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     let iface = oxide.if_hardware.interface.clone();
-    let idx = iface.index.unwrap();
+    let idx = iface.index.unwrap() as i32;
     let interface_name =
-        String::from_utf8(iface.clone().name).expect("cannot get interface name from bytes.");
+        String::from_utf8(iface.clone().name.unwrap_or_default()).expect("cannot get interface name from bytes.");
 
     let duration = Duration::from_secs(1);
     thread::sleep(duration);
@@ -2729,7 +2729,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::SeqCst) {
         // Update our interface
         oxide.if_hardware.interface =
-            match get_interface_info(oxide.if_hardware.interface.index.unwrap()) {
+            match get_interface_info(oxide.if_hardware.interface.index.unwrap() as i32) {
                 Ok(interface) => interface,
                 Err(e) => {
                     // Uh oh... no interfacee
@@ -3276,7 +3276,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     oxide
                         .if_hardware
                         .netlink
-                        .set_interface_up(oxide.if_hardware.interface.index.unwrap())
+                        .set_interface_up(oxide.if_hardware.interface.index.unwrap() as i32)
                         .ok();
                 } else {
                     // This will result in error message.

@@ -130,23 +130,14 @@ impl PcapWriter {
 
         let mut pcap_writer = PcapNgWriter::with_section_header(file, shb).unwrap();
 
-        let mac = interface.mac;
+        let mac = interface.mac.clone().unwrap_or_else(|| vec![0; 6]);
         let interface = InterfaceDescriptionBlock {
             linktype: DataLink::IEEE802_11_RADIOTAP,
             snaplen: 0x0000,
             options: vec![
                 InterfaceDescriptionOption::IfName(Cow::from(interface.name_as_string())),
                 InterfaceDescriptionOption::IfHardware(Cow::from(interface.driver_as_string())),
-                InterfaceDescriptionOption::IfMacAddr(Cow::from({
-                    #[cfg(target_os = "linux")]
-                    {
-                        mac.unwrap_or_default()
-                    }
-                    #[cfg(target_os = "macos")]
-                    {
-                        mac.to_vec()
-                    }
-                })),
+                InterfaceDescriptionOption::IfMacAddr(Cow::from(mac)),
             ],
         };
 

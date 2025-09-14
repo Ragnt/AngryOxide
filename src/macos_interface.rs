@@ -6,7 +6,7 @@ use std::ffi::CString;
 use std::mem;
 use std::process::Command;
 
-use crate::interface::{Interface, Nl80211Iftype};
+use crate::interface::{Frequency, Interface, Nl80211Iftype};
 
 // ioctl constants for macOS
 const SIOCGIFHWADDR: libc::c_ulong = 0xc0206935; // Get hardware address
@@ -95,16 +95,19 @@ pub fn get_interface_info_macos(ifindex: i32) -> Result<Interface, String> {
         libc::close(sock);
 
         Ok(Interface {
-            index: Some(ifindex),
+            index: Some(ifindex as u32),
             ssid,
-            name: ifname.as_bytes().to_vec(),
-            mac,
-            frequency,
-            channel,
-            phy: ifindex, // Use index as phy for simplicity
-            device: Some(ifindex as u32),
-            wdev: Some(ifindex as u64),
-            mode,
+            name: Some(ifname.as_bytes().to_vec()),
+            mac: Some(mac.to_vec()),
+            frequency: Frequency {
+                frequency,
+                channel: channel.map(|c| c as u32),
+                width: None,
+                pwr: None,
+            },
+            phy: Some(ifindex as u32), // Use index as phy for simplicity
+            phy_name: ifindex as u32,
+            device: Some(ifindex as u64),
             current_iftype,
             driver,
         })
