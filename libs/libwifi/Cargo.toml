@@ -1,0 +1,29 @@
+[package]
+name = "libwifi"
+description = "A library for parsing IEEE 802.11 frames and handling wifi interfaces."
+version = "0.3.1"
+keywords = ["wifi", "802_11", "parser", "frame"]
+readme = "README.md"
+authors = ["Arne Beer <contact@arne.beer>"]
+homepage = "https://github.com/nukesor/libwifi"
+repository = "https://github.com/nukesor/libwifi"
+documentation = "https://docs.rs/libwifi/"
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rand = "0.8"
+byteorder = "1.5.0"
+log = "0.4"
+nom = "7"
+thiserror = "1.0"
+strum_macros = "0.25"
+enum_dispatch = "0.3"
+libwifi_macros = { version = "0.0.2", path = "../libwifi_macros" }
+crc = "3.0.1"
+
+[dev-dependencies]
+criterion = "0.5"
+doc-comment = "0.3"
+rand = "0.8"
