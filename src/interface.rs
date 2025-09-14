@@ -1,5 +1,6 @@
 // Platform abstraction layer for wireless interface operations
 
+#[cfg(target_os = "macos")]
 use std::collections::HashMap;
 
 #[cfg(target_os = "linux")]
@@ -552,7 +553,7 @@ pub enum Nl80211Iftype {
 // Channel/frequency conversion functions
 #[cfg(target_os = "linux")]
 pub fn frequency_to_band(freq: u32) -> Option<Band> {
-    freq_to_band(freq).map(|band| Band::from(band))
+    Some(Band::from(freq_to_band(freq)))
 }
 
 #[cfg(target_os = "macos")]
