@@ -1,9 +1,48 @@
-use copypasta_ext::osc52::Osc52ClipboardContext;
-use copypasta_ext::prelude::*;
-use copypasta_ext::x11_bin::X11BinClipboardContext;
 use derive_setters::Setters;
 use libwifi::frame::components::MacAddress;
 use std::{io::Result, time::Instant};
+
+// Helper function to set clipboard content for the current platform
+fn set_clipboard_content(content: String) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use copypasta_ext::osc52::Osc52ClipboardContext;
+        use copypasta_ext::prelude::*;
+        use copypasta_ext::x11_bin::X11BinClipboardContext;
+
+        let mut ctx = Osc52ClipboardContext::new_with(
+            X11BinClipboardContext::new()
+                .map_err(|e| anyhow::anyhow!("Failed to create X11 clipboard context: {:?}", e))?,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create OSC52 clipboard context: {:?}", e))?;
+        ctx.set_contents(content)
+            .map_err(|e| anyhow::anyhow!("Failed to set clipboard contents: {:?}", e))?;
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Use copypasta for macOS as well, or use pbcopy command
+        use std::process::Command;
+        Command::new("pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                child
+                    .stdin
+                    .as_mut()
+                    .unwrap()
+                    .write_all(content.as_bytes())?;
+                child.wait().map(|_| ())
+            })
+            .map_err(|e| anyhow::anyhow!("Failed to set clipboard: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        Err(anyhow::anyhow!("Unsupported platform for clipboard"))
+    }
+}
 
 use crate::{
     advancedtable::{self, advtable::AdvTable},
@@ -496,7 +535,7 @@ fn create_keybind_popup(frame: &mut Frame<'_>, area: Rect) {
 }
 
 fn repeat_char(c: char, count: usize) -> String {
-    std::iter::repeat(c).take(count).collect()
+    std::iter::repeat_n(c, count).collect()
 }
 
 fn repeat_dot(count: usize) -> String {
@@ -558,12 +597,10 @@ fn create_status_bar(
 
     let flow = match oxide.ui_state.paused {
         true => Span::from("Paused").fg(Color::Red),
-        false => {
-            match oxide.config.autoexit {
-                true => Span::from("Running (Autoexit)").fg(Color::Yellow),
-                false => Span::from("Running"),
-            }
-        }
+        false => match oxide.config.autoexit {
+            true => Span::from("Running (Autoexit)").fg(Color::Yellow),
+            false => Span::from("Running"),
+        },
     };
 
     let dataflow = Line::from(vec![
@@ -579,32 +616,35 @@ fn create_status_bar(
     );
 
     let interface_name = String::from_utf8(
-        oxide
-            .if_hardware
-            .interface
-            .name
-            .clone()
-            .expect("Cannot get interface name"),
+        oxide.if_hardware.interface.name.clone().unwrap_or_default()
     );
 
-    let mac_addr = MacAddress::from_vec(
+    let mac_addr = MacAddress(
         oxide
             .if_hardware
             .interface
             .mac
             .clone()
-            .expect("Cannot get mac address"),
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or([0u8; 6])
     );
 
     // Top Left
     let interface = format!(
         "Interface: {}",
-        interface_name.expect("Cannot get interface name")
+        interface_name.unwrap_or_else(|_| "unknown".to_string())
     );
-    let mac: String = format!("MacAddr: {}", mac_addr.expect("Cannot get mac address"));
+    let mac: String = format!("MacAddr: {}", mac_addr);
     let channel = format!(
         "Frequency: {} {}",
-        oxide.if_hardware.interface.frequency.clone().print(),
+        oxide
+            .if_hardware
+            .interface
+            .frequency
+            .frequency
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "N/A".to_string()),
         if oxide.ui_state.geofenced {
             "(GeoFenced)"
         } else if oxide.config.autohunt {
@@ -651,17 +691,13 @@ fn create_ap_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     if oxide.ui_state.copy_short {
         if let Some(ap) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(ap.mac_address.to_string()).unwrap();
+            set_clipboard_content(ap.mac_address.to_string().to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(ap) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(ap.to_json_str()).unwrap();
+            set_clipboard_content(ap.to_json_str().to_string()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
@@ -937,17 +973,13 @@ fn create_sta_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) 
 
     if oxide.ui_state.copy_short {
         if let Some(station) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(station.mac_address.to_string()).unwrap();
+            set_clipboard_content(station.mac_address.to_string().to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(station) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(station.to_json_str()).unwrap();
+            set_clipboard_content(station.to_json_str().to_string()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }
@@ -1037,17 +1069,13 @@ fn create_hs_page(oxide: &mut OxideRuntime, frame: &mut Frame<'_>, area: Rect) {
 
     if oxide.ui_state.copy_short {
         if let Some(hs) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(hs.json_summary()).unwrap();
+            set_clipboard_content(hs.json_summary().to_string()).unwrap();
         }
         oxide.ui_state.copy_short = false;
     }
     if oxide.ui_state.copy_long {
         if let Some(hs) = selected_object {
-            let mut ctx =
-                Osc52ClipboardContext::new_with(X11BinClipboardContext::new().unwrap()).unwrap();
-            ctx.set_contents(hs.json_detail()).unwrap();
+            set_clipboard_content(hs.json_detail().to_string()).unwrap();
         }
         oxide.ui_state.copy_long = false;
     }

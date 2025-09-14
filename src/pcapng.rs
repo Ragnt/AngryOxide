@@ -1,7 +1,7 @@
+use crate::interface::Interface;
 use byteorder::LE;
 use crc32fast::Hasher;
 use libwifi::frame::components::MacAddress;
-use nl80211_ng::Interface;
 use pcap_file::pcapng::blocks::enhanced_packet::{EnhancedPacketBlock, EnhancedPacketOption};
 use pcap_file::pcapng::blocks::interface_description::{
     InterfaceDescriptionBlock, InterfaceDescriptionOption,
@@ -43,6 +43,7 @@ pub struct FrameData {
 }
 
 impl FrameData {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         timestamp: SystemTime,
         packetid: u64,
@@ -129,7 +130,7 @@ impl PcapWriter {
 
         let mut pcap_writer = PcapNgWriter::with_section_header(file, shb).unwrap();
 
-        let mac = interface.mac.clone().unwrap();
+        let mac = interface.mac.clone().unwrap_or_else(|| vec![0; 6]);
         let interface = InterfaceDescriptionBlock {
             linktype: DataLink::IEEE802_11_RADIOTAP,
             snaplen: 0x0000,

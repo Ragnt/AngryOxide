@@ -1,0 +1,154 @@
+name: macOS Build and Test
+
+on:
+  push:
+    branches: [ main, master, feature/macos-support ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test-macos:
+    name: Test on macOS
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-13, macos-14]  # Intel and Apple Silicon
+        rust: [stable, nightly]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all
+        if: matrix.rust == 'stable'
+
+      - name: Run clippy
+        run: cargo clippy --all-features -- -D warnings
+        if: matrix.rust == 'stable'
+
+      - name: Build
+        run: cargo build --verbose --release
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Test platform detection
+        run: cargo test --test platform_test -- --nocapture
+
+      - name: Test parity features
+        run: cargo test --test parity_test -- --nocapture
+
+      - name: Check BPF support
+        run: |
+          echo "Checking BPF device availability..."
+          ls -la /dev/bpf* || echo "BPF devices may require root"
+
+      - name: Check Airport utility
+        run: |
+          echo "Checking Airport utility..."
+          if [ -f "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport" ]; then
+            echo "✅ Airport utility found"
+          else
+            echo "⚠️ Airport utility not found (expected on newer macOS)"
+          fi
+
+      - name: Check tcpdump availability
+        run: |
+          echo "Checking tcpdump..."
+          which tcpdump && echo "✅ tcpdump found" || echo "❌ tcpdump not found"
+
+      - name: Check wdutil availability
+        run: |
+          echo "Checking wdutil..."
+          which wdutil && echo "✅ wdutil found" || echo "❌ wdutil not found"
+
+  build-universal:
+    name: Build Universal Binary
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Build for Intel
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Build for Apple Silicon
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Create Universal Binary
+        run: |
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            target/x86_64-apple-darwin/release/angryoxide \
+            target/aarch64-apple-darwin/release/angryoxide \
+            -output target/universal-apple-darwin/release/angryoxide
+
+          # Verify universal binary
+          file target/universal-apple-darwin/release/angryoxide
+          lipo -info target/universal-apple-darwin/release/angryoxide
+
+      - name: Package Universal Binary
+        run: |
+          cd target/universal-apple-darwin/release
+          tar czf ../../../angryoxide-macos-universal.tar.gz angryoxide
+          cd -
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: angryoxide-macos-universal
+          path: angryoxide-macos-universal.tar.gz
+
+  integration-test:
+    name: Integration Tests (macOS)
+    runs-on: macos-latest
+    needs: test-macos
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Test help output
+        run: ./target/release/angryoxide --help
+
+      - name: Test version output
+        run: ./target/release/angryoxide --version
+
+      - name: Test interface listing (no sudo)
+        run: |
+          # This should work without sudo but won't show all details
+          ./target/release/angryoxide --list-interfaces || true
+
+      - name: Check compilation warnings
+        run: |
+          cargo build --release 2>&1 | tee build.log
+          if grep -q "not yet implemented" build.log; then
+            echo "❌ Found 'not yet implemented' in build output"
+            exit 1
+          else
+            echo "✅ No stub implementations found"
+          fi

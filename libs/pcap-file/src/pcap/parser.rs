@@ -1,10 +1,9 @@
 use byteorder_slice::{BigEndian, LittleEndian};
 
 use super::RawPcapPacket;
+use crate::Endianness;
 use crate::errors::*;
 use crate::pcap::{PcapHeader, PcapPacket};
-use crate::Endianness;
-
 
 /// Parses a Pcap from a slice of bytes.
 ///

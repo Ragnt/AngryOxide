@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![allow(unexpected_cfgs)]
 use std::iter;
 
 use itertools::Itertools;
@@ -370,7 +371,6 @@ pub enum HighlightSpacing {
 /// frame.render_stateful_widget(table, area, &mut table_state);
 /// # }
 /// ```
-
 impl<'a> AdvTable<'a> {
     /// Creates a new [`Table`] widget with the given rows.
     ///
@@ -661,6 +661,7 @@ impl<'a> AdvTable<'a> {
         reason = "The name for this feature is not final and may change in the future",
         issue = "https://github.com/ratatui-org/ratatui/issues/536"
     )]
+    #[allow(unexpected_cfgs)]
     pub const fn segment_size(mut self, segment_size: SegmentSize) -> Self {
         self.segment_size = segment_size;
         self
@@ -705,13 +706,13 @@ impl<'a> AdvTable<'a> {
                 width: table_area.width,
                 height: table_row.height,
             };
-            let is_selected = state.selected_mut().map_or(false, |s| s == i);
+            let is_selected = *state.selected_mut() == Some(i);
             if is_selected {
                 self.selected_row_area = Some(Rect {
                     x: table_row_area.x,
-                    y: table_row_area.y+1,
+                    y: table_row_area.y + 1,
                     width: table_row_area.width,
-                    height: table_row_area.height-1,
+                    height: table_row_area.height - 1,
                 });
             }
         }
@@ -1031,7 +1032,7 @@ impl<'a> StatefulWidget for AdvTable<'a> {
                 height: table_row.height,
             };
             buf.set_style(table_row_area, table_row.style);
-            let is_selected = state.selected_mut().map_or(false, |s| s == i);
+            let is_selected = *state.selected_mut() == Some(i);
             if selection_width > 0 && is_selected {
                 // this should in normal cases be safe, because "get_columns_widths" allocates
                 // "highlight_symbol.width()" space but "get_columns_widths"

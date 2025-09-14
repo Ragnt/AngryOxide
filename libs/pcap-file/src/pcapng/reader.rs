@@ -1,13 +1,12 @@
 use std::io::Read;
 
+use super::PcapNgParser;
 use super::blocks::block_common::{Block, RawBlock};
 use super::blocks::enhanced_packet::EnhancedPacketBlock;
 use super::blocks::interface_description::InterfaceDescriptionBlock;
 use super::blocks::section_header::SectionHeaderBlock;
-use super::PcapNgParser;
 use crate::errors::PcapError;
 use crate::read_buffer::ReadBuffer;
-
 
 /// Reads a PcapNg from a reader.
 ///
@@ -44,13 +43,12 @@ impl<R: Read> PcapNgReader<R> {
     }
 
     /// Returns the next [`Block`].
-    pub fn next_block(&mut self) -> Option<Result<Block, PcapError>> {
+    pub fn next_block(&mut self) -> Option<Result<Block<'_>, PcapError>> {
         match self.reader.has_data_left() {
             Ok(has_data) => {
                 if has_data {
                     Some(self.reader.parse_with(|src| self.parser.next_block(src)))
-                }
-                else {
+                } else {
                     None
                 }
             },
@@ -59,13 +57,12 @@ impl<R: Read> PcapNgReader<R> {
     }
 
     /// Returns the next [`RawBlock`].
-    pub fn next_raw_block(&mut self) -> Option<Result<RawBlock, PcapError>> {
+    pub fn next_raw_block(&mut self) -> Option<Result<RawBlock<'_>, PcapError>> {
         match self.reader.has_data_left() {
             Ok(has_data) => {
                 if has_data {
                     Some(self.reader.parse_with(|src| self.parser.next_raw_block(src)))
-                }
-                else {
+                } else {
                     None
                 }
             },
@@ -84,7 +81,7 @@ impl<R: Read> PcapNgReader<R> {
     }
 
     /// Returns the [`InterfaceDescriptionBlock`] corresponding to the given packet
-    pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock> {
+    pub fn packet_interface(&self, packet: &EnhancedPacketBlock) -> Option<&InterfaceDescriptionBlock<'_>> {
         self.interfaces().get(packet.interface_id as usize)
     }
 

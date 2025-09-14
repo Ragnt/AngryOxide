@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use crate::interface::Band as WiFiBand;
 use libwifi::{
     frame::{
         components::{MacAddress, RsnAkmSuite, RsnCipherSuite, RsnInformation},
@@ -12,7 +13,6 @@ use libwifi::{
     },
     Addresses,
 };
-use nl80211_ng::channels::WiFiBand;
 
 use crate::{
     status::{MessageType, StatusMessage},
@@ -173,8 +173,8 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
 
         if ap_data
             .channel
-            .clone()
-            .is_some_and(|f| f.0 == WiFiBand::Band6GHz)
+            .as_ref()
+            .is_some_and(|f| f.0 == WiFiBand::BAND_6_GHZ)
         {
             let frx = build_disassocation_from_ap(
                 ap_mac,

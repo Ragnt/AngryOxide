@@ -9,7 +9,6 @@ use derive_into_owned::IntoOwned;
 use super::block_common::{Block, PcapNgBlock};
 use crate::errors::PcapError;
 
-
 /// The Systemd Journal Export Block is a lightweight containter for systemd Journal Export Format entry data.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct SystemdJournalExportBlock<'a> {

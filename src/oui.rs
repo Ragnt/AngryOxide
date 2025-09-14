@@ -1,4 +1,3 @@
-
 use libwifi::frame::components::MacAddress;
 
 // Define bitmasks for different OUI lengths
@@ -66,7 +65,7 @@ impl OuiDatabase {
             let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() >= 3 {
                 let oui_str = parts[0].split('/').next().unwrap_or("").trim();
-                let oui_len_str = parts[0].split('/').last().unwrap_or("").trim();
+                let oui_len_str = parts[0].split('/').next_back().unwrap_or("").trim();
                 let oui = u64::from_str_radix(&oui_str.replace(':', ""), 16).unwrap_or(0);
                 let oui_length: u32 = oui_len_str.parse().unwrap_or(24);
                 let oui = match oui_length {

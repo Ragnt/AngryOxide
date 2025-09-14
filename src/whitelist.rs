@@ -64,15 +64,15 @@ impl WhiteMAC {
 }
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum White {
-    MAC(WhiteMAC),
-    SSID(WhiteSSID),
+    Mac(WhiteMAC),
+    Ssid(WhiteSSID),
 }
 
 impl White {
     pub fn get_string(&self) -> String {
         match self {
-            White::MAC(tgt) => tgt.addr.to_string(),
-            White::SSID(tgt) => tgt.ssid.clone(),
+            White::Mac(tgt) => tgt.addr.to_string(),
+            White::Ssid(tgt) => tgt.ssid.clone(),
         }
     }
 }
@@ -108,29 +108,29 @@ impl WhiteList {
 
         for device in &self.devices {
             match device {
-                White::MAC(tgt) => {
+                White::Mac(tgt) => {
                     if tgt.whitelist_match(ap) {
                         if let Some(ssid) = &ap.ssid {
                             if !self.is_whitelisted_ssid(ssid) {
-                                self.add(White::SSID(WhiteSSID {
+                                self.add(White::Ssid(WhiteSSID {
                                     ssid: ssid.to_string(),
                                 }));
                             }
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         return true;
                     }
                 }
-                White::SSID(tgt) => {
+                White::Ssid(tgt) => {
                     if tgt.whitelist_match(ap) {
                         if !self.is_whitelisted_mac(&ap.mac_address) {
-                            self.add(White::MAC(WhiteMAC {
+                            self.add(White::Mac(WhiteMAC {
                                 addr: ap.mac_address,
                             }))
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         return true;
@@ -149,29 +149,29 @@ impl WhiteList {
 
         for target in self.devices.clone() {
             match target {
-                White::MAC(ref tgt) => {
+                White::Mac(ref tgt) => {
                     if tgt.whitelist_match(ap) {
                         if let Some(ssid) = &ap.ssid {
                             if !self.is_whitelisted_ssid(ssid) {
-                                self.add(White::SSID(WhiteSSID {
+                                self.add(White::Ssid(WhiteSSID {
                                     ssid: ssid.to_string(),
                                 }));
                             }
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         matches.push(target);
                     }
                 }
-                White::SSID(ref tgt) => {
+                White::Ssid(ref tgt) => {
                     if tgt.whitelist_match(ap) {
                         if !self.is_whitelisted_mac(&ap.mac_address) {
-                            self.add(White::MAC(WhiteMAC {
+                            self.add(White::Mac(WhiteMAC {
                                 addr: ap.mac_address,
                             }))
                         }
-                        if ! ap.is_target() {
+                        if !ap.is_target() {
                             ap.is_whitelisted = true;
                         }
                         matches.push(target);
@@ -189,12 +189,12 @@ impl WhiteList {
 
         for target in &self.devices {
             match target {
-                White::MAC(tgt) => {
+                White::Mac(tgt) => {
                     if tgt.addr == *mac {
                         return true;
                     }
                 }
-                White::SSID(_) => {} // do nothing
+                White::Ssid(_) => {} // do nothing
             }
         }
         false
@@ -207,8 +207,8 @@ impl WhiteList {
 
         for target in &self.devices {
             match target {
-                White::MAC(_) => {} // do nothing, we don't have anything to compare to here.
-                White::SSID(tgt) => {
+                White::Mac(_) => {} // do nothing, we don't have anything to compare to here.
+                White::Ssid(tgt) => {
                     if tgt.match_ssid(ssid.to_owned()) {
                         return true;
                     }
@@ -221,8 +221,8 @@ impl WhiteList {
     pub fn has_ssid(&self) -> bool {
         for device in &self.devices {
             match device {
-                White::MAC(_) => continue,
-                White::SSID(_) => return true,
+                White::Mac(_) => continue,
+                White::Ssid(_) => return true,
             }
         }
         false
@@ -237,7 +237,7 @@ impl WhiteList {
         }
         loop {
             let tgt = self.devices.choose(&mut rand::thread_rng()).unwrap();
-            if let White::SSID(tgt) = tgt {
+            if let White::Ssid(tgt) = tgt {
                 return Some(tgt.ssid.clone());
             }
         }
@@ -247,8 +247,8 @@ impl WhiteList {
         self.devices
             .iter()
             .map(|target| match target {
-                White::MAC(mac_target) => format!("MAC: {}", mac_target.addr),
-                White::SSID(ssid_target) => format!("SSID: {}", ssid_target.ssid),
+                White::Mac(mac_target) => format!("MAC: {}", mac_target.addr),
+                White::Ssid(ssid_target) => format!("SSID: {}", ssid_target.ssid),
             })
             .collect::<Vec<String>>()
             .join(", ")

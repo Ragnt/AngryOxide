@@ -10,9 +10,8 @@ use derive_into_owned::IntoOwned;
 
 use super::block_common::{Block, PcapNgBlock};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
-use crate::errors::PcapError;
 use crate::Endianness;
-
+use crate::errors::PcapError;
 
 /// Section Header Block: it defines the most important characteristics of the capture file.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -61,7 +60,7 @@ impl<'a> PcapNgBlock<'a> for SectionHeaderBlock<'a> {
         return Ok((rem, block));
 
         #[allow(clippy::type_complexity)]
-        fn parse_inner<B: ByteOrder>(mut slice: &[u8]) -> Result<(&[u8], u16, u16, i64, Vec<SectionHeaderOption>), PcapError> {
+        fn parse_inner<B: ByteOrder>(mut slice: &[u8]) -> Result<(&[u8], u16, u16, i64, Vec<SectionHeaderOption<'_>>), PcapError> {
             let maj_ver = slice.read_u16::<B>().unwrap();
             let min_ver = slice.read_u16::<B>().unwrap();
             let sec_len = slice.read_i64::<B>().unwrap();
@@ -102,7 +101,6 @@ impl Default for SectionHeaderBlock<'static> {
         }
     }
 }
-
 
 /// Section Header Block options
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]

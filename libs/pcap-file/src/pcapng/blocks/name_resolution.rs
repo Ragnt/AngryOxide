@@ -3,15 +3,14 @@
 use std::borrow::Cow;
 use std::io::{Result as IoResult, Write};
 
+use byteorder_slice::ByteOrder;
 use byteorder_slice::byteorder::WriteBytesExt;
 use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
 use derive_into_owned::IntoOwned;
 
 use super::block_common::{Block, PcapNgBlock};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
 use crate::errors::PcapError;
-
 
 /// The Name Resolution Block (NRB) is used to support the correlation of numeric addresses
 /// (present in the captured packets) and their corresponding canonical names and it is optional.
@@ -210,14 +209,13 @@ impl<'a> Ipv4Record<'a> {
             writer.write_all(name.as_bytes())?;
             writer.write_u8(0)?;
 
-            len += name.as_bytes().len();
+            len += name.len();
             len += 1;
         }
 
         Ok(len)
     }
 }
-
 
 /// Ipv6 records
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
@@ -265,7 +263,7 @@ impl<'a> Ipv6Record<'a> {
             writer.write_all(name.as_bytes())?;
             writer.write_u8(0)?;
 
-            len += name.as_bytes().len();
+            len += name.len();
             len += 1;
         }
 
@@ -290,7 +288,6 @@ impl<'a> UnknownRecord<'a> {
         UnknownRecord { type_, length, value: Cow::Borrowed(value) }
     }
 }
-
 
 /// The Name Resolution Block (NRB) options
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]

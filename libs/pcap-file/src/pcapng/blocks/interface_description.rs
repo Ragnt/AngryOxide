@@ -5,29 +5,28 @@
 use std::borrow::Cow;
 use std::io::{Result as IoResult, Write};
 
+use byteorder_slice::ByteOrder;
 use byteorder_slice::byteorder::WriteBytesExt;
 use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
 use derive_into_owned::IntoOwned;
 
 use super::block_common::{Block, PcapNgBlock};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
-use crate::errors::PcapError;
 use crate::DataLink;
-
+use crate::errors::PcapError;
 
 /// An Interface Description Block (IDB) is the container for information describing an interface
 /// on which packet data is captured.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct InterfaceDescriptionBlock<'a> {
     /// A value that defines the link layer type of this interface.
-    /// 
+    ///
     /// The list of Standardized Link Layer Type codes is available in the
     /// [tcpdump.org link-layer header types registry.](http://www.tcpdump.org/linktypes.html).
     pub linktype: DataLink,
 
     /// Maximum number of octets captured from each packet.
-    /// 
+    ///
     /// The portion of each packet that exceeds this value will not be stored in the file.
     /// A value of zero indicates no limit.
     pub snaplen: u32,

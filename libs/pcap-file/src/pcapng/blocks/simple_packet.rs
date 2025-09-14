@@ -3,17 +3,16 @@
 use std::borrow::Cow;
 use std::io::{Result as IoResult, Write};
 
+use byteorder_slice::ByteOrder;
 use byteorder_slice::byteorder::WriteBytesExt;
 use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
 use derive_into_owned::IntoOwned;
 
 use super::block_common::{Block, PcapNgBlock};
 use crate::errors::PcapError;
 
-
 /// The Simple Packet Block (SPB) is a lightweight container for storing the packets coming from the network.
-/// 
+///
 /// Its presence is optional.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct SimplePacketBlock<'a> {

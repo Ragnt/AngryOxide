@@ -1,4 +1,4 @@
-use nl80211_ng::Interface;
+use crate::interface::Interface;
 
 use rusqlite::{params, Connection, Result};
 use std::time::Duration;
@@ -145,38 +145,36 @@ pub fn setup_database(conn: &Connection, datasource: String, interface: Interfac
     Ok(())
 }
 
-
 fn add_frame(conn: &Connection, frx: &FrameData) {
     let packet_data = PacketData::new(frx);
     let _result = conn.execute(
         "INSERT INTO packets (ts_sec, ts_usec, phyname, sourcemac, destmac, transmac, frequency, devkey, lat, lon, alt, speed, heading, packet_len, signal, datasource, dlt, packet, error, tags, datarate, hash, packetid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         params![
-            packet_data.ts_sec, 
-            packet_data.ts_usec, 
-            packet_data.phyname, 
-            packet_data.sourcemac, 
-            packet_data.destmac, 
-            packet_data.transmac, 
-            packet_data.frequency, 
-            packet_data.devkey, 
-            packet_data.lat, 
-            packet_data.lon, 
-            packet_data.alt, 
-            packet_data.speed, 
-            packet_data.heading, 
-            packet_data.packet_len, 
-            packet_data.signal, 
-            packet_data.datasource, 
-            packet_data.dlt, 
-            packet_data.packet, 
-            packet_data.error, 
-            packet_data.tags, 
-            packet_data.datarate, 
-            packet_data.hash, 
+            packet_data.ts_sec,
+            packet_data.ts_usec,
+            packet_data.phyname,
+            packet_data.sourcemac,
+            packet_data.destmac,
+            packet_data.transmac,
+            packet_data.frequency,
+            packet_data.devkey,
+            packet_data.lat,
+            packet_data.lon,
+            packet_data.alt,
+            packet_data.speed,
+            packet_data.heading,
+            packet_data.packet_len,
+            packet_data.signal,
+            packet_data.datasource,
+            packet_data.dlt,
+            packet_data.packet,
+            packet_data.error,
+            packet_data.tags,
+            packet_data.datarate,
+            packet_data.hash,
             packet_data.packetid
         ],
     );
-
 }
 
 #[derive(Debug, Clone)]
@@ -244,7 +242,7 @@ impl PacketData {
             sourcemac: frx.source.to_long_string(),
             destmac: frx.destination.to_long_string(),
             transmac: String::from("00:00:00:00:00:00"),
-            frequency: frx.frequency.unwrap_or_default()*1000.0,
+            frequency: frx.frequency.unwrap_or_default() * 1000.0,
             devkey: String::from("0"),
             lat,
             lon,

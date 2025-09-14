@@ -1,3 +1,0 @@
-[submodule "libs/libwifi"]
-	path = libs/libwifi
-	url = https://github.com/Ragnt/libwifi.git

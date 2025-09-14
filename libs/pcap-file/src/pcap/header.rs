@@ -7,7 +7,6 @@ use byteorder_slice::{BigEndian, ByteOrder, LittleEndian};
 use crate::errors::*;
 use crate::{DataLink, Endianness, TsResolution};
 
-
 /// Pcap Global Header
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PcapHeader {

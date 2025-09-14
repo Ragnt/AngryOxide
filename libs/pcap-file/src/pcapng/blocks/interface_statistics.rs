@@ -3,27 +3,26 @@
 use std::borrow::Cow;
 use std::io::{Result as IoResult, Write};
 
+use byteorder_slice::ByteOrder;
 use byteorder_slice::byteorder::WriteBytesExt;
 use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
 use derive_into_owned::IntoOwned;
 
 use super::block_common::{Block, PcapNgBlock};
 use super::opt_common::{CustomBinaryOption, CustomUtf8Option, PcapNgOption, UnknownOption, WriteOptTo};
 use crate::errors::PcapError;
 
-
 /// The Interface Statistics Block contains the capture statistics for a given interface and it is optional.
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]
 pub struct InterfaceStatisticsBlock<'a> {
     /// Specifies the interface these statistics refers to.
-    /// 
+    ///
     /// The correct interface will be the one whose Interface Description Block (within the current Section of the file)
     /// is identified by same number of this field.
     pub interface_id: u32,
 
     /// Time this statistics refers to.
-    /// 
+    ///
     /// The format of the timestamp is the same already defined in the Enhanced Packet Block.
     /// The length of a unit of time is specified by the 'if_tsresol' option of the Interface Description Block referenced by this packet.
     pub timestamp: u64,
@@ -33,7 +32,7 @@ pub struct InterfaceStatisticsBlock<'a> {
 }
 
 impl<'a> PcapNgBlock<'a> for InterfaceStatisticsBlock<'a> {
-    fn from_slice<B: ByteOrder>(mut slice: &'a [u8]) -> Result<(&[u8], Self), PcapError> {
+    fn from_slice<B: ByteOrder>(mut slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError> {
         if slice.len() < 12 {
             return Err(PcapError::InvalidField("InterfaceStatisticsBlock: block length < 12"));
         }
@@ -59,7 +58,6 @@ impl<'a> PcapNgBlock<'a> for InterfaceStatisticsBlock<'a> {
         Block::InterfaceStatistics(self)
     }
 }
-
 
 /// The Interface Statistics Block options
 #[derive(Clone, Debug, IntoOwned, Eq, PartialEq)]

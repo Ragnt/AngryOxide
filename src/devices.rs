@@ -1,7 +1,9 @@
+use crate::interface::Band as WiFiBand;
 use globset::Glob;
-use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, StationInfo, WpaAkmSuite, WpsInformation};
+use libwifi::frame::components::{
+    MacAddress, RsnAkmSuite, RsnCipherSuite, StationInfo, WpaAkmSuite, WpsInformation,
+};
 use libwifi::frame::{Beacon, ProbeResponse};
-use nl80211_ng::channels::{WiFiBand};
 use radiotap::field::{AntennaSignal, Field};
 use radiotap::Radiotap;
 use rand::seq::IteratorRandom;
@@ -40,15 +42,13 @@ impl AuthSequence {
     // Checks if CONST_T1_TIMEOUT has elapsed since t1
     // Timer 1 is an interaction timer - elapsed means we have passed 1 second
     pub fn is_t1_timeout(&self) -> bool {
-        self.t1
-            .elapsed() > CONST_T1_TIMEOUT
+        self.t1.elapsed() > CONST_T1_TIMEOUT
     }
 
     // Checks if CONST_T2_TIMEOUT has elapsed since t2
     // Timer 2 is a timer of WHEN state last changed.
     pub fn is_t2_timeout(&self) -> bool {
-        self.t2
-            .elapsed()> CONST_T2_TIMEOUT
+        self.t2.elapsed() > CONST_T2_TIMEOUT
     }
 
     // Checks if CONST_T2_TIMEOUT has elapsed since t2
@@ -110,7 +110,7 @@ pub struct AccessPoint {
     pub has_pmkid: bool,
     pub is_target: bool,
     pub is_whitelisted: bool,
-    pub wps_data: Option<WpsInformation>
+    pub wps_data: Option<WpsInformation>,
 }
 
 impl WiFiDeviceType for AccessPoint {}
@@ -140,12 +140,13 @@ impl Default for AccessPoint {
             has_pmkid: false,
             is_target: false,
             is_whitelisted: false,
-            wps_data: None
+            wps_data: None,
         }
     }
 }
 
 impl AccessPoint {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
@@ -154,7 +155,7 @@ impl AccessPoint {
         information: Option<APFlags>,
         rogue_mac: MacAddress,
         wps_data: Option<WpsInformation>,
-        oui_data: Option<OuiRecord>
+        oui_data: Option<OuiRecord>,
     ) -> Self {
         let client_list = WiFiDeviceList::new();
         let last_recv = SystemTime::now()
@@ -162,11 +163,7 @@ impl AccessPoint {
             .expect("Time went backwards")
             .as_secs();
 
-        let chan = if let Some(channel) = channel {
-            Some((channel.0, channel.1))
-        } else {
-            None
-        };
+        let chan = channel.map(|channel| (channel.0, channel.1));
 
         AccessPoint {
             mac_address,
@@ -185,10 +182,11 @@ impl AccessPoint {
             has_pmkid: false,
             is_target: false,
             is_whitelisted: false,
-            wps_data
+            wps_data,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_clients(
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
@@ -205,11 +203,7 @@ impl AccessPoint {
             .expect("Time went backwards")
             .as_secs();
 
-        let chan = if let Some(channel) = channel {
-            Some((channel.0, channel.1))
-        } else {
-            None
-        };
+        let chan = channel.map(|channel| (channel.0, channel.1));
 
         AccessPoint {
             mac_address,
@@ -228,27 +222,44 @@ impl AccessPoint {
             has_pmkid: false,
             is_target: false,
             is_whitelisted: false,
-            wps_data
+            wps_data,
         }
     }
 
-    pub fn from_beacon(frame: &Beacon, radiotap: &Radiotap, oxide: &OxideRuntime) -> Result<AccessPoint, String>
-    {
+    pub fn from_beacon(
+        frame: &Beacon,
+        radiotap: &Radiotap,
+        oxide: &OxideRuntime,
+    ) -> Result<AccessPoint, String> {
         let band = &oxide.if_hardware.current_band;
         let bssid = frame.header.address_3;
-        let signal_strength: AntennaSignal = radiotap.antenna_signal.unwrap_or(
-            AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
-        );
+        let signal_strength: AntennaSignal = radiotap
+            .antenna_signal
+            .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
         let station_info = &frame.station_info;
 
-        let ssid = station_info.ssid.as_ref().map(|ssid| ssid.replace('\0', ""));
-
+        let ssid = station_info
+            .ssid
+            .as_ref()
+            .map(|ssid| ssid.replace('\0', ""));
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
-            Some((band.clone(), channel as u32))
+            #[cfg(target_os = "linux")]
+            let band_val = band.clone();
+            #[cfg(target_os = "macos")]
+            let band_val = *band;
+            Some((band_val, channel as u32))
         } else {
-            station_info.ht_information.as_ref()
-                .map(|ht_info| (band.clone(), ht_info.primary_channel as u32))
+            station_info
+                .ht_information
+                .as_ref()
+                .map(|ht_info| {
+                    #[cfg(target_os = "linux")]
+                    let band_val = band.clone();
+                    #[cfg(target_os = "macos")]
+                    let band_val = *band;
+                    (band_val, ht_info.primary_channel as u32)
+                })
         };
 
         Ok(AccessPoint::new(
@@ -258,30 +269,34 @@ impl AccessPoint {
             channel,
             Some(APFlags {
                 apie_essid: station_info.ssid.as_ref().map(|_| true),
-                gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.group_cipher_suite == RsnCipherSuite::CCMP
-                }),
-                gs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.group_cipher_suite == RsnCipherSuite::TKIP
-                }),
-                cs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.pairwise_cipher_suites
-                        .contains(&RsnCipherSuite::CCMP)
-                }),
-                cs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.pairwise_cipher_suites
-                        .contains(&RsnCipherSuite::TKIP)
-                }),
+                gs_ccmp: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.group_cipher_suite == RsnCipherSuite::CCMP),
+                gs_tkip: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.group_cipher_suite == RsnCipherSuite::TKIP),
+                cs_ccmp: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.pairwise_cipher_suites.contains(&RsnCipherSuite::CCMP)),
+                cs_tkip: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.pairwise_cipher_suites.contains(&RsnCipherSuite::TKIP)),
                 rsn_akm_psk: station_info
                     .rsn_information
                     .as_ref()
                     .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK)),
-                rsn_akm_psk256: station_info.rsn_information.as_ref().map(
-                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256),
-                ),
-                rsn_akm_pskft: station_info.rsn_information.as_ref().map(
-                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
-                ),
+                rsn_akm_psk256: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256)),
+                rsn_akm_pskft: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT)),
                 rsn_akm_sae: station_info
                     .rsn_information
                     .as_ref()
@@ -301,22 +316,40 @@ impl AccessPoint {
         ))
     }
 
-    pub fn from_probe_response(frame: &ProbeResponse, radiotap: &Radiotap, oxide: &OxideRuntime) -> Result<AccessPoint, String> {
+    pub fn from_probe_response(
+        frame: &ProbeResponse,
+        radiotap: &Radiotap,
+        oxide: &OxideRuntime,
+    ) -> Result<AccessPoint, String> {
         let band = &oxide.if_hardware.current_band;
         let bssid = frame.header.address_3;
-        let signal_strength: AntennaSignal = radiotap.antenna_signal.unwrap_or(
-            AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?,
-        );
+        let signal_strength: AntennaSignal = radiotap
+            .antenna_signal
+            .unwrap_or(AntennaSignal::from_bytes(&[0u8]).map_err(|err| err.to_string())?);
         let station_info = &frame.station_info;
         let ssid: Option<String> = station_info
             .ssid
             .as_ref()
             .map(|nssid| nssid.replace('\0', ""));
 
-
         let channel = if let Some(channel) = station_info.ds_parameter_set {
-            Some((band.clone(), channel as u32))
-        } else { station_info.ht_information.as_ref().map(|ht_info| (band.clone(), ht_info.primary_channel as u32)) };
+            #[cfg(target_os = "linux")]
+            let band_val = band.clone();
+            #[cfg(target_os = "macos")]
+            let band_val = *band;
+            Some((band_val, channel as u32))
+        } else {
+            station_info
+                .ht_information
+                .as_ref()
+                .map(|ht_info| {
+                    #[cfg(target_os = "linux")]
+                    let band_val = band.clone();
+                    #[cfg(target_os = "macos")]
+                    let band_val = *band;
+                    (band_val, ht_info.primary_channel as u32)
+                })
+        };
 
         Ok(AccessPoint::new(
             bssid,
@@ -325,30 +358,34 @@ impl AccessPoint {
             channel,
             Some(APFlags {
                 apie_essid: station_info.ssid.as_ref().map(|_| true),
-                gs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.group_cipher_suite == RsnCipherSuite::CCMP
-                }),
-                gs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.group_cipher_suite == RsnCipherSuite::TKIP
-                }),
-                cs_ccmp: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.pairwise_cipher_suites
-                        .contains(&RsnCipherSuite::CCMP)
-                }),
-                cs_tkip: station_info.rsn_information.as_ref().map(|rsn| {
-                    rsn.pairwise_cipher_suites
-                        .contains(&RsnCipherSuite::TKIP)
-                }),
+                gs_ccmp: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.group_cipher_suite == RsnCipherSuite::CCMP),
+                gs_tkip: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.group_cipher_suite == RsnCipherSuite::TKIP),
+                cs_ccmp: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.pairwise_cipher_suites.contains(&RsnCipherSuite::CCMP)),
+                cs_tkip: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.pairwise_cipher_suites.contains(&RsnCipherSuite::TKIP)),
                 rsn_akm_psk: station_info
                     .rsn_information
                     .as_ref()
                     .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK)),
-                rsn_akm_psk256: station_info.rsn_information.as_ref().map(
-                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256),
-                ),
-                rsn_akm_pskft: station_info.rsn_information.as_ref().map(
-                    |rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT),
-                ),
+                rsn_akm_psk256: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSK256)),
+                rsn_akm_pskft: station_info
+                    .rsn_information
+                    .as_ref()
+                    .map(|rsn| rsn.akm_suites.contains(&RsnAkmSuite::PSKFT)),
                 rsn_akm_sae: station_info
                     .rsn_information
                     .as_ref()
@@ -367,7 +404,6 @@ impl AccessPoint {
             oxide.file_data.oui_database.search(&bssid),
         ))
     }
-
 
     // Check if the current time is passed the time stored in the t1 value + 5 seconds
     pub fn is_t1_elapsed(&self) -> bool {
@@ -444,17 +480,17 @@ pub struct APFlags {
 
 impl APFlags {
     pub fn to_json_str(&self) -> String {
-        format!("{{\"apie_essid\": {},\"gs_ccmp\": {},\"gs_tkip\": {},\"cs_ccmp\": {},\"cs_tkip\": {},\"rsn_akm_psk\": {},\"rsn_akm_psk256\": {},\"rsn_akm_pskft\": {},\"rsn_akm_sae\": {}, \"wpa_akm_psk\": {},\"ap_mfp\": {}}}", 
-        option_bool_to_json_string(self.apie_essid), 
-        option_bool_to_json_string(self.gs_ccmp), 
-        option_bool_to_json_string(self.gs_tkip), 
-        option_bool_to_json_string(self.cs_ccmp), 
-        option_bool_to_json_string(self.cs_tkip), 
-        option_bool_to_json_string(self.rsn_akm_psk), 
-        option_bool_to_json_string(self.rsn_akm_psk256), 
-        option_bool_to_json_string(self.rsn_akm_pskft), 
-        option_bool_to_json_string(self.rsn_akm_sae), 
-        option_bool_to_json_string(self.wpa_akm_psk), 
+        format!("{{\"apie_essid\": {},\"gs_ccmp\": {},\"gs_tkip\": {},\"cs_ccmp\": {},\"cs_tkip\": {},\"rsn_akm_psk\": {},\"rsn_akm_psk256\": {},\"rsn_akm_pskft\": {},\"rsn_akm_sae\": {}, \"wpa_akm_psk\": {},\"ap_mfp\": {}}}",
+        option_bool_to_json_string(self.apie_essid),
+        option_bool_to_json_string(self.gs_ccmp),
+        option_bool_to_json_string(self.gs_tkip),
+        option_bool_to_json_string(self.cs_ccmp),
+        option_bool_to_json_string(self.cs_tkip),
+        option_bool_to_json_string(self.rsn_akm_psk),
+        option_bool_to_json_string(self.rsn_akm_psk256),
+        option_bool_to_json_string(self.rsn_akm_pskft),
+        option_bool_to_json_string(self.rsn_akm_sae),
+        option_bool_to_json_string(self.wpa_akm_psk),
         option_bool_to_json_string(self.ap_mfp)
     )
     }
@@ -480,8 +516,6 @@ impl APFlags {
         }
 
         true_flags.join(", ")
-
-        
     }
 
     // Checks if the AKM is PSK from any one of the indicators
@@ -704,7 +738,7 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
         T: HasSSID,
     {
         self.devices.values_mut().find_map(|x: &mut T| {
-            if x.ssid().as_ref().map_or(false, |f| f == ssid) {
+            if x.ssid().as_ref().is_some_and(|f| f == ssid) {
                 Some(x)
             } else {
                 None
@@ -754,13 +788,13 @@ impl WiFiDeviceList<AccessPoint> {
         all_clients
     }
 
-    pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool)  {
+    pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool) {
         let mut access_points: Vec<AccessPoint> = self
-        .get_devices()
-        .iter()
-        .map(|(_, access_point)| access_point.clone())
-        .collect();
-    
+            .get_devices()
+            .values()
+            .cloned()
+            .collect();
+
         match sort {
             0 => access_points.sort_by(|a, b| {
                 // TGT
@@ -785,7 +819,19 @@ impl WiFiDeviceList<AccessPoint> {
                     _ => std::cmp::Ordering::Equal,
                 }
             }),
-            1 => access_points.sort_by(|a, b| b.channel.clone().unwrap_or((WiFiBand::Unknown, 0)).1.cmp(&a.channel.clone().unwrap_or((WiFiBand::Unknown, 0)).1)), // CH
+            1 => access_points.sort_by(|a, b| {
+                #[cfg(target_os = "linux")]
+                let b_chan = b.channel.clone().unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+                #[cfg(target_os = "macos")]
+                let b_chan = b.channel.unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+
+                #[cfg(target_os = "linux")]
+                let a_chan = a.channel.clone().unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+                #[cfg(target_os = "macos")]
+                let a_chan = a.channel.unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+
+                b_chan.cmp(&a_chan)
+            }), // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI
                 let a_val = a.last_signal_strength.value;
@@ -854,7 +900,14 @@ impl WiFiDeviceList<AccessPoint> {
 
             // Update the channel
             if new_ap.channel.is_some() {
-                ap.channel = new_ap.channel.clone();
+                #[cfg(target_os = "linux")]
+                {
+                    ap.channel = new_ap.channel.clone();
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    ap.channel = new_ap.channel;
+                }
             }
 
             // Update clients
@@ -965,18 +1018,18 @@ impl WiFiDeviceList<AccessPoint> {
     }
 
     pub fn remove_old_devices(&mut self, timeout: u64) {
-        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         // Remove devices from HashMap
-        self.devices.retain(|_, device| {
-            device.last_recv + timeout > current_time || device.is_target()
-        });
+        self.devices
+            .retain(|_, device| device.last_recv + timeout > current_time || device.is_target());
 
         // Remove devices from the sorted vector
-        self.devices_sorted.retain(|device| {
-            device.last_recv + timeout > current_time || device.is_target()
-        });
+        self.devices_sorted
+            .retain(|device| device.last_recv + timeout > current_time || device.is_target());
     }
-
 }
 
 fn add_client_header(ap_row: Vec<String>) -> Vec<String> {
@@ -1107,11 +1160,11 @@ fn add_probe_rows(
 
 // Functions specific to a WiFiDeviceList holding Stations
 impl WiFiDeviceList<Station> {
-    pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool)  {
+    pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool) {
         let mut stations: Vec<_> = self
             .get_devices()
-            .iter()
-            .map(|(_, station)| station.clone())
+            .values()
+            .cloned()
             .collect();
 
         match sort {
@@ -1161,7 +1214,7 @@ impl WiFiDeviceList<Station> {
         &mut self,
         selected_row: Option<usize>,
         sort: u8,
-        sort_reverse: bool
+        sort_reverse: bool,
     ) -> (Vec<String>, Vec<(Vec<String>, u16)>) {
         // Header fields
         //"MAC Address", "RSSI", "Last", Tx, "Probes"
@@ -1268,17 +1321,17 @@ impl WiFiDeviceList<Station> {
     }
 
     pub fn remove_old_devices(&mut self, timeout: u64) {
-        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
         // Remove devices from HashMap
-        self.devices.retain(|_, device| {
-            device.last_recv + timeout > current_time
-        });
+        self.devices
+            .retain(|_, device| device.last_recv + timeout > current_time);
 
         // Remove devices from the sorted vector
-        self.devices_sorted.retain(|device| {
-            device.last_recv + timeout > current_time
-        });
+        self.devices_sorted
+            .retain(|device| device.last_recv + timeout > current_time);
     }
-
 }

@@ -17,9 +17,8 @@ use super::section_header::SectionHeaderBlock;
 use super::simple_packet::SimplePacketBlock;
 use super::systemd_journal_export::SystemdJournalExportBlock;
 use super::unknown::UnknownBlock;
-use crate::errors::PcapError;
 use crate::PcapResult;
-
+use crate::errors::PcapError;
 
 /// Section header block type
 pub const SECTION_HEADER_BLOCK: u32 = 0x0A0D0D0A;
@@ -86,8 +85,7 @@ impl<'a> RawBlock<'a> {
             };
 
             return res;
-        }
-        else {
+        } else {
             let initial_len = slice.read_u32::<B>().map_err(|_| PcapError::IncompleteBuffer)?;
             return inner_parse::<B>(slice, type_, initial_len);
         };
@@ -316,11 +314,10 @@ impl<'a> Block<'a> {
     }
 }
 
-
 /// Common interface for the PcapNg blocks
 pub trait PcapNgBlock<'a> {
     /// Parse a new block from a slice
-    fn from_slice<B: ByteOrder>(slice: &'a [u8]) -> Result<(&[u8], Self), PcapError>
+    fn from_slice<B: ByteOrder>(slice: &'a [u8]) -> Result<(&'a [u8], Self), PcapError>
     where
         Self: std::marker::Sized;
 

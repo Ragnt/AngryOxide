@@ -64,15 +64,15 @@ impl TargetMAC {
 }
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Target {
-    MAC(TargetMAC),
-    SSID(TargetSSID),
+    Mac(TargetMAC),
+    Ssid(TargetSSID),
 }
 
 impl Target {
     pub fn get_string(&self) -> String {
         match self {
-            Target::MAC(tgt) => tgt.addr.to_string(),
-            Target::SSID(tgt) => tgt.ssid.clone(),
+            Target::Mac(tgt) => tgt.addr.to_string(),
+            Target::Ssid(tgt) => tgt.ssid.clone(),
         }
     }
 }
@@ -96,7 +96,7 @@ impl TargetList {
         self.targets.push(target);
     }
 
-    /// Remove *exactly* the provided `Target`.  
+    /// Remove *exactly* the provided `Target`.
     /// Returns `true` if something was deleted.
     pub fn remove(&mut self, target: &Target) -> bool {
         let before = self.targets.len();
@@ -108,7 +108,7 @@ impl TargetList {
     pub fn remove_mac(&mut self, mac: &MacAddress) -> bool {
         let before = self.targets.len();
         self.targets
-            .retain(|t| !matches!(t, Target::MAC(tgt) if tgt.addr == *mac));
+            .retain(|t| !matches!(t, Target::Mac(tgt) if tgt.addr == *mac));
         before != self.targets.len()
     }
 
@@ -116,7 +116,7 @@ impl TargetList {
     pub fn remove_ssid(&mut self, ssid: &str) -> bool {
         let before = self.targets.len();
         self.targets
-            .retain(|t| !matches!(t, Target::SSID(tgt) if tgt.ssid == ssid));
+            .retain(|t| !matches!(t, Target::Ssid(tgt) if tgt.ssid == ssid));
         before != self.targets.len()
     }
 
@@ -132,11 +132,11 @@ impl TargetList {
 
         for target in &self.targets {
             match target {
-                Target::MAC(tgt) => {
+                Target::Mac(tgt) => {
                     if tgt.target_match(ap) {
                         if let Some(ssid) = &ap.ssid {
                             if !self.is_target_ssid(ssid) {
-                                self.add(Target::SSID(TargetSSID {
+                                self.add(Target::Ssid(TargetSSID {
                                     ssid: ssid.to_string(),
                                 }));
                             }
@@ -147,10 +147,10 @@ impl TargetList {
                         return true;
                     }
                 }
-                Target::SSID(tgt) => {
+                Target::Ssid(tgt) => {
                     if tgt.target_match(ap) {
                         if !self.is_target_mac(&ap.mac_address) {
-                            self.add(Target::MAC(TargetMAC {
+                            self.add(Target::Mac(TargetMAC {
                                 addr: ap.mac_address,
                             }))
                         }
@@ -173,11 +173,11 @@ impl TargetList {
 
         for target in self.targets.clone() {
             match target {
-                Target::MAC(ref tgt) => {
+                Target::Mac(ref tgt) => {
                     if tgt.target_match(ap) {
                         if let Some(ssid) = &ap.ssid {
                             if !self.is_target_ssid(ssid) {
-                                self.add(Target::SSID(TargetSSID {
+                                self.add(Target::Ssid(TargetSSID {
                                     ssid: ssid.to_string(),
                                 }));
                             }
@@ -188,10 +188,10 @@ impl TargetList {
                         matches.push(target);
                     }
                 }
-                Target::SSID(ref tgt) => {
+                Target::Ssid(ref tgt) => {
                     if tgt.target_match(ap) {
                         if !self.is_target_mac(&ap.mac_address) {
-                            self.add(Target::MAC(TargetMAC {
+                            self.add(Target::Mac(TargetMAC {
                                 addr: ap.mac_address,
                             }))
                         }
@@ -207,26 +207,24 @@ impl TargetList {
     }
 
     pub fn is_actual_target_mac(&self, mac: &MacAddress) -> bool {
-
         for target in &self.targets {
             match target {
-                Target::MAC(tgt) => {
+                Target::Mac(tgt) => {
                     if tgt.addr == *mac {
                         return true;
                     }
                 }
-                Target::SSID(_) => {} // do nothing
+                Target::Ssid(_) => {} // do nothing
             }
         }
         false
     }
 
     pub fn is_actual_target_ssid(&self, ssid: &str) -> bool {
-
         for target in &self.targets {
             match target {
-                Target::MAC(_) => {} // do nothing, we don't have anything to compare to here.
-                Target::SSID(tgt) => {
+                Target::Mac(_) => {} // do nothing, we don't have anything to compare to here.
+                Target::Ssid(tgt) => {
                     if tgt.match_ssid(ssid.to_owned()) {
                         return true;
                     }
@@ -243,12 +241,12 @@ impl TargetList {
 
         for target in &self.targets {
             match target {
-                Target::MAC(tgt) => {
+                Target::Mac(tgt) => {
                     if tgt.addr == *mac {
                         return true;
                     }
                 }
-                Target::SSID(_) => {} // do nothing
+                Target::Ssid(_) => {} // do nothing
             }
         }
         false
@@ -261,8 +259,8 @@ impl TargetList {
 
         for target in &self.targets {
             match target {
-                Target::MAC(_) => {} // do nothing, we don't have anything to compare to here.
-                Target::SSID(tgt) => {
+                Target::Mac(_) => {} // do nothing, we don't have anything to compare to here.
+                Target::Ssid(tgt) => {
                     if tgt.match_ssid(ssid.to_owned()) {
                         return true;
                     }
@@ -275,8 +273,8 @@ impl TargetList {
     pub fn has_ssid(&self) -> bool {
         for target in &self.targets {
             match target {
-                Target::MAC(_) => continue,
-                Target::SSID(_) => return true,
+                Target::Mac(_) => continue,
+                Target::Ssid(_) => return true,
             }
         }
         false
@@ -291,7 +289,7 @@ impl TargetList {
         }
         loop {
             let tgt = self.targets.choose(&mut rand::thread_rng()).unwrap();
-            if let Target::SSID(tgt) = tgt {
+            if let Target::Ssid(tgt) = tgt {
                 return Some(tgt.ssid.clone());
             }
         }
@@ -301,8 +299,8 @@ impl TargetList {
         self.targets
             .iter()
             .map(|target| match target {
-                Target::MAC(mac_target) => format!("MAC: {}", mac_target.addr),
-                Target::SSID(ssid_target) => format!("SSID: {}", ssid_target.ssid),
+                Target::Mac(mac_target) => format!("MAC: {}", mac_target.addr),
+                Target::Ssid(ssid_target) => format!("SSID: {}", ssid_target.ssid),
             })
             .collect::<Vec<String>>()
             .join(", ")

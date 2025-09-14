@@ -57,13 +57,23 @@ jobs:
             bin: angryoxide
             name: angryoxide-linux-aarch64-gnu.tar.gz
 
+          - os_name: macOS-x86_64
+            os: macos-12
+            target: x86_64-apple-darwin
+            bin: angryoxide
+            name: angryoxide-macos-x86_64.tar.gz
+
+          - os_name: macOS-aarch64
+            os: macos-13
+            target: aarch64-apple-darwin
+            bin: angryoxide
+            name: angryoxide-macos-aarch64.tar.gz
+
         toolchain:
           - stable
           
     steps:
-      - uses: actions/checkout@v3  
-        with:
-          submodules: true
+      - uses: actions/checkout@v3
       - name: Cache cargo & target directories
         uses: Swatinem/rust-cache@v2
       - name: Configure Git
@@ -73,6 +83,10 @@ jobs:
       - name: Install musl-tools on Linux
         run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
         if: contains(matrix.platform.name, 'musl')
+
+      - name: Install Rust targets for macOS
+        run: rustup target add ${{ matrix.platform.target }}
+        if: contains(matrix.platform.os, 'macos')
       
       - name: Install cross
         id: cross-nix

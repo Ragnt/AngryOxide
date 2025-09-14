@@ -35,8 +35,6 @@ bundled = ["rusqlite/bundled"]
 [dependencies]
 libwifi = { version = "0.3.1", path = "libs/libwifi" }
 pcap-file = { version = "2.0.0", path = "libs/pcap-file" }
-#nl80211-ng = { version = ">=0.5.5", path = "../nl/nl80211-ng" }
-nl80211-ng = ">=0.5.5"
 byteorder = "1.5.0"
 libc = "0.2.149"
 nix = { version = "0.27.1", features = [
@@ -48,8 +46,6 @@ nix = { version = "0.27.1", features = [
 ] }
 radiotap = "1.3.0"
 anyhow = "1.0.75"
-neli = "0.6.4"
-neli-proc-macros = "0.1.0"
 hex = "0.4.3"
 rand = "0.8.5"
 ctrlc = "3.4.1"
@@ -72,7 +68,6 @@ uuid = { version = "1.6.1", features = ["v4"] }
 crc32fast = "1.3.2"
 flate2 = { version = "1.0.28", features = ["zlib"] }
 tar = "0.4.40"
-procfs = "0.16.0"
 uname = "0.1.1"
 globset = "0.4.14"
 terminal-clipboard = "0.4.1"
@@ -83,3 +78,14 @@ geo = "0.28.0"
 geo-types = "0.7.13"
 geoconvert = "1.0.2"
 geomorph = "1.1.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = "0.16.0"
+nl80211-ng = ">=0.5.5"
+neli = "0.6.4"
+neli-proc-macros = "0.1.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
+core-foundation-sys = "0.8"
+system-configuration = "0.5"

@@ -1,0 +1,150 @@
+name: Cross-Platform Tests
+
+on:
+  push:
+    branches: [ main, master, develop, 'feature/*' ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+        include:
+          - os: ubuntu-latest
+            os_name: Linux
+          - os: macos-latest
+            os_name: macOS
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check code formatting
+        run: cargo fmt --all
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Test for stub implementations
+        run: |
+          # Check that no "not yet implemented" strings remain
+          if grep -r "not yet implemented" src/; then
+            echo "❌ Found stub implementations"
+            exit 1
+          else
+            echo "✅ No stub implementations found"
+          fi
+
+      - name: Platform-specific checks (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo "Testing Linux-specific features..."
+          # Check for nl80211 headers
+          ls /usr/include/linux/nl80211.h || echo "nl80211 headers not found in CI"
+
+      - name: Platform-specific checks (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "Testing macOS-specific features..."
+          # Check for BPF devices
+          ls -la /dev/bpf* || echo "BPF devices not accessible without root"
+
+          # Check for tcpdump
+          which tcpdump && echo "✅ tcpdump found"
+
+          # Check for wdutil
+          which wdutil && echo "✅ wdutil found"
+
+          # Check if Airport exists (may not on newer macOS)
+          if [ -f "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport" ]; then
+            echo "✅ Airport utility found"
+          else
+            echo "ℹ️ Airport utility not found (normal on newer macOS)"
+          fi
+
+  feature-parity:
+    name: Feature Parity Check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build with all features
+        run: cargo build --all-features
+
+      - name: Run parity test
+        run: cargo test --test parity_test -- --nocapture
+
+      - name: Check interface module compilation
+        run: |
+          # Ensure interface functions compile on both platforms
+          cargo build
+
+      - name: Verify monitor mode implementation
+        run: |
+          # Check that monitor mode code exists for both platforms
+          echo "Checking monitor mode implementation..."
+
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            grep -q "nl80211" src/interface.rs && echo "✅ Linux nl80211 support found"
+          else
+            grep -q "airport\|tcpdump" src/*.rs && echo "✅ macOS monitor mode support found"
+          fi
+
+  documentation:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check documentation structure
+        run: |
+          # Verify docs are organized properly
+          test -d docs && echo "✅ docs/ directory exists"
+          test -f README.md && echo "✅ README.md exists"
+          test -f CLAUDE.md && echo "✅ CLAUDE.md exists"
+          test -f docs/README.md && echo "✅ docs/README.md exists"
+
+      - name: Check for broken links in docs
+        run: |
+          # Simple check for broken internal links
+          for file in docs/*.md; do
+            echo "Checking $file..."
+            # This is a simple check - could be enhanced with a proper link checker
+            grep -o '\[.*\]([^)]*\.md)' "$file" | while read -r link; do
+              target=$(echo "$link" | sed -n 's/.*(\(.*\.md\)).*/\1/p')
+              if [[ ! -f "docs/$target" ]]; then
+                echo "⚠️ Possible broken link in $file: $target"
+              fi
+            done
+          done

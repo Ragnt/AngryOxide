@@ -2,7 +2,6 @@ use std::io::{Error, ErrorKind, Read};
 
 use crate::PcapError;
 
-
 /// Internal structure that bufferize its input and allow to parse element from its buffer.
 #[derive(Debug)]
 pub(crate) struct ReadBuffer<R: Read> {

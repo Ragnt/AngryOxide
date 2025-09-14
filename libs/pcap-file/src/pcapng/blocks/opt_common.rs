@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 use std::io::{Result as IoResult, Write};
 
+use byteorder_slice::ByteOrder;
 use byteorder_slice::byteorder::WriteBytesExt;
 use byteorder_slice::result::ReadSlice;
-use byteorder_slice::ByteOrder;
 use derive_into_owned::IntoOwned;
 
 use crate::errors::PcapError;
-
 
 /// Common fonctions of the PcapNg options
 pub(crate) trait PcapNgOption<'a> {
@@ -160,7 +159,7 @@ impl<'a> WriteOptTo for Cow<'a, [u8]> {
 
 impl<'a> WriteOptTo for Cow<'a, str> {
     fn write_opt_to<B: ByteOrder, W: Write>(&self, code: u16, writer: &mut W) -> IoResult<usize> {
-        let len = self.as_bytes().len();
+        let len = self.len();
         let pad_len = (4 - len % 4) % 4;
 
         writer.write_u16::<B>(code)?;
