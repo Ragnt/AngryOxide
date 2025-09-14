@@ -58,6 +58,7 @@ use crate::interface::{
     Band as WiFiBand, Interface, Nl80211, Nl80211Iftype,
 };
 
+#[cfg(target_os = "linux")]
 #[allow(unused_imports)] // This trait is used for name_as_string() method
 use crate::interface::InterfaceExt;
 

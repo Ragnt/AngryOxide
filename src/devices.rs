@@ -244,12 +244,22 @@ impl AccessPoint {
             .map(|ssid| ssid.replace('\0', ""));
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
-            Some((band.clone(), channel as u32))
+            #[cfg(target_os = "linux")]
+            let band_val = band.clone();
+            #[cfg(target_os = "macos")]
+            let band_val = *band;
+            Some((band_val, channel as u32))
         } else {
             station_info
                 .ht_information
                 .as_ref()
-                .map(|ht_info| (band.clone(), ht_info.primary_channel as u32))
+                .map(|ht_info| {
+                    #[cfg(target_os = "linux")]
+                    let band_val = band.clone();
+                    #[cfg(target_os = "macos")]
+                    let band_val = *band;
+                    (band_val, ht_info.primary_channel as u32)
+                })
         };
 
         Ok(AccessPoint::new(
@@ -323,12 +333,22 @@ impl AccessPoint {
             .map(|nssid| nssid.replace('\0', ""));
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
-            Some((band.clone(), channel as u32))
+            #[cfg(target_os = "linux")]
+            let band_val = band.clone();
+            #[cfg(target_os = "macos")]
+            let band_val = *band;
+            Some((band_val, channel as u32))
         } else {
             station_info
                 .ht_information
                 .as_ref()
-                .map(|ht_info| (band.clone(), ht_info.primary_channel as u32))
+                .map(|ht_info| {
+                    #[cfg(target_os = "linux")]
+                    let band_val = band.clone();
+                    #[cfg(target_os = "macos")]
+                    let band_val = *band;
+                    (band_val, ht_info.primary_channel as u32)
+                })
         };
 
         Ok(AccessPoint::new(
@@ -800,11 +820,17 @@ impl WiFiDeviceList<AccessPoint> {
                 }
             }),
             1 => access_points.sort_by(|a, b| {
-                b.channel
-                    .clone()
-                    .unwrap_or((WiFiBand::UNKNOWN, 0))
-                    .1
-                    .cmp(&a.channel.clone().unwrap_or((WiFiBand::UNKNOWN, 0)).1)
+                #[cfg(target_os = "linux")]
+                let b_chan = b.channel.clone().unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+                #[cfg(target_os = "macos")]
+                let b_chan = b.channel.unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+
+                #[cfg(target_os = "linux")]
+                let a_chan = a.channel.clone().unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+                #[cfg(target_os = "macos")]
+                let a_chan = a.channel.unwrap_or((WiFiBand::UNKNOWN, 0)).1;
+
+                b_chan.cmp(&a_chan)
             }), // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI
@@ -874,7 +900,14 @@ impl WiFiDeviceList<AccessPoint> {
 
             // Update the channel
             if new_ap.channel.is_some() {
-                ap.channel = new_ap.channel.clone();
+                #[cfg(target_os = "linux")]
+                {
+                    ap.channel = new_ap.channel.clone();
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    ap.channel = new_ap.channel;
+                }
             }
 
             // Update clients
