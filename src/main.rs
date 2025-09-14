@@ -496,8 +496,8 @@ impl OxideRuntime {
             vec_targets
                 .into_iter()
                 .map(|f| match MacAddress::from_str(&f) {
-                    Ok(mac) => Target::MAC(TargetMAC::new(mac)),
-                    Err(_) => Target::SSID(TargetSSID::new(&f)),
+                    Ok(mac) => Target::Mac(TargetMAC::new(mac)),
+                    Err(_) => Target::Ssid(TargetSSID::new(&f)),
                 })
                 .collect()
         } else {
@@ -518,8 +518,8 @@ impl OxideRuntime {
                                 // Remove comments
                                 let line = util::strip_comment(&l);
                                 match MacAddress::from_str(line) {
-                                    Ok(mac) => Target::MAC(TargetMAC::new(mac)),
-                                    Err(_) => Target::SSID(TargetSSID::new(line)),
+                                    Ok(mac) => Target::Mac(TargetMAC::new(mac)),
+                                    Err(_) => Target::Ssid(TargetSSID::new(line)),
                                 }
                             }
                             Err(_) => {
@@ -547,10 +547,10 @@ impl OxideRuntime {
                     "├"
                 };
                 match target {
-                    Target::MAC(tgt) => {
+                    Target::Mac(tgt) => {
                         println!(" {} MAC: {}", tree, tgt.addr)
                     }
-                    Target::SSID(tgt) => {
+                    Target::Ssid(tgt) => {
                         println!(" {} SSID: {}", tree, tgt.ssid)
                     }
                 }
@@ -578,7 +578,7 @@ impl OxideRuntime {
                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
                             None
                         } else {
-                            Some(White::MAC(WhiteMAC::new(mac)))
+                            Some(White::Mac(WhiteMAC::new(mac)))
                         }
                     }
                     Err(_) => {
@@ -586,7 +586,7 @@ impl OxideRuntime {
                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", f);
                             None
                         } else {
-                            Some(White::SSID(WhiteSSID::new(&f)))
+                            Some(White::Ssid(WhiteSSID::new(&f)))
                         }
                     }
                 })
@@ -614,7 +614,7 @@ impl OxideRuntime {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", mac);
                                             continue;
                                         } else {
-                                            White::MAC(WhiteMAC::new(mac))
+                                            White::Mac(WhiteMAC::new(mac))
                                         }
                                     }
                                     Err(_) => {
@@ -622,7 +622,7 @@ impl OxideRuntime {
                                             println!("❌ Whitelist {} is a target. Cannot add to whitelist.", line);
                                             continue;
                                         } else {
-                                            White::SSID(WhiteSSID::new(&l))
+                                            White::Ssid(WhiteSSID::new(&l))
                                         }
                                     }
                                 }
@@ -652,10 +652,10 @@ impl OxideRuntime {
                     "├"
                 };
                 match device {
-                    White::MAC(dev) => {
+                    White::Mac(dev) => {
                         println!(" {} MAC: {}", tree, dev.addr)
                     }
-                    White::SSID(dev) => {
+                    White::Ssid(dev) => {
                         println!(" {} SSID: {}", tree, dev.ssid)
                     }
                 }
@@ -953,8 +953,8 @@ impl OxideRuntime {
         println!("💲 OUI Records Imported: {}", oui_db.record_count());
 
         // Open sockets
-        let rx_socket = open_socket_rx(idx.try_into().unwrap()).expect("Failed to open RX Socket.");
-        let tx_socket = open_socket_tx(idx.try_into().unwrap()).expect("Failed to open TX Socket.");
+        let rx_socket = open_socket_rx(idx).expect("Failed to open RX Socket.");
+        let tx_socket = open_socket_tx(idx).expect("Failed to open TX Socket.");
         thread::sleep(Duration::from_millis(500));
 
         println!(
@@ -1176,11 +1176,7 @@ impl OxideRuntime {
             let mut closest_channel = None;
 
             for &channel in channels {
-                let distance = if channel > current_channel {
-                    channel - current_channel
-                } else {
-                    current_channel - channel
-                };
+                let distance = channel.abs_diff(current_channel);
 
                 if distance < closest_distance && distance != 0 {
                     closest_distance = distance;
@@ -1212,7 +1208,7 @@ impl OxideRuntime {
 
         for target in self.target_data.targets.get_ref() {
             match target {
-                Target::MAC(tgt) => {
+                Target::Mac(tgt) => {
                     if self
                         .handshake_storage
                         .has_complete_handshake_for_ap(&tgt.addr)
@@ -1222,7 +1218,7 @@ impl OxideRuntime {
                         all_completes.push(false);
                     }
                 }
-                Target::SSID(tgt) => {
+                Target::Ssid(tgt) => {
                     if let Some(ap) = self.access_points.get_device_by_ssid(&tgt.ssid) {
                         if self
                             .handshake_storage
@@ -1259,8 +1255,8 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let packet_id = oxide.counters.packet_id();
 
     // Get Channel Values
-    let current_freq = oxide.if_hardware.interface.frequency.clone();
-    let current_channel_opt = oxide.if_hardware.interface.channel.clone();
+    let current_freq = oxide.if_hardware.interface.frequency;
+    let current_channel_opt = oxide.if_hardware.interface.channel;
 
     if current_channel_opt.is_none() {
         panic!("Channel is None. Current Frequency: {current_freq:?}");
@@ -1274,7 +1270,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
 
-    let fcs = radiotap.flags.map_or(false, |flags| flags.fcs);
+    let fcs = radiotap.flags.is_some_and(|flags| flags.fcs);
     let gps_data = oxide.file_data.gps_source.get_gps();
     let source: MacAddress;
     let destination: MacAddress;
@@ -1348,7 +1344,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         };
 
                         // No SSID, send a probe request. This is low-key so don't increment interactions for this AP.
-                        if !ap.ssid.clone().is_some_and(|ssid| !ssid.is_empty())
+                        if ap.ssid.clone().is_none_or(|ssid| ssid.is_empty())
                             && !oxide.config.notx
                             && ap.beacon_count % 200 == 0
                         {
@@ -1400,20 +1396,17 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                     if client_mac.is_real_device() && client_mac != oxide.target_data.rogue_client {
                         if !ap_mac.is_broadcast() {
                             // Directed probe request
-                            match ssid {
-                                Some(ssid) => {
-                                    // Add to unassoc clients.
-                                    oxide.unassoc_clients.add_or_update_device(
+                            if let Some(ssid) = ssid {
+                                // Add to unassoc clients.
+                                oxide.unassoc_clients.add_or_update_device(
+                                    client_mac,
+                                    &Station::new_unassoc_station(
                                         client_mac,
-                                        &Station::new_unassoc_station(
-                                            client_mac,
-                                            signal_strength,
-                                            vec![ssid.to_string()],
-                                            oxide.file_data.oui_database.search(&client_mac),
-                                        ),
-                                    );
-                                }
-                                None => {}
+                                        signal_strength,
+                                        vec![ssid.to_string()],
+                                        oxide.file_data.oui_database.search(&client_mac),
+                                    ),
+                                );
                             }
                             // Probe request attack - Begin our RogueM2 attack procedure.
                             rogue_m2_attack_directed(oxide, probe_request_frame)?;
@@ -3132,11 +3125,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 oxide
                                     .target_data
                                     .targets
-                                    .add(Target::MAC(targets::TargetMAC {
+                                    .add(Target::Mac(targets::TargetMAC {
                                         addr: ap.mac_address,
                                     }));
                                 if let Some(ssid) = &ap.ssid {
-                                    oxide.target_data.targets.add(Target::SSID(
+                                    oxide.target_data.targets.add(Target::Ssid(
                                         targets::TargetSSID {
                                             ssid: ssid.to_string(),
                                         },

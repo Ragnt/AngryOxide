@@ -48,6 +48,7 @@ pub struct Band(WiFiBand);
 
 #[cfg(target_os = "linux")]
 impl Band {
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_u8(&self) -> u8 {
         match self.0 {
             WiFiBand::Band2GHz => 0,
@@ -164,6 +165,7 @@ impl Interface {
 
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(clippy::enum_variant_names)]
 pub enum Band {
     Band2_4GHz,
     Band5GHz,
@@ -188,6 +190,7 @@ impl std::fmt::Display for Band {
 
 #[cfg(target_os = "macos")]
 impl Band {
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_u8(&self) -> u8 {
         match self {
             Band::Band2_4GHz => 0,
@@ -545,7 +548,6 @@ pub enum Nl80211Iftype {
     IftypeOcb,
     IftypeNan,
 }
-
 
 // Channel/frequency conversion functions
 #[cfg(target_os = "linux")]

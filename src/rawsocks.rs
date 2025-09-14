@@ -1,4 +1,3 @@
-
 #[cfg(target_os = "linux")]
 pub use linux_impl::{open_socket_rx, open_socket_tx};
 

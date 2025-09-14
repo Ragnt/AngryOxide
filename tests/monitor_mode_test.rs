@@ -3,12 +3,10 @@
 #[cfg(test)]
 mod monitor_mode_tests {
     #[cfg(target_os = "macos")]
-    use angry_oxide::airport::{
-        check_monitor_capability, disassociate, get_current_channel, set_channel,
-    };
+    use angry_oxide::airport::{check_monitor_capability, disassociate, get_current_channel};
 
     #[cfg(target_os = "macos")]
-    use angry_oxide::interface::{Nl80211Mock, Phy};
+    use angry_oxide::interface::Nl80211Mock;
 
     use std::process::Command;
 
@@ -86,7 +84,7 @@ mod monitor_mode_tests {
     fn test_linux_build_unaffected() {
         // This test ensures Linux builds still work
         // It doesn't need to do anything complex, just compile and run
-        assert!(true, "Linux build test passed");
+        // Linux build test passed
     }
 
     #[test]
@@ -181,17 +179,14 @@ mod monitor_mode_tests {
 
         #[cfg(target_os = "macos")]
         {
-            use angry_oxide::airport;
-            use angry_oxide::rawsocks;
             // If these modules compile, our conditional compilation works
         }
 
         #[cfg(target_os = "linux")]
         {
-            use angry_oxide::rawsocks;
             // Linux-specific modules should still compile
         }
 
-        assert!(true, "Cross-platform compilation successful");
+        // Cross-platform compilation successful
     }
 }

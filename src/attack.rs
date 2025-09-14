@@ -173,7 +173,6 @@ pub fn disassoc_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<
 
         if ap_data
             .channel
-            .clone()
             .is_some_and(|f| f.0 == WiFiBand::Band6GHz)
         {
             let frx = build_disassocation_from_ap(

@@ -18,5 +18,5 @@ fn test_platform_detection() {
 #[test]
 fn test_build_succeeds() {
     // This test just ensures the build completes successfully
-    assert!(true, "Build completed successfully");
+    // Build completed successfully
 }

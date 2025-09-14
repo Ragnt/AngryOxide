@@ -535,7 +535,7 @@ fn create_keybind_popup(frame: &mut Frame<'_>, area: Rect) {
 }
 
 fn repeat_char(c: char, count: usize) -> String {
-    std::iter::repeat(c).take(count).collect()
+    std::iter::repeat_n(c, count).collect()
 }
 
 fn repeat_dot(count: usize) -> String {
@@ -640,7 +640,7 @@ fn create_status_bar(
         }
         #[cfg(target_os = "macos")]
         {
-            oxide.if_hardware.interface.mac.clone()
+            oxide.if_hardware.interface.mac
         }
     });
 

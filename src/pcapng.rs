@@ -43,6 +43,7 @@ pub struct FrameData {
 }
 
 impl FrameData {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         timestamp: SystemTime,
         packetid: u64,
@@ -129,7 +130,7 @@ impl PcapWriter {
 
         let mut pcap_writer = PcapNgWriter::with_section_header(file, shb).unwrap();
 
-        let mac = interface.mac.clone();
+        let mac = interface.mac;
         let interface = InterfaceDescriptionBlock {
             linktype: DataLink::IEEE802_11_RADIOTAP,
             snaplen: 0x0000,

@@ -146,6 +146,7 @@ impl Default for AccessPoint {
 }
 
 impl AccessPoint {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
@@ -162,11 +163,7 @@ impl AccessPoint {
             .expect("Time went backwards")
             .as_secs();
 
-        let chan = if let Some(channel) = channel {
-            Some((channel.0, channel.1))
-        } else {
-            None
-        };
+        let chan = channel.map(|channel| (channel.0, channel.1));
 
         AccessPoint {
             mac_address,
@@ -189,6 +186,7 @@ impl AccessPoint {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_clients(
         mac_address: MacAddress,
         last_signal_strength: AntennaSignal,
@@ -205,11 +203,7 @@ impl AccessPoint {
             .expect("Time went backwards")
             .as_secs();
 
-        let chan = if let Some(channel) = channel {
-            Some((channel.0, channel.1))
-        } else {
-            None
-        };
+        let chan = channel.map(|channel| (channel.0, channel.1));
 
         AccessPoint {
             mac_address,
@@ -250,12 +244,12 @@ impl AccessPoint {
             .map(|ssid| ssid.replace('\0', ""));
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
-            Some((band.clone(), channel as u32))
+            Some((*band, channel as u32))
         } else {
             station_info
                 .ht_information
                 .as_ref()
-                .map(|ht_info| (band.clone(), ht_info.primary_channel as u32))
+                .map(|ht_info| (*band, ht_info.primary_channel as u32))
         };
 
         Ok(AccessPoint::new(
@@ -329,12 +323,12 @@ impl AccessPoint {
             .map(|nssid| nssid.replace('\0', ""));
 
         let channel = if let Some(channel) = station_info.ds_parameter_set {
-            Some((band.clone(), channel as u32))
+            Some((*band, channel as u32))
         } else {
             station_info
                 .ht_information
                 .as_ref()
-                .map(|ht_info| (band.clone(), ht_info.primary_channel as u32))
+                .map(|ht_info| (*band, ht_info.primary_channel as u32))
         };
 
         Ok(AccessPoint::new(
@@ -724,7 +718,7 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
         T: HasSSID,
     {
         self.devices.values_mut().find_map(|x: &mut T| {
-            if x.ssid().as_ref().map_or(false, |f| f == ssid) {
+            if x.ssid().as_ref().is_some_and(|f| f == ssid) {
                 Some(x)
             } else {
                 None
@@ -777,8 +771,8 @@ impl WiFiDeviceList<AccessPoint> {
     pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool) {
         let mut access_points: Vec<AccessPoint> = self
             .get_devices()
-            .iter()
-            .map(|(_, access_point)| access_point.clone())
+            .values()
+            .cloned()
             .collect();
 
         match sort {
@@ -807,10 +801,9 @@ impl WiFiDeviceList<AccessPoint> {
             }),
             1 => access_points.sort_by(|a, b| {
                 b.channel
-                    .clone()
                     .unwrap_or((WiFiBand::Unknown, 0))
                     .1
-                    .cmp(&a.channel.clone().unwrap_or((WiFiBand::Unknown, 0)).1)
+                    .cmp(&a.channel.unwrap_or((WiFiBand::Unknown, 0)).1)
             }), // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI
@@ -880,7 +873,7 @@ impl WiFiDeviceList<AccessPoint> {
 
             // Update the channel
             if new_ap.channel.is_some() {
-                ap.channel = new_ap.channel.clone();
+                ap.channel = new_ap.channel;
             }
 
             // Update clients
@@ -1136,8 +1129,8 @@ impl WiFiDeviceList<Station> {
     pub fn sort_devices(&mut self, sort: u8, sort_reverse: bool) {
         let mut stations: Vec<_> = self
             .get_devices()
-            .iter()
-            .map(|(_, station)| station.clone())
+            .values()
+            .cloned()
             .collect();
 
         match sort {

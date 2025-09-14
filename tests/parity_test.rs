@@ -24,5 +24,5 @@ fn test_feature_parity() {
         println!("✅ Running on Linux - all features natively supported");
     }
 
-    assert!(true, "Feature parity achieved!");
+    // Feature parity achieved!
 }
