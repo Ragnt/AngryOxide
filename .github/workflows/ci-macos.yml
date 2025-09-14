@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-12, macos-13, macos-14]  # Intel and Apple Silicon
+        os: [macos-13, macos-14]  # Intel and Apple Silicon
         rust: [stable, nightly]
 
     steps:

@@ -58,7 +58,7 @@ use crate::interface::{
     Band as WiFiBand, Interface, Nl80211, Nl80211Iftype,
 };
 
-#[cfg(target_os = "linux")]
+#[allow(unused_imports)] // This trait is used for name_as_string() method
 use crate::interface::InterfaceExt;
 
 use flate2::write::GzEncoder;
@@ -465,6 +465,9 @@ impl OxideRuntime {
 
         // Get + Setup Interface
 
+        #[cfg(target_os = "linux")]
+        let mut netlink = get_nl80211().expect("Cannot open Nl80211");
+        #[cfg(target_os = "macos")]
         let netlink = get_nl80211().expect("Cannot open Nl80211");
 
         // Need to ensure the channels available here are validated
@@ -889,6 +892,9 @@ impl OxideRuntime {
         // Put interface into the right mode
         thread::sleep(Duration::from_secs(1));
         println!("💲 Setting {} down.", interface_name);
+        #[cfg(target_os = "linux")]
+        netlink.set_interface_down(idx as u32).ok();
+        #[cfg(target_os = "macos")]
         netlink.set_interface_down(idx).ok();
         thread::sleep(Duration::from_millis(500));
 
@@ -908,6 +914,9 @@ impl OxideRuntime {
         } else {
             println!("💲 Randomizing {} mac to {}", interface_name, rogue_client);
         }
+        #[cfg(target_os = "linux")]
+        netlink.set_interface_mac(idx as u32, &rogue_client.0).ok();
+        #[cfg(target_os = "macos")]
         netlink.set_interface_mac(idx, &rogue_client.0).ok();
 
         thread::sleep(Duration::from_millis(500));
@@ -2876,7 +2885,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 #[cfg(target_os = "linux")]
                 let result = oxide.if_hardware.netlink.set_interface_chan(
                     idx as u32,
-                    channel as u32,
+                    channel,
                     band,
                 );
 

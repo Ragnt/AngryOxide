@@ -60,9 +60,6 @@ impl Band {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{:?}", self.0)
-    }
 
     pub fn from_u8(val: u8) -> Self {
         match val {
