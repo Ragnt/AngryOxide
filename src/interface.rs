@@ -74,11 +74,11 @@ impl Band {
         }
     }
 
-    pub const Unknown: Band = Band(WiFiBand::Band2GHz); // Placeholder for Unknown
-    pub const Band2_4GHz: Band = Band(WiFiBand::Band2GHz);
-    pub const Band5GHz: Band = Band(WiFiBand::Band5GHz);
-    pub const Band6GHz: Band = Band(WiFiBand::Band6GHz);
-    pub const Band60GHz: Band = Band(WiFiBand::Band60GHz);
+    pub const UNKNOWN: Band = Band(WiFiBand::Band2GHz); // Placeholder for Unknown
+    pub const BAND_2_4_GHZ: Band = Band(WiFiBand::Band2GHz);
+    pub const BAND_5_GHZ: Band = Band(WiFiBand::Band5GHz);
+    pub const BAND_6_GHZ: Band = Band(WiFiBand::Band6GHz);
+    pub const BAND_60_GHZ: Band = Band(WiFiBand::Band60GHz);
 }
 
 #[cfg(target_os = "linux")]
@@ -92,6 +92,20 @@ impl From<WiFiBand> for Band {
 impl From<Band> for WiFiBand {
     fn from(band: Band) -> Self {
         band.0
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl std::fmt::Display for Band {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let band_str = match self.0 {
+            WiFiBand::Band2GHz => "2.4GHz",
+            WiFiBand::Band5GHz => "5GHz",
+            WiFiBand::Band6GHz => "6GHz",
+            WiFiBand::Band60GHz => "60GHz",
+            _ => "Unknown",
+        };
+        write!(f, "{}", band_str)
     }
 }
 
@@ -227,6 +241,13 @@ impl Band {
             _ => Band::Unknown,
         }
     }
+
+    // Constants for consistency with Linux
+    pub const UNKNOWN: Band = Band::Unknown;
+    pub const BAND_2_4_GHZ: Band = Band::Band2_4GHz;
+    pub const BAND_5_GHZ: Band = Band::Band5GHz;
+    pub const BAND_6_GHZ: Band = Band::Band6GHz;
+    pub const BAND_60_GHZ: Band = Band::Band60GHz;
 }
 
 // Platform-specific implementations

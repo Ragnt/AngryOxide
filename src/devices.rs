@@ -801,9 +801,9 @@ impl WiFiDeviceList<AccessPoint> {
             }),
             1 => access_points.sort_by(|a, b| {
                 b.channel
-                    .unwrap_or((WiFiBand::Unknown, 0))
+                    .unwrap_or((WiFiBand::UNKNOWN, 0))
                     .1
-                    .cmp(&a.channel.unwrap_or((WiFiBand::Unknown, 0)).1)
+                    .cmp(&a.channel.unwrap_or((WiFiBand::UNKNOWN, 0)).1)
             }), // CH
             2 => access_points.sort_by(|a, b| {
                 // RSSI

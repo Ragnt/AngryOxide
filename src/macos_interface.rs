@@ -69,12 +69,12 @@ pub fn get_interface_info_macos(ifindex: i32) -> Result<Interface, String> {
         };
 
         // Get interface flags to determine mode
-        let mut mode = None;
+        let mut _mode = None;
         let mut current_iftype = None;
         if ioctl(sock, SIOCGIFFLAGS as _, &mut ifr) == 0 {
             let flags = ifr.ifr_ifru.ifru_flags;
             if flags & IFF_UP != 0 {
-                mode = Some(1); // Interface is up
+                _mode = Some(1); // Interface is up
             }
             if flags & IFF_PROMISC != 0 {
                 current_iftype = Some(Nl80211Iftype::IftypeMonitor);

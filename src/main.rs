@@ -1109,7 +1109,7 @@ impl OxideRuntime {
         let if_hardware = IfHardware {
             netlink,
             original_address,
-            current_band: WiFiBand::Unknown,
+            current_band: WiFiBand::UNKNOWN,
             current_channel: 0,
             hop_channels,
             hop_interval,
@@ -1265,7 +1265,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let current_channel = current_channel_opt.unwrap() as u8;
     oxide.if_hardware.current_channel = current_channel as u32;
     oxide.if_hardware.current_band =
-        frequency_to_band(current_freq.unwrap()).unwrap_or(WiFiBand::Band2_4GHz);
+        frequency_to_band(current_freq.unwrap()).unwrap_or(WiFiBand::BAND_2_4_GHZ);
 
     let band = &oxide.if_hardware.current_band;
     let payload = &packet[radiotap.header.length..];
