@@ -24,7 +24,7 @@ _angryoxide() {
         '--whitelist[Optional - File to load whitelist entries from]:whitelist file:_files' \
         '(-r --rate)'{-r,--rate}'[Optional - Attack rate (1, 2, 3)]:rate:(1 2 3)' \
         '--combine[Optional - Combine all hc22000 files into one large file for bulk processing]' \
-        '--noactive[Optional - Disable Active Monitor mode]' \
+        '--active[Optional - Enable Active Monitor mode]' \
         '--rogue[Optional - Tx MAC for rogue-based attacks]:MAC Address:' \
         '--gpsd[Optional - Alter default HOST:Port for GPSD connection]:GPSD Host:Port:' \
         '--autohunt[Optional - AO will auto-hunt all channels then lock in]' \

@@ -100,7 +100,7 @@ Targeting:
 Advanced Options:
   -r, --rate <Attack Rate>            Optional - Attack rate (1, 2, 3 || 3 is most aggressive) [default: 2]
       --combine                       Optional - Combine all hc22000 files into one large file for bulk processing
-      --noactive                      Optional - Disable Active Monitor mode
+      --active                        Optional - Use Active Monitor mode - WARNING, may cause bugs.
       --rogue <MAC Address>           Optional - Tx MAC for rogue-based attacks - will randomize if excluded
       --gpsd <GPSD Host:Port>         Optional - Alter default HOST:Port for GPSD connection [default: 127.0.0.1:2947]
       --autohunt                      Optional - AO will auto-hunt all channels then lock in on the ones targets are on

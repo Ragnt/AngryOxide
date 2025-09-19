@@ -22,7 +22,7 @@ _angryoxide()
 
     if [[ $cword -eq 1 ]]; then
         if [[ $cur == --* ]]; then
-            COMPREPLY=( $( compgen -W '--interface --channel --band --output --help --version --target-entry --whitelist-entry --targetlist --rate --combine --noactive --rogue --gpsd --autohunt --headless --autoexit --notransmit --notar --disablemouse --dwell --geofence --center --distance --geofence-timeout --disable-deauth --disable-pmkid --disable-anon --disable-csa --disable-disassoc --disable-roguem2' -- "$cur" ) )
+            COMPREPLY=( $( compgen -W '--interface --channel --band --output --help --version --target-entry --whitelist-entry --targetlist --rate --combine --active --rogue --gpsd --autohunt --headless --autoexit --notransmit --notar --disablemouse --dwell --geofence --center --distance --geofence-timeout --disable-deauth --disable-pmkid --disable-anon --disable-csa --disable-disassoc --disable-roguem2' -- "$cur" ) )
         elif [[ $cur == -* ]]; then
             COMPREPLY=( $( compgen -W '-i -c -b -o -h -V -t -w -r' -- "$cur" ) )
         fi

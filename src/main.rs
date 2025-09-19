@@ -105,7 +105,7 @@ use clap::{ArgAction, Parser};
 
 #[derive(Parser)]
 #[command(name = "AngryOxide")]
-#[command(author = "Ryan Butler (rage)")]
+#[command(author = "Ryan Butler (rage) plus other greate contributors!")]
 #[command(about = "Does awesome things... with wifi.", long_about = None)]
 #[command(version)]
 struct Arguments {
@@ -151,7 +151,7 @@ struct Arguments {
 
     /// Optional - Disable Active Monitor mode.
     #[arg(long, help_heading = "Advanced Options")]
-    noactive: bool,
+    active: bool,
 
     /// Optional - Tx MAC for rogue-based attacks - will randomize if excluded.
     #[arg(long, help_heading = "Advanced Options", name = "MAC Address")]
@@ -864,7 +864,7 @@ impl OxideRuntime {
         println!(
             "💲 Setting {} to Monitor mode. (\"active\" flag: {})",
             interface_name,
-            (iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive)
+            (iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && cli_args.active)
         );
 
         if iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive {
