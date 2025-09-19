@@ -267,7 +267,7 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
 
     // Make an authentication frame (no_ack), so we don't over-send.
     // This will flip between sending params and not sending, hopefully one of them works.
-    let frx = if oxide.counters.seq2 % 2 == 0 {
+    let frx = if oxide.counters.seq2.is_multiple_of(2) {
         build_authentication_frame_noack(
             ap_mac,
             &oxide.target_data.rogue_client,

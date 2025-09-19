@@ -156,7 +156,7 @@ impl GpsData {
         header[6..8].copy_from_slice(&length.to_ne_bytes());
 
         // Padding data to 32 bits
-        let next_multiple_of_4 = if data.len() % 4 == 0 {
+        let next_multiple_of_4 = if data.len().is_multiple_of(4) {
             data.len() // if it's already a multiple of 4, no need to pad
         } else {
             (data.len() / 4 + 1) * 4 // next multiple of 4

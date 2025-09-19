@@ -2,8 +2,8 @@
 members = ["libs/libwifi", "libs/libwifi_macros", "libs/pcap-file"]
 
 [workspace.package]
-version = "0.8.33"
-authors = ["Ryan Butler"]
+version = "0.9.0"
+authors = ["Ryan Butler, others"]
 description = "80211 Attack Tool"
 license = "GPL"
 edition = "2021"

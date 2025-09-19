@@ -1229,7 +1229,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
     let destination: MacAddress;
 
     // Send a probe request out there every 200 beacons.
-    if oxide.counters.beacons % 200 == 0 && !oxide.config.notx {
+    if oxide.counters.beacons.is_multiple_of(200) && !oxide.config.notx {
         let frx = build_probe_request_undirected(
             &oxide.target_data.rogue_client,
             oxide.counters.sequence2(),
@@ -1299,7 +1299,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         // No SSID, send a probe request. This is low-key so don't increment interactions for this AP.
                         if !ap.ssid.clone().is_some_and(|ssid| !ssid.is_empty())
                             && !oxide.config.notx
-                            && ap.beacon_count % 200 == 0
+                            && ap.beacon_count.is_multiple_of(200)
                         {
                             let frx = build_probe_request_target(
                                 &oxide.target_data.rogue_client,
