@@ -94,7 +94,7 @@ impl<'a> RawBlock<'a> {
 
         // Section Header parsing
         fn inner_parse<B: ByteOrder>(slice: &[u8], type_: u32, initial_len: u32) -> Result<(&[u8], RawBlock<'_>), PcapError> {
-            if (initial_len % 4) != 0 {
+            if !initial_len.is_multiple_of(4) {
                 return Err(PcapError::InvalidField("Block: (initial_len % 4) != 0"));
             }
 
