@@ -867,7 +867,7 @@ impl OxideRuntime {
             (iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && cli_args.active)
         );
 
-        if iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && !cli_args.noactive {
+        if iface.phy.clone().unwrap().active_monitor.is_some_and(|x| x) && cli_args.active {
             netlink.set_interface_monitor(true, idx).ok();
         } else {
             netlink.set_interface_monitor(false, idx).ok();
