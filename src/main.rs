@@ -1,3 +1,4 @@
+#![feature(unsigned_is_multiple_of)]
 #![allow(dead_code)]
 mod advancedtable;
 mod ascii;

@@ -1,3 +1,4 @@
+#![feature(unsigned_is_multiple_of)]
 #![allow(clippy::unreadable_literal)]
 
 //! Provides parsers, readers and writers for Pcap and PcapNg files.
