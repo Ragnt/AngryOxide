@@ -22,37 +22,37 @@ jobs:
       matrix:
         platform:
           - os_name: Linux-x86_64
-            os: ubuntu-20.04
+            os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin: angryoxide
             name: angryoxide-linux-x86_64.tar.gz
 
           - os_name: Linux-x86_64_musl
-            os: ubuntu-20.04
+            os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             bin: angryoxide
             name: angryoxide-linux-x86_64-musl.tar.gz
 
           - os_name: Linux-aarch64
-            os: ubuntu-20.04
+            os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             bin: angryoxide
             name: angryoxide-linux-aarch64-musl.tar.gz
 
           - os_name: Linux-arm
-            os: ubuntu-20.04
+            os: ubuntu-latest
             target: arm-unknown-linux-musleabi
             bin: angryoxide
             name: angryoxide-linux-arm-musl.tar.gz
 
           - os_name: Linux-armv7hf
-            os: ubuntu-20.04
+            os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             bin: angryoxide
             name: angryoxide-linux-armv7hf-musl.tar.gz
 
           - os_name: Linux-aarch64-gnu
-            os: ubuntu-20.04
+            os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             bin: angryoxide
             name: angryoxide-linux-aarch64-gnu.tar.gz
