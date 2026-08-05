@@ -492,6 +492,13 @@ impl APFlags {
             || self.wpa_akm_psk.unwrap_or(false)
     }
 
+    // Returns true when the AP advertises both SAE and PSK AKMs in the same RSN IE,
+    // which is the definition of WPA3-SAE Transition Mode.  The AP will accept WPA2
+    // associations (PSK-only RSN), making a PMKID downgrade attack possible.
+    pub fn is_sae_transition_mode(&self) -> bool {
+        self.rsn_akm_sae.unwrap_or(false) && self.rsn_akm_psk.unwrap_or(false)
+    }
+
     // Function to update capabilities with non-None values from another instance
     pub fn update_with(&mut self, other: &APFlags) {
         if let Some(val) = other.apie_essid {
