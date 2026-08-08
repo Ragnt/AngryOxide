@@ -2178,7 +2178,7 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
         Err(err) => {
             match err {
                 libwifi::error::Error::Failure(message, _data) => match &message[..] {
-                    "An error occured while parsing the data: nom::ErrorKind is Eof" => {}
+                    "An error occurred while parsing the data: nom::ErrorKind is Eof" => {}
                     _ => {
                         oxide.status_log.add_message(StatusMessage::new(
                             MessageType::Error,
