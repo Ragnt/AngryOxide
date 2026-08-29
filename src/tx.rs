@@ -664,6 +664,49 @@ pub fn build_probe_request_directed(
     rth
 }
 
+// Unicast probe request sent directly to a specific AP, carrying its SSID.
+// The AP responds with a probe response containing its full RSN IE, which may
+// reveal PSK support that was absent from its beacon (transition mode discovery).
+pub fn build_probe_request_ap_ssid(
+    ap_mac: &MacAddress,
+    our_mac: &MacAddress,
+    ssid: &String,
+    sequence: u16,
+) -> Vec<u8> {
+    let mut rth: Vec<u8> = RTH_NO_ACK.to_vec();
+
+    let frame_control = FrameControl {
+        protocol_version: 0,
+        frame_type: libwifi::FrameType::Management,
+        frame_subtype: libwifi::FrameSubType::ProbeRequest,
+        flags: 0u8,
+    };
+
+    let header: ManagementHeader = ManagementHeader {
+        frame_control,
+        duration: [0x3a, 0x01],
+        address_1: *ap_mac,
+        address_2: *our_mac,
+        address_3: *ap_mac,
+        sequence_control: SequenceControl {
+            fragment_number: 0u8,
+            sequence_number: sequence,
+        },
+    };
+
+    let frx = ProbeRequest {
+        header,
+        station_info: StationInfo {
+            supported_rates: RATES.to_vec(),
+            extended_supported_rates: Some(EXT_RATES.to_vec()),
+            ssid: Some(ssid.to_string()),
+            ..Default::default()
+        },
+    };
+    rth.extend(frx.encode());
+    rth
+}
+
 // Remember this is coming from an AP - this is a part of being rogue"
 pub fn build_probe_response(
     addr_client: &MacAddress,
