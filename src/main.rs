@@ -25,6 +25,7 @@ use anyhow::Result;
 use attack::{
     anon_reassociation_attack, csa_attack, deauth_attack, disassoc_attack, m1_retrieval_attack,
     m1_retrieval_attack_phase_2, rogue_m2_attack_directed, rogue_m2_attack_undirected,
+    transition_probe_attack,
 };
 
 use chrono::Local;
@@ -1314,6 +1315,13 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                         }
                         beacon_count = ap.beacon_count;
                     }
+
+                    // For SAE-advertising APs where PSK support is not yet confirmed,
+                    // probe the AP directly to fetch its full RSN IE.  If the probe
+                    // response reveals PSK the AP is in WPA3-SAE Transition Mode and
+                    // m1_retrieval_attack will fire immediately from the probe response
+                    // handler below (main.rs:1464).
+                    let _ = transition_probe_attack(oxide, &bssid);
 
                     // Always try M1 Retrieval
                     // it is running it's own internal rate limiting.
