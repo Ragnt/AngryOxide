@@ -71,6 +71,26 @@ Will by default attack ALL access points in range, unless atleast one target is 
 
 All of these attacks are rate-controlled both to prevent erroneous EAPOL timer resets and to maintain some level of operational security.
 
+## Interpreting AP-less hc22000 records
+
+For `WPA*02` records, the final `MESSAGEPAIR` field is a hexadecimal
+bitmask. AngryOxide sets bit `0x10` for AP-less captures. Test that bit
+(`message_pair & 0x10`), rather than comparing the whole value with `10`,
+because other flags may also be present. This interpretation applies to
+`WPA*02` EAPOL records, not `WPA*01` PMKID records.
+
+In the RogueM2 path, `MAC_AP` is AngryOxide's rogue MAC and the ESSID comes
+from the association tracked for that client. Multiple client/ESSID
+combinations can therefore share `MAC_AP` during one run. That shared
+address does not identify a common infrastructure access point, nor does
+the record imply that all four handshake messages were observed.
+
+Downstream tools should preserve the AP-less flag, ESSID and client
+address when interpreting these records. Do not join recovered results
+onto every ESSID sharing `MAC_AP`, or infer that one recovered passphrase
+belongs to all those networks. Keep recovery attribution tied to the
+corresponding capture and network identity.
+
 ## Help
 
 ```
