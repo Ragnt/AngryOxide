@@ -186,6 +186,18 @@ impl WhiteList {
         matches
     }
 
+    /// True when an SSID entry matches `ssid`, whether or not an AP with that
+    /// SSID has been seen. Check this before answering for an SSID (the rogue
+    /// M2 attack), when the real AP may not be in the access point list. An
+    /// entry given as a MAC counts once its AP has been seen, which adds the
+    /// AP's SSID to the list.
+    pub fn matches_ssid(&self, ssid: &str) -> bool {
+        self.devices.iter().any(|device| match device {
+            White::SSID(tgt) => ssid_entry_matches(&tgt.ssid, ssid),
+            White::MAC(_) => false,
+        })
+    }
+
     pub fn is_whitelisted_mac(&self, mac: &MacAddress) -> bool {
         if self.empty() {
             return true;
@@ -266,6 +278,7 @@ impl WhiteList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     fn ap_with_ssid(ssid: &str) -> AccessPoint {
         let mut ap = AccessPoint::default();
@@ -287,5 +300,33 @@ mod tests {
         let entry = WhiteSSID::new("Cafe [Guest");
         assert!(entry.whitelist_match(&ap_with_ssid("Cafe [Guest")));
         assert!(!entry.whitelist_match(&ap_with_ssid("Cafe Guest")));
+    }
+
+    #[test]
+    fn matches_ssid_needs_no_ap() {
+        let list = WhiteList::from_vec(vec![
+            White::SSID(WhiteSSID::new("My Network")),
+            White::SSID(WhiteSSID::new("Cafe*")),
+        ]);
+        assert!(list.matches_ssid("My Network"));
+        assert!(list.matches_ssid("Cafe Guest"));
+        assert!(!list.matches_ssid("Library WiFi"));
+    }
+
+    #[test]
+    fn an_empty_whitelist_matches_no_ssid() {
+        assert!(!WhiteList::new().matches_ssid("My Network"));
+    }
+
+    #[test]
+    fn a_mac_entry_matches_its_ssid_once_its_ap_is_seen() {
+        let mac = MacAddress::from_str("00:00:5E:00:53:01").unwrap();
+        let mut list = WhiteList::from_vec(vec![White::MAC(WhiteMAC::new(mac))]);
+        assert!(!list.matches_ssid("My Network"));
+
+        let mut ap = ap_with_ssid("My Network");
+        ap.mac_address = mac;
+        assert!(list.is_whitelisted(&mut ap));
+        assert!(list.matches_ssid("My Network"));
     }
 }

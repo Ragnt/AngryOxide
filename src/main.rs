@@ -1705,11 +1705,14 @@ fn process_frame(oxide: &mut OxideRuntime, packet: &[u8]) -> Result<(), String> 
                             ),
                         );
 
+                        let rogue_ssid = ssid.unwrap_or("".to_string());
+                        // A client may ask our rogue AP for a whitelisted SSID
+                        // however it found it: never answer for one.
                         if ap_mac == oxide.target_data.rogue_client
                             && !oxide.config.disable_roguem2
                             && !oxide.config.notx
+                            && !oxide.target_data.whitelist.matches_ssid(&rogue_ssid)
                         {
-                            let rogue_ssid = ssid.unwrap_or("".to_string());
                             // We need to send an association response back
                             let frx = build_association_response(
                                 &client_mac,
