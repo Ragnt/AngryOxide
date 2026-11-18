@@ -13,16 +13,20 @@ pub struct WhiteSSID {
     pub ssid: String,
 }
 
+/// Does a whitelist SSID entry match this SSID? Entries are glob patterns; an
+/// entry that isn't a valid pattern (an SSID with an unclosed `[`, say)
+/// matches only that exact SSID.
+fn ssid_entry_matches(entry: &str, ssid: &str) -> bool {
+    match Glob::new(entry) {
+        Ok(glob) => glob.compile_matcher().is_match(ssid),
+        Err(_) => entry == ssid,
+    }
+}
+
 impl IsWhitelisted for WhiteSSID {
     fn whitelist_match(&self, ap: &AccessPoint) -> bool {
-        if let Some(ssid) = ap.ssid.clone() {
-            if Glob::new(&self.ssid)
-                .unwrap()
-                .compile_matcher()
-                .is_match(ssid)
-            {
-                return true;
-            }
+        if let Some(ssid) = &ap.ssid {
+            return ssid_entry_matches(&self.ssid, ssid);
         }
         false
     }
@@ -256,5 +260,32 @@ impl WhiteList {
 
     pub fn get_ref(&self) -> &Vec<White> {
         &self.devices
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ap_with_ssid(ssid: &str) -> AccessPoint {
+        let mut ap = AccessPoint::default();
+        ap.ssid = Some(ssid.to_owned());
+        ap
+    }
+
+    #[test]
+    fn ssid_entries_are_glob_patterns() {
+        assert!(WhiteSSID::new("My Network").whitelist_match(&ap_with_ssid("My Network")));
+        assert!(WhiteSSID::new("Cafe*").whitelist_match(&ap_with_ssid("Cafe Guest")));
+        assert!(!WhiteSSID::new("My Network").whitelist_match(&ap_with_ssid("Library WiFi")));
+    }
+
+    #[test]
+    fn an_entry_that_is_not_a_pattern_matches_itself() {
+        // Not a valid glob: Glob::new(...).unwrap() used to panic on it.
+        assert!(Glob::new("Cafe [Guest").is_err());
+        let entry = WhiteSSID::new("Cafe [Guest");
+        assert!(entry.whitelist_match(&ap_with_ssid("Cafe [Guest")));
+        assert!(!entry.whitelist_match(&ap_with_ssid("Cafe Guest")));
     }
 }
