@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use globset::Glob;
 use libwifi::frame::components::WpsInformation;
 use libwifi::frame::{EapolKey, KeyInformation};
 use radiotap::field::ext::TimeUnit;
@@ -202,6 +203,16 @@ pub fn sanitize_essid(filename: &str) -> String {
         .collect()
 }
 
+/// Does an SSID pattern (a glob, as given with --target) match this SSID? A
+/// pattern that isn't a valid glob (an SSID with an unclosed `[`, say) matches
+/// only that exact SSID.
+pub fn ssid_matches_pattern(pattern: &str, ssid: &str) -> bool {
+    match Glob::new(pattern) {
+        Ok(glob) => glob.compile_matcher().is_match(ssid),
+        Err(_) => pattern == ssid,
+    }
+}
+
 pub fn strip_comment(line: &str) -> &str {
     line.split_once('#')
         .map(|(line_without_comment, _)| line_without_comment)
@@ -212,6 +223,21 @@ pub fn strip_comment(line: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ssid_patterns_are_globs() {
+        assert!(ssid_matches_pattern("My Network", "My Network"));
+        assert!(ssid_matches_pattern("Cafe*", "Cafe Guest"));
+        assert!(!ssid_matches_pattern("Cafe*", "Library WiFi"));
+    }
+
+    #[test]
+    fn a_pattern_that_is_not_a_glob_matches_itself() {
+        // Not a valid glob: Glob::new(...).unwrap() used to panic on it.
+        assert!(Glob::new("Cafe [Guest").is_err());
+        assert!(ssid_matches_pattern("Cafe [Guest", "Cafe [Guest"));
+        assert!(!ssid_matches_pattern("Cafe [Guest", "Cafe Guest"));
+    }
 
     #[test]
     fn test_sanitize_filename() {
