@@ -1,7 +1,7 @@
 use nl80211_ng::Interface;
 
 use rusqlite::{params, Connection, Result};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{
     sync::{
         self,
@@ -13,6 +13,17 @@ use std::{
 };
 
 use crate::pcapng::FrameData;
+
+/// Most frames written in one transaction. The writer takes whatever is queued
+/// (up to this many) and inserts it in a single transaction, so a busy channel
+/// costs one commit, and one journal sync, per batch instead of one per frame.
+/// On an SD card a commit per frame managed about 66 frames a second while a
+/// busy area delivered over 200, so the queue (and memory) grew for as long as
+/// capture ran.
+const BATCH_MAX: usize = 2000;
+
+/// How long stop() may spend writing frames still queued when it is called.
+const STOP_FLUSH: Duration = Duration::from_secs(2);
 
 pub struct DatabaseWriter {
     handle: Option<thread::JoinHandle<()>>,
@@ -53,18 +64,44 @@ impl DatabaseWriter {
 
         self.handle = Some(thread::spawn(move || {
             // Setup database file
-            let conn = Connection::open(filename).unwrap();
+            let mut conn = Connection::open(filename).unwrap();
             let _ = setup_database(&conn, datasource, interface);
 
+            let mut batch: Vec<FrameData> = Vec::with_capacity(BATCH_MAX);
             while alive.load(Ordering::SeqCst) {
-                let frx =
-                    if let Ok(frx) = rx.lock().unwrap().recv_timeout(Duration::from_millis(500)) {
-                        frx
-                    } else {
-                        continue;
-                    };
-                add_frame(&conn, &frx);
+                {
+                    let rx = rx.lock().unwrap();
+                    match rx.recv_timeout(Duration::from_millis(500)) {
+                        Ok(frx) => batch.push(frx),
+                        Err(_) => continue,
+                    }
+                    // Take whatever else is already queued, without waiting.
+                    while batch.len() < BATCH_MAX {
+                        match rx.try_recv() {
+                            Ok(frx) => batch.push(frx),
+                            Err(_) => break,
+                        }
+                    }
+                }
+                write_batch(&mut conn, &mut batch);
             }
+
+            // Write the frames still queued at stop, for at most STOP_FLUSH, so
+            // the last moments of a capture aren't lost.
+            let deadline = Instant::now() + STOP_FLUSH;
+            let rx = rx.lock().unwrap();
+            while Instant::now() < deadline {
+                match rx.try_recv() {
+                    Ok(frx) => {
+                        batch.push(frx);
+                        if batch.len() >= BATCH_MAX {
+                            write_batch(&mut conn, &mut batch);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            write_batch(&mut conn, &mut batch);
         }));
     }
 
@@ -146,9 +183,24 @@ pub fn setup_database(conn: &Connection, datasource: String, interface: Interfac
 }
 
 
-fn add_frame(conn: &Connection, frx: &FrameData) {
+/// Insert `batch` in one transaction, then clear it. As before, a frame that
+/// fails to insert is skipped; a failed commit drops the batch.
+fn write_batch(conn: &mut Connection, batch: &mut Vec<FrameData>) {
+    if batch.is_empty() {
+        return;
+    }
+    if let Ok(tx) = conn.transaction() {
+        for frx in batch.iter() {
+            let _ = add_frame(&tx, frx);
+        }
+        let _ = tx.commit();
+    }
+    batch.clear();
+}
+
+fn add_frame(conn: &Connection, frx: &FrameData) -> Result<usize> {
     let packet_data = PacketData::new(frx);
-    let _result = conn.execute(
+    conn.execute(
         "INSERT INTO packets (ts_sec, ts_usec, phyname, sourcemac, destmac, transmac, frequency, devkey, lat, lon, alt, speed, heading, packet_len, signal, datasource, dlt, packet, error, tags, datarate, hash, packetid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         params![
             packet_data.ts_sec, 
@@ -175,8 +227,7 @@ fn add_frame(conn: &Connection, frx: &FrameData) {
             packet_data.hash, 
             packet_data.packetid
         ],
-    );
-
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -262,5 +313,69 @@ impl PacketData {
             hash: frx.crc32(),
             packetid: frx.packetid,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libwifi::frame::components::MacAddress;
+    use std::time::SystemTime;
+    use uuid::Uuid;
+
+    fn frame(id: u64) -> FrameData {
+        FrameData::new(
+            SystemTime::now(),
+            id,
+            vec![0x80, 0x00, 0x00, 0x00],
+            None,
+            MacAddress([0x00, 0x00, 0x5e, 0x00, 0x53, 0x01]),
+            MacAddress([0xff; 6]),
+            Some(2412.0),
+            Some(-40),
+            Some(1.0),
+            Uuid::new_v4(),
+        )
+    }
+
+    fn packets_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "create table if not exists packets (ts_sec integer, ts_usec integer, phyname TEXT, sourcemac TEXT, destmac TEXT, transmac TEXT, frequency REAL, devkey TEXT, lat REAL, lon REAL, alt REAL, speed REAL, heading REAL, packet_len integer, signal integer, datasource TEXT, dlt integer, packet BLOB, error integer, tags TEXT, datarate REAL, hash integer, packetid integer )",
+            (),
+        )
+        .unwrap();
+        conn
+    }
+
+    fn rows(conn: &Connection) -> i64 {
+        conn.query_row("SELECT COUNT(*) FROM packets", [], |r| r.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn write_batch_inserts_every_frame_and_empties_the_batch() {
+        let mut conn = packets_db();
+        let mut batch: Vec<FrameData> = (0..2500).map(frame).collect();
+        write_batch(&mut conn, &mut batch);
+        assert!(batch.is_empty());
+        assert_eq!(rows(&conn), 2500);
+        // A second, empty batch is a no-op.
+        write_batch(&mut conn, &mut batch);
+        assert_eq!(rows(&conn), 2500);
+    }
+
+    #[test]
+    fn write_batch_skips_a_frame_that_fails_and_keeps_the_rest() {
+        let mut conn = packets_db();
+        // A trigger that rejects packetid 3 stands in for a failed insert.
+        conn.execute_batch(
+            "CREATE TRIGGER reject_three BEFORE INSERT ON packets WHEN NEW.packetid = 3 \
+             BEGIN SELECT RAISE(ABORT, 'rejected'); END;",
+        )
+        .unwrap();
+        let mut batch: Vec<FrameData> = (0..6).map(frame).collect();
+        write_batch(&mut conn, &mut batch);
+        assert_eq!(rows(&conn), 5);
     }
 }
