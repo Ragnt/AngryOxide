@@ -613,6 +613,11 @@ pub fn rogue_m2_attack_directed(
 
     let ssid = probe.station_info.ssid.unwrap();
 
+    // Never answer for a whitelisted SSID, whether or not its AP has been seen.
+    if oxide.target_data.whitelist.matches_ssid(&ssid) {
+        return Ok(());
+    }
+
     if station.timer_interact.elapsed().unwrap() < Duration::from_secs(3) {
         return Ok(());
     }
@@ -683,6 +688,12 @@ pub fn rogue_m2_attack_undirected(
             return Ok(());
         }
 
+        // Never answer for a whitelisted SSID, whether or not its AP has been
+        // seen: the check on the AP below only runs when it has.
+        if oxide.target_data.whitelist.matches_ssid(&ssid) {
+            return Ok(());
+        }
+
         if let Some(ap) = oxide.access_points.get_device_by_ssid(&ssid) {
             // Make sure this AP is a target and that this AP is
             if oxide
@@ -737,6 +748,10 @@ pub fn rogue_m2_attack_undirected(
             } else {
                 return Ok(());
             };
+
+            if oxide.target_data.whitelist.is_whitelisted(ap) {
+                return Ok(());
+            }
 
             let frx = build_probe_response(
                 &probe.header.address_2,
