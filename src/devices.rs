@@ -1,4 +1,3 @@
-use globset::Glob;
 use libwifi::frame::components::{MacAddress, RsnAkmSuite, RsnCipherSuite, StationInfo, WpaAkmSuite, WpsInformation};
 use libwifi::frame::{Beacon, ProbeResponse};
 use nl80211_ng::channels::{WiFiBand};
@@ -11,7 +10,10 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::oui::OuiRecord;
-use crate::util::{epoch_to_iso_string, epoch_to_string, option_bool_to_json_string, wps_to_json};
+use crate::util::{
+    epoch_to_iso_string, epoch_to_string, option_bool_to_json_string, ssid_matches_pattern,
+    wps_to_json,
+};
 use crate::OxideRuntime;
 
 // Constants for timeouts
@@ -719,11 +721,7 @@ impl<T: WiFiDeviceType> WiFiDeviceList<T> {
     {
         self.devices.values_mut().find_map(|x: &mut T| {
             if let Some(device_ssid) = x.ssid() {
-                if Glob::new(ssid)
-                    .unwrap()
-                    .compile_matcher()
-                    .is_match(device_ssid)
-                {
+                if ssid_matches_pattern(ssid, device_ssid) {
                     Some(x)
                 } else {
                     None

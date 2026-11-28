@@ -1,8 +1,8 @@
-use globset::Glob;
 use libwifi::frame::components::MacAddress;
 use rand::seq::SliceRandom;
 
 use crate::devices::AccessPoint;
+use crate::util::ssid_matches_pattern;
 
 trait IsTarget {
     fn target_match(&self, ap: &AccessPoint) -> bool;
@@ -15,14 +15,8 @@ pub struct TargetSSID {
 
 impl IsTarget for TargetSSID {
     fn target_match(&self, ap: &AccessPoint) -> bool {
-        if let Some(ssid) = ap.ssid.clone() {
-            if Glob::new(&self.ssid)
-                .unwrap()
-                .compile_matcher()
-                .is_match(ssid)
-            {
-                return true;
-            }
+        if let Some(ssid) = &ap.ssid {
+            return ssid_matches_pattern(&self.ssid, ssid);
         }
         false
     }
@@ -310,5 +304,19 @@ impl TargetList {
 
     pub fn get_ref(&self) -> &Vec<Target> {
         &self.targets
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_target_that_is_not_a_glob_matches_itself() {
+        let mut ap = AccessPoint::default();
+        ap.ssid = Some("Cafe [Guest".to_owned());
+        assert!(TargetSSID::new("Cafe [Guest").target_match(&ap));
+        ap.ssid = Some("Cafe Guest".to_owned());
+        assert!(!TargetSSID::new("Cafe [Guest").target_match(&ap));
     }
 }
